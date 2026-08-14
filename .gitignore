@@ -1,0 +1,68 @@
+# Dependencies
+node_modules/
+
+# Build output
+out/
+dist/
+release/
+build/
+
+# Native module / compiler artifacts
+*.node
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime / temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+.cache/
+.vite/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local secrets / SSH material
+*.pem
+*.key
+*.pfx
+*.p12
+*.ppk
+
+# Test / coverage output
+coverage/
+.nyc_output/
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# OS metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Windows crash / debug artifacts
+*.dmp
+
+# Local release signing material
+certs/
+signing/

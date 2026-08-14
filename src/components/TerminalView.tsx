@@ -1,0 +1,249 @@
+import { useEffect, useRef, useState } from 'react';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
+import { SearchAddon } from '@xterm/addon-search';
+import '@xterm/xterm/css/xterm.css';
+
+interface TerminalViewProps {
+  sessionId: string;
+  /**
+   * Terminal yang tidak aktif tetap terpasang, hanya disembunyikan — kalau
+   * dilepas, channel SSH ikut tertutup dan proses yang sedang berjalan mati.
+   * Prop ini menandai kapan perlu mengukur ulang dan mengambil fokus.
+   */
+  active: boolean;
+  onRequestNewTab?: () => void;
+  onRequestCloseTab?: () => void;
+  onExit?: () => void;
+}
+
+const THEME = {
+  background: '#020307',
+  foreground: '#d9d1de',
+  cursor: '#ff9700',
+  cursorAccent: '#020307',
+  selectionBackground: '#7b2aa955',
+  black: '#08050b',
+  red: '#ff5a68',
+  green: '#58e879',
+  yellow: '#ffb52e',
+  blue: '#8f83ff',
+  magenta: '#c05cff',
+  cyan: '#6bd8e8',
+  white: '#e9e2ed',
+  brightBlack: '#716878',
+  brightRed: '#ff7b86',
+  brightGreen: '#7cf197',
+  brightYellow: '#ffc85f',
+  brightBlue: '#aaa2ff',
+  brightMagenta: '#d783ff',
+  brightCyan: '#8be7f3',
+  brightWhite: '#ffffff',
+};
+
+function stripAnsi(value: string): string {
+  return value
+    .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\r/g, '');
+}
+
+/**
+ * Deteksi direktori kerja dari prompt Linux umum:
+ *   user@host:/var/www$
+ *   user@host:~$
+ *   root@host:/etc#
+ *
+ * Ini tidak memodifikasi shell remote. Bila prompt kustom tidak memuat path,
+ * File Browser tetap bisa dipakai manual.
+ */
+function detectPromptCwd(buffer: string): string | null {
+  const clean = stripAnsi(buffer);
+  const lines = clean.split('\n');
+  for (let index = lines.length - 1; index >= Math.max(0, lines.length - 4); index -= 1) {
+    const line = lines[index].trimEnd();
+    const match = line.match(/(?:^|\s)[\w.-]+@[\w.-]+:([~\/][^$#\n]*?)[#$]\s*$/);
+    if (match?.[1]) return match[1].trim();
+  }
+  return null;
+}
+
+export function TerminalView({
+  sessionId,
+  active,
+  onRequestNewTab,
+  onRequestCloseTab,
+  onExit,
+}: TerminalViewProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<Terminal | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
+  const terminalIdRef = useRef<string | null>(null);
+  const outputTailRef = useRef('');
+  const lastCwdRef = useRef<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Callback disimpan di ref supaya handler papan ketik tidak perlu dipasang
+  // ulang setiap kali induk render.
+  const newTabRef = useRef(onRequestNewTab);
+  const closeTabRef = useRef(onRequestCloseTab);
+  const exitRef = useRef(onExit);
+
+  newTabRef.current = onRequestNewTab;
+  closeTabRef.current = onRequestCloseTab;
+  exitRef.current = onExit;
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const term = new Terminal({
+      fontFamily:
+        getComputedStyle(document.documentElement).getPropertyValue('--font-mono') ||
+        'Consolas, monospace',
+      fontSize: 13,
+      lineHeight: 1.25,
+      cursorBlink: true,
+      scrollback: 10_000,
+      allowProposedApi: true,
+      theme: THEME,
+    });
+
+    const fit = new FitAddon();
+    term.loadAddon(fit);
+    term.loadAddon(new WebLinksAddon());
+    term.loadAddon(new SearchAddon());
+
+    const unicode = new Unicode11Addon();
+    term.loadAddon(unicode);
+    term.unicode.activeVersion = '11';
+
+    // Pintasan tab ditangani sebelum xterm; kalau tidak, Ctrl+Shift+T akan
+    // dikirim ke shell sebagai karakter kontrol.
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type !== 'keydown' || !event.ctrlKey || !event.shiftKey) return true;
+      if (event.key.toLowerCase() === 't') {
+        newTabRef.current?.();
+        return false;
+      }
+      if (event.key.toLowerCase() === 'w') {
+        closeTabRef.current?.();
+        return false;
+      }
+      return true;
+    });
+
+    term.open(container);
+    termRef.current = term;
+    fitRef.current = fit;
+    fit.fit();
+
+    let disposed = false;
+    const unsubscribers: Array<() => void> = [];
+
+    void (async () => {
+      try {
+        const id = await window.ssh.shell.open(sessionId, term.cols, term.rows);
+        console.debug('[ASProSSH] shell opened', { sessionId, terminalId: id });
+        if (disposed) {
+          window.ssh.shell.close(id);
+          return;
+        }
+        terminalIdRef.current = id;
+
+        unsubscribers.push(
+          window.ssh.shell.onData(({ terminalId: source, data }) => {
+            if (source !== id) return;
+
+            term.write(data);
+
+            outputTailRef.current = (outputTailRef.current + data).slice(-4096);
+            const cwd = detectPromptCwd(outputTailRef.current);
+            if (cwd && cwd !== lastCwdRef.current) {
+              lastCwdRef.current = cwd;
+              window.dispatchEvent(
+                new CustomEvent('asprossh:terminal-cwd', {
+                  detail: { sessionId, cwd },
+                }),
+              );
+            }
+          }),
+          window.ssh.shell.onClose(({ terminalId: source }) => {
+            if (source !== id) return;
+            term.write('\r\n\x1b[33mKoneksi shell ditutup.\x1b[0m\r\n');
+            exitRef.current?.();
+          }),
+        );
+
+        term.onData((data) => window.ssh.shell.write(id, data));
+      } catch (err) {
+        setError((err as Error).message);
+      }
+    })();
+
+    const observer = new ResizeObserver(() => {
+      // Lebar nol berarti terminal sedang disembunyikan. Mengukur ulang saat
+      // itu akan menyetel ukurannya ke 1x1 dan merusak tampilan saat muncul.
+      if (container.clientWidth === 0) return;
+      fit.fit();
+      if (terminalIdRef.current) {
+        window.ssh.shell.resize(terminalIdRef.current, term.cols, term.rows);
+      }
+    });
+    observer.observe(container);
+
+    return () => {
+      disposed = true;
+      observer.disconnect();
+      for (const unsubscribe of unsubscribers) unsubscribe();
+      if (terminalIdRef.current) {
+        console.debug('[ASProSSH] shell closing', {
+          sessionId,
+          terminalId: terminalIdRef.current,
+        });
+        window.ssh.shell.close(terminalIdRef.current);
+      }
+      term.dispose();
+      termRef.current = null;
+      fitRef.current = null;
+      terminalIdRef.current = null;
+      outputTailRef.current = '';
+      lastCwdRef.current = null;
+    };
+  // Sangat penting: lifecycle shell hanya mengikuti sessionId.
+  // Callback UI disimpan di ref agar render ulang parent (mis. berpindah
+  // File Browser ↔ Monitoring) TIDAK menutup dan membuka shell baru.
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!active) return;
+    const term = termRef.current;
+    const fit = fitRef.current;
+    if (!term || !fit) return;
+
+    // Ukuran container baru benar setelah frame berikutnya digambar.
+    const frame = requestAnimationFrame(() => {
+      fit.fit();
+      if (terminalIdRef.current) {
+        window.ssh.shell.resize(terminalIdRef.current, term.cols, term.rows);
+      }
+      term.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [active]);
+
+  if (error) {
+    return (
+      <div className="flex h-full items-center justify-center bg-abyss p-8 text-center">
+        <div>
+          <p className="text-sm text-coral">Shell tidak bisa dibuka.</p>
+          <p className="mt-2 text-xs text-muted">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <div ref={containerRef} className="aspro-xterm h-full w-full bg-abyss p-2" />;
+}
