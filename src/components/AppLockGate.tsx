@@ -9,7 +9,11 @@ import { useI18n } from '../i18n';
  */
 export function AppLockGate({ children }: { children: ReactNode }) {
   const { t } = useI18n();
-  const [status, setStatus] = useState<{ enabled: boolean; locked: boolean } | null>(null);
+  const [status, setStatus] = useState<{
+    enabled: boolean;
+    locked: boolean;
+    idleMinutes: number;
+  } | null>(null);
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [retrySeconds, setRetrySeconds] = useState(0);
@@ -17,6 +21,9 @@ export function AppLockGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void window.ssh.appLock.status().then(setStatus);
+    // relock() dipanggil dari effect idle-timer di bawah — status di sini
+    // perlu ikut diperbarui supaya layar PIN benar-benar muncul lagi.
+    return window.ssh.appLock.onChanged(setStatus);
   }, []);
 
   useEffect(() => {
@@ -24,6 +31,30 @@ export function AppLockGate({ children }: { children: ReactNode }) {
     const timer = setInterval(() => setRetrySeconds((v) => Math.max(0, v - 1)), 1000);
     return () => clearInterval(timer);
   }, [retrySeconds]);
+
+  // Kunci ulang otomatis setelah sekian menit tanpa aktivitas mouse/keyboard
+  // — cuma jalan kalau lock sudah diaktifkan, sedang terbuka, dan
+  // idleMinutes > 0 (0 berarti dimatikan oleh pengguna).
+  useEffect(() => {
+    if (!status?.enabled || status.locked || status.idleMinutes <= 0) return;
+
+    const timeoutMs = status.idleMinutes * 60_000;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => void window.ssh.appLock.relock(), timeoutMs);
+    };
+
+    const activityEvents = ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart'] as const;
+    for (const name of activityEvents) window.addEventListener(name, reset, { passive: true });
+    reset();
+
+    return () => {
+      clearTimeout(timer);
+      for (const name of activityEvents) window.removeEventListener(name, reset);
+    };
+  }, [status?.enabled, status?.locked, status?.idleMinutes]);
 
   // Belum tahu status → jangan kedipkan konten sebelum keputusan final ada.
   if (!status) return null;
@@ -38,7 +69,7 @@ export function AppLockGate({ children }: { children: ReactNode }) {
     setBusy(false);
 
     if (result.ok) {
-      setStatus({ enabled: true, locked: false });
+      setStatus((prev) => (prev ? { ...prev, enabled: true, locked: false } : prev));
       return;
     }
 
@@ -56,7 +87,7 @@ export function AppLockGate({ children }: { children: ReactNode }) {
         onSubmit={(e) => void submit(e)}
         className="w-full max-w-xs rounded-lg border border-line bg-raised p-6"
       >
-        <div className="mb-1 text-[10px] uppercase tracking-[0.2em] text-orange">ASProSSH</div>
+        <div className="mb-1 text-[10px] uppercase tracking-[0.2em] text-orange">ASProOps</div>
         <h2 className="text-sm font-semibold text-fg">{t('applock.lockTitle')}</h2>
         <p className="mt-2 text-xs text-muted">{t('applock.lockSubtitle')}</p>
 

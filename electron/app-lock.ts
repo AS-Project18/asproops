@@ -5,7 +5,7 @@ import { app } from 'electron';
 
 /**
  * Kunci aplikasi opsional — PIN pendek yang harus dimasukkan setiap kali
- * ASProSSH dibuka, sebelum daftar server dan kredensial tersimpan bisa
+ * ASProOps dibuka, sebelum daftar server dan kredensial tersimpan bisa
  * diakses. Ini BUKAN pengganti enkripsi `safeStorage` di SessionStore —
  * itu tetap yang melindungi isi berkas di disk. Ini cuma penghalang di
  * lapisan UI+IPC supaya orang yang kebetulan duduk di depan mesin yang
@@ -15,12 +15,17 @@ import { app } from 'electron';
 interface LockFile {
   salt: string;
   hash: string;
+  /** Menit tanpa aktivitas sebelum otomatis dikunci lagi. 0 = mati. */
+  idleMinutes?: number;
 }
 
 export interface LockStatus {
   enabled: boolean;
   locked: boolean;
+  idleMinutes: number;
 }
+
+const DEFAULT_IDLE_MINUTES = 10;
 
 export interface VerifyResult {
   ok: boolean;
@@ -65,22 +70,47 @@ export class AppLock {
   }
 
   status(): LockStatus {
-    return { enabled: this.isEnabled(), locked: this.isLocked() };
+    return {
+      enabled: this.isEnabled(),
+      locked: this.isLocked(),
+      idleMinutes: this.readFile()?.idleMinutes ?? DEFAULT_IDLE_MINUTES,
+    };
   }
 
   /** Set PIN baru. Kalau lock sedang aktif, verifikasi PIN lama dulu sebelum memanggil ini. */
   setPin(pin: string): void {
+    // Pertahankan idleMinutes yang sudah diatur sebelumnya — setPin juga
+    // dipanggil saat GANTI PIN, bukan cuma setup pertama kali.
+    const idleMinutes = this.readFile()?.idleMinutes;
     const salt = randomBytes(16);
     const hash = this.hash(pin, salt);
     mkdirSync(dirname(this.path), { recursive: true });
     writeFileSync(
       this.path,
-      JSON.stringify({ salt: salt.toString('hex'), hash: hash.toString('hex') }),
+      JSON.stringify({
+        salt: salt.toString('hex'),
+        hash: hash.toString('hex'),
+        ...(idleMinutes !== undefined ? { idleMinutes } : {}),
+      }),
       { mode: 0o600 },
     );
     this.unlocked = true;
     this.failedAttempts = 0;
     this.lockedUntil = 0;
+  }
+
+  /** Dipanggil dari renderer setelah idle timeout tercapai. */
+  relock(): void {
+    if (this.isEnabled()) this.unlocked = false;
+  }
+
+  setIdleMinutes(minutes: number): void {
+    const stored = this.readFile();
+    if (!stored) return; // tidak ada gunanya tanpa PIN yang diatur
+    const clamped = Math.max(0, Math.min(180, Math.round(minutes)));
+    writeFileSync(this.path, JSON.stringify({ ...stored, idleMinutes: clamped }), {
+      mode: 0o600,
+    });
   }
 
   disable(): void {

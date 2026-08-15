@@ -77,13 +77,13 @@ export function SessionSidebar({
   const onServerDragStart = (event: DragEvent<HTMLDivElement>, sessionId: string) => {
     setDraggingId(sessionId);
     event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/asprossh-session', sessionId);
+    event.dataTransfer.setData('text/asproops-session', sessionId);
   };
 
   const onDropGroup = async (event: DragEvent<HTMLElement>, group: string) => {
     event.preventDefault();
     const sessionId =
-      event.dataTransfer.getData('text/asprossh-session') || draggingId;
+      event.dataTransfer.getData('text/asproops-session') || draggingId;
     setDragTarget(null);
     setDraggingId(null);
     if (!sessionId) return;

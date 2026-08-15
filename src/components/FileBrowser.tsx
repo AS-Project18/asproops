@@ -42,7 +42,7 @@ const NAME_MIN_WIDTH = 32;
 const NAME_DEFAULT_WIDTH = 220;
 const CHECKBOX_COL_WIDTH = 24;
 
-const NAME_WIDTH_STORAGE_KEY = 'asprossh.sftpNameWidth';
+const NAME_WIDTH_STORAGE_KEY = 'asproops.sftpNameWidth';
 
 function loadNameWidth(): number {
   const raw = Number(localStorage.getItem(NAME_WIDTH_STORAGE_KEY));
@@ -50,7 +50,7 @@ function loadNameWidth(): number {
   return Math.max(NAME_MIN_WIDTH, raw);
 }
 
-const COLUMN_STORAGE_KEY = 'asprossh.sftpColumns';
+const COLUMN_STORAGE_KEY = 'asproops.sftpColumns';
 const DEFAULT_COLUMNS: ColumnState[] = [
   { id: 'size', width: 76, visible: true },
   { id: 'modified', width: 132, visible: true },
@@ -254,8 +254,8 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
       }
     };
 
-    window.addEventListener('asprossh:terminal-cwd', handleTerminalCwd);
-    return () => window.removeEventListener('asprossh:terminal-cwd', handleTerminalCwd);
+    window.addEventListener('asproops:terminal-cwd', handleTerminalCwd);
+    return () => window.removeEventListener('asproops:terminal-cwd', handleTerminalCwd);
   }, [followTerminal, homePath, load, path, sessionId]);
 
   useEffect(
@@ -751,12 +751,12 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
               onDragStart={(e) => {
                 setDraggingCol(col.id);
                 e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/asprossh-column', col.id);
+                e.dataTransfer.setData('text/asproops-column', col.id);
               }}
               onDrop={(e) => {
                 e.preventDefault();
                 const draggedId =
-                  (e.dataTransfer.getData('text/asprossh-column') as ColumnId) || draggingCol;
+                  (e.dataTransfer.getData('text/asproops-column') as ColumnId) || draggingCol;
                 setDraggingCol(null);
                 if (draggedId) reorderColumns(draggedId, col.id);
               }}

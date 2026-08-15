@@ -2,12 +2,15 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from 're
 
 export type AppLanguage = 'id' | 'en';
 
-const STORAGE_KEY = 'asprossh.language';
+const STORAGE_KEY = 'asproops.language';
 
 const messages = {
   id: {
     'app.tagline': 'KONEKSI. KEAMANAN. KONTROL.',
     'app.quickConnect': 'Quick Connect',
+    'quickConnect.placeholder': 'Cari server, host, atau grup…',
+    'quickConnect.navigate': 'pilih',
+    'quickConnect.connect': 'hubungkan',
     'app.activeServers': 'Server aktif',
     'app.of': 'dari',
     'app.importSsh': 'Import SSH',
@@ -53,7 +56,7 @@ const messages = {
     'project.save': 'Simpan',
     'project.cancel': 'Batal',
     'project.deleteConfirmTitle': 'Hapus project "{name}"?',
-    'project.deleteConfirmDesc': 'Ini cuma menghapus catatan project-nya di ASProSSH — tidak menyentuh apa pun di server.',
+    'project.deleteConfirmDesc': 'Ini cuma menghapus catatan project-nya di ASProOps — tidak menyentuh apa pun di server.',
     'service.subtitle': '{count} layanan ditemukan',
     'service.refresh': 'Muat ulang',
     'service.searchPlaceholder': 'Cari layanan…',
@@ -244,7 +247,7 @@ const messages = {
     'monitor.user': 'Pengguna',
     'monitor.command': 'Perintah',
     'settings.title': 'Pengaturan',
-    'settings.subtitle': 'Preferensi ASProSSH',
+    'settings.subtitle': 'Preferensi ASProOps',
     'settings.close': 'Tutup',
     'settings.general': 'Umum',
     'settings.language': 'Bahasa aplikasi',
@@ -300,7 +303,7 @@ const messages = {
     'sftp.conflictTitle': 'Berkas "{name}" sudah ada',
     'sftp.conflictDesc': 'Mau ditimpa, dilewati, atau disimpan dengan nama baru?',
     'sftp.conflictApplyAll': 'Terapkan untuk sisanya',
-    'applock.lockTitle': 'ASProSSH Terkunci',
+    'applock.lockTitle': 'ASProOps Terkunci',
     'applock.lockSubtitle': 'Masukkan PIN untuk membuka daftar server.',
     'applock.placeholder': 'PIN',
     'applock.unlock': 'Buka',
@@ -308,9 +311,12 @@ const messages = {
     'applock.tooManyAttempts': 'Terlalu banyak percobaan. Coba lagi dalam {seconds} detik.',
     'applock.settingsTitle': 'Kunci Aplikasi',
     'applock.settingsDesc':
-      'Minta PIN setiap kali ASProSSH dibuka, supaya server dan password tersimpan tidak langsung bisa diakses.',
+      'Minta PIN setiap kali ASProOps dibuka, supaya server dan password tersimpan tidak langsung bisa diakses.',
     'applock.statusEnabled': 'Aktif',
     'applock.statusDisabled': 'Tidak aktif',
+    'applock.idleTitle': 'Kunci otomatis',
+    'applock.idleDesc': 'Minta PIN lagi kalau tidak ada aktivitas mouse/keyboard selama sekian menit. Isi 0 untuk mematikan.',
+    'applock.idleSuffix': 'menit',
     'applock.enable': 'Aktifkan',
     'applock.disable': 'Matikan',
     'applock.changePin': 'Ubah PIN',
@@ -328,6 +334,9 @@ const messages = {
   en: {
     'app.tagline': 'CONNECT. SECURE. CONTROL.',
     'app.quickConnect': 'Quick Connect',
+    'quickConnect.placeholder': 'Search server, host, or group…',
+    'quickConnect.navigate': 'navigate',
+    'quickConnect.connect': 'connect',
     'app.activeServers': 'Active servers',
     'app.of': 'of',
     'app.importSsh': 'Import SSH',
@@ -373,7 +382,7 @@ const messages = {
     'project.save': 'Save',
     'project.cancel': 'Cancel',
     'project.deleteConfirmTitle': 'Delete project "{name}"?',
-    'project.deleteConfirmDesc': "This only removes the project record in ASProSSH — nothing on the server is touched.",
+    'project.deleteConfirmDesc': "This only removes the project record in ASProOps — nothing on the server is touched.",
     'service.subtitle': '{count} services found',
     'service.refresh': 'Refresh',
     'service.searchPlaceholder': 'Search services…',
@@ -564,7 +573,7 @@ const messages = {
     'monitor.user': 'User',
     'monitor.command': 'Command',
     'settings.title': 'Settings',
-    'settings.subtitle': 'ASProSSH preferences',
+    'settings.subtitle': 'ASProOps preferences',
     'settings.close': 'Close',
     'settings.general': 'General',
     'settings.language': 'Application language',
@@ -620,7 +629,7 @@ const messages = {
     'sftp.conflictTitle': 'A file named "{name}" already exists',
     'sftp.conflictDesc': 'Overwrite it, skip it, or save with a new name?',
     'sftp.conflictApplyAll': 'Apply to the rest',
-    'applock.lockTitle': 'ASProSSH Locked',
+    'applock.lockTitle': 'ASProOps Locked',
     'applock.lockSubtitle': 'Enter your PIN to open the server list.',
     'applock.placeholder': 'PIN',
     'applock.unlock': 'Unlock',
@@ -628,9 +637,12 @@ const messages = {
     'applock.tooManyAttempts': 'Too many attempts. Try again in {seconds}s.',
     'applock.settingsTitle': 'App Lock',
     'applock.settingsDesc':
-      "Require a PIN every time ASProSSH opens, so saved servers and passwords aren't immediately accessible.",
+      "Require a PIN every time ASProOps opens, so saved servers and passwords aren't immediately accessible.",
     'applock.statusEnabled': 'Enabled',
     'applock.statusDisabled': 'Disabled',
+    'applock.idleTitle': 'Auto-lock',
+    'applock.idleDesc': 'Ask for the PIN again after this many minutes without mouse/keyboard activity. Set 0 to disable.',
+    'applock.idleSuffix': 'min',
     'applock.enable': 'Enable',
     'applock.disable': 'Disable',
     'applock.changePin': 'Change PIN',
@@ -665,8 +677,10 @@ const I18nContext = createContext<I18nValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<AppLanguage>(() => {
+    // Default-nya sekarang English — pengguna yang sudah pernah pilih
+    // Indonesia secara eksplisit tetap dipertahankan pilihannya.
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved === 'en' ? 'en' : 'id';
+    return saved === 'id' ? 'id' : 'en';
   });
 
   const value = useMemo<I18nValue>(() => ({
@@ -676,7 +690,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       document.documentElement.lang = next;
       setLanguageState(next);
     },
-    t: (key, vars) => interpolate(messages[language][key] ?? messages.id[key], vars),
+    t: (key, vars) => interpolate(messages[language][key] ?? messages.en[key], vars),
   }), [language]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

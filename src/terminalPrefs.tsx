@@ -29,7 +29,7 @@ export const DEFAULT_TERMINAL_PREFS: TerminalPrefs = {
   scrollback: 10_000,
 };
 
-const STORAGE_KEY = 'asprossh.terminalPrefs';
+const STORAGE_KEY = 'asproops.terminalPrefs';
 
 function loadTerminalPrefs(): TerminalPrefs {
   try {

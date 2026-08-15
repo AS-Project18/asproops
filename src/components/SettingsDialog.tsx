@@ -155,7 +155,11 @@ type LockMode = 'view' | 'setup' | 'change' | 'disable';
 
 function AppLockSettings() {
   const { t } = useI18n();
-  const [status, setStatus] = useState<{ enabled: boolean; locked: boolean } | null>(null);
+  const [status, setStatus] = useState<{
+    enabled: boolean;
+    locked: boolean;
+    idleMinutes: number;
+  } | null>(null);
   const [mode, setMode] = useState<LockMode>('view');
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');
@@ -228,40 +232,60 @@ function AppLockSettings() {
 
   if (mode === 'view') {
     return (
-      <div className="aspro-setting-row">
-        <div>
-          <strong>{t('applock.settingsTitle')}</strong>
-          <small>{status.enabled ? t('applock.statusEnabled') : t('applock.statusDisabled')}</small>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {status.enabled ? (
-            <>
+      <>
+        <div className="aspro-setting-row">
+          <div>
+            <strong>{t('applock.settingsTitle')}</strong>
+            <small>{status.enabled ? t('applock.statusEnabled') : t('applock.statusDisabled')}</small>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {status.enabled ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setMode('change')}
+                  className="aspro-button aspro-button-secondary compact"
+                >
+                  {t('applock.changePin')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode('disable')}
+                  className="aspro-button aspro-button-danger compact"
+                >
+                  {t('applock.disable')}
+                </button>
+              </>
+            ) : (
               <button
                 type="button"
-                onClick={() => setMode('change')}
-                className="aspro-button aspro-button-secondary compact"
+                onClick={() => setMode('setup')}
+                className="aspro-button aspro-button-primary compact"
               >
-                {t('applock.changePin')}
+                {t('applock.enable')}
               </button>
-              <button
-                type="button"
-                onClick={() => setMode('disable')}
-                className="aspro-button aspro-button-danger compact"
-              >
-                {t('applock.disable')}
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setMode('setup')}
-              className="aspro-button aspro-button-primary compact"
-            >
-              {t('applock.enable')}
-            </button>
-          )}
+            )}
+          </div>
         </div>
-      </div>
+
+        {status.enabled && (
+          <div className="aspro-setting-row">
+            <div>
+              <strong>{t('applock.idleTitle')}</strong>
+              <small>{t('applock.idleDesc')}</small>
+            </div>
+            <NumberField
+              value={status.idleMinutes}
+              min={0}
+              max={180}
+              suffix={t('applock.idleSuffix')}
+              onCommit={(minutes) =>
+                void window.ssh.appLock.setIdleMinutes(minutes).then(setStatus)
+              }
+            />
+          </div>
+        )}
+      </>
     );
   }
 
@@ -410,12 +434,15 @@ function NumberField({
   min,
   max,
   suffix = 's',
+  width = 'w-16',
   onCommit,
 }: {
   value: number;
   min: number;
   max: number;
   suffix?: string;
+  /** Kelas lebar Tailwind — nilai dengan lebih banyak digit (mis. scrollback sampai 100000) butuh lebih dari default w-16. */
+  width?: string;
   onCommit: (value: number) => void;
 }) {
   const [local, setLocal] = useState(String(value));
@@ -445,7 +472,7 @@ function NumberField({
           commit();
           (e.target as HTMLInputElement).blur();
         }}
-        className="aspro-input w-16 px-2 py-1.5 text-right text-sm text-fg focus:border-azure focus:outline-none"
+        className={`aspro-input ${width} px-2 py-1.5 text-right text-sm text-fg focus:border-azure focus:outline-none`}
       />
       <span className="text-xs text-faint">{suffix}</span>
     </div>
@@ -549,6 +576,7 @@ function TerminalSettings() {
           value={prefs.scrollback}
           min={500}
           max={100_000}
+          width="w-24"
           suffix={t('settings.terminalScrollbackUnit')}
           onCommit={(scrollback) => setPrefs({ scrollback })}
         />

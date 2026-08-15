@@ -6,7 +6,7 @@ import { rebuild } from '@electron/rebuild';
 
 const require = createRequire(import.meta.url);
 const projectRoot = process.cwd();
-const markerPath = join(projectRoot, 'node_modules', '.asprossh-native-build.json');
+const markerPath = join(projectRoot, 'node_modules', '.asproops-native-build.json');
 
 function packageVersion(name) {
   try {
@@ -20,12 +20,12 @@ const electronVersion = packageVersion('electron');
 const nodePtyVersion = packageVersion('node-pty');
 
 if (!electronVersion) {
-  console.error('[ASProSSH] Paket Electron belum terpasang.');
+  console.error('[ASProOps] Paket Electron belum terpasang.');
   process.exit(1);
 }
 
 if (!nodePtyVersion) {
-  console.error('[ASProSSH] Paket node-pty belum terpasang.');
+  console.error('[ASProOps] Paket node-pty belum terpasang.');
   process.exit(1);
 }
 
@@ -57,14 +57,14 @@ const upToDate =
 
 if (upToDate) {
   console.log(
-    `[ASProSSH] node-pty sudah cocok untuk Electron ${electronVersion} ` +
+    `[ASProOps] node-pty sudah cocok untuk Electron ${electronVersion} ` +
       `(${process.platform}/${process.arch}) — rebuild dilewati.`,
   );
   process.exit(0);
 }
 
 console.log(
-  `[ASProSSH] Rebuild node-pty untuk Electron ${electronVersion} ` +
+  `[ASProOps] Rebuild node-pty untuk Electron ${electronVersion} ` +
     `(${process.platform}/${process.arch})`,
 );
 
@@ -90,9 +90,9 @@ try {
     'utf8',
   );
 
-  console.log('[ASProSSH] node-pty rebuild selesai dan cache build disimpan.');
+  console.log('[ASProOps] node-pty rebuild selesai dan cache build disimpan.');
 } catch (error) {
-  console.error('[ASProSSH] node-pty rebuild gagal.');
+  console.error('[ASProOps] node-pty rebuild gagal.');
   console.error(error);
   process.exit(1);
 }

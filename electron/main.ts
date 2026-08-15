@@ -6,13 +6,13 @@ import { registerIpc, shutdown } from './ipc';
 /** Diisi oleh scripts/dev.mjs; kosong pada build produksi. */
 const devServerUrl = process.env.VITE_DEV_SERVER_URL;
 
-app.setName('ASProSSH');
+app.setName('ASProOps');
 
 function appIconPath(): string {
   return join(
     app.getAppPath(),
     'assets',
-    process.platform === 'win32' ? 'asprossh-icon.ico' : 'asprossh-icon.png',
+    process.platform === 'win32' ? 'asproops.ico' : 'asproops-icon.png',
   );
 }
 
@@ -50,10 +50,10 @@ function createWindow(): BrowserWindow {
 
 void app.whenReady().then(() => {
   if (process.platform === 'win32') {
-    app.setAppUserModelId('com.asprossh.desktop');
+    app.setAppUserModelId('com.asproops.desktop');
   }
 
-  // ASProSSH memakai navigasi/action sendiri. Menu default File/Edit/View/
+  // ASProOps memakai navigasi/action sendiri. Menu default File/Edit/View/
   // Window/Help Electron hanya menduplikasi UI dan dihilangkan.
   Menu.setApplicationMenu(null);
 

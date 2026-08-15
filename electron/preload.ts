@@ -51,6 +51,10 @@ const api = {
       ipcRenderer.invoke('applock:changePin', currentPin, newPin),
     disable: (currentPin: string): Promise<VerifyResult> =>
       ipcRenderer.invoke('applock:disable', currentPin),
+    relock: (): Promise<void> => ipcRenderer.invoke('applock:relock'),
+    setIdleMinutes: (minutes: number): Promise<LockStatus> =>
+      ipcRenderer.invoke('applock:setIdleMinutes', minutes),
+    onChanged: (handler: (status: LockStatus) => void) => subscribe('applock:changed', handler),
   },
 
   settings: {

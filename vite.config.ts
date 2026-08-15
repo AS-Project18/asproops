@@ -8,7 +8,15 @@ export default defineConfig({
   // Path relatif diperlukan agar aset tetap ditemukan saat Electron memuat
   // berkas hasil build lewat protokol file://.
   base: './',
-  server: { port: 5173, strictPort: true },
+  server: {
+    port: 5173,
+    strictPort: true,
+    // File asing (bukan bagian source) kadang muncul sesaat di root project
+    // dari proses lain di luar app ini dan terkunci OS — watcher yang
+    // mencoba memantaunya bikin seluruh dev server crash (EBUSY). Proyek
+    // ini tidak pernah punya .zip sebagai source, jadi aman diabaikan.
+    watch: { ignored: ['**/*.zip'] },
+  },
   build: {
     outDir: 'out/renderer',
     emptyOutDir: true,

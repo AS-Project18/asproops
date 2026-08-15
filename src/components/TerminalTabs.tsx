@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { TerminalView } from './TerminalView';
 
 /**
@@ -62,6 +62,19 @@ export function TerminalTabs({ sessionId, visible }: TerminalTabsProps) {
     setActiveId(nextId);
     setNextId((prev) => prev + 1);
   }, [nextId]);
+
+  // Fallback global dari App.tsx untuk Ctrl+Shift+T saat fokus BUKAN di
+  // xterm (mis. panel Files sedang aktif) — disaring lewat sessionId
+  // supaya cuma instance TerminalTabs milik tab yang sedang aktif yang
+  // bereaksi, bukan semua session yang kebetulan masih ter-mount.
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ sessionId: string }>).detail;
+      if (detail?.sessionId === sessionId) addTab();
+    };
+    window.addEventListener('asproops:new-terminal', handler);
+    return () => window.removeEventListener('asproops:new-terminal', handler);
+  }, [sessionId, addTab]);
 
   const closeTab = useCallback(
     (id: number) => {

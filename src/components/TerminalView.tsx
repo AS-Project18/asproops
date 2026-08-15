@@ -200,7 +200,7 @@ export function TerminalView({
       void (async () => {
         try {
           const id = await window.ssh.shell.open(sessionId, term.cols, term.rows);
-          console.debug('[ASProSSH] shell opened', { sessionId, terminalId: id });
+          console.debug('[ASProOps] shell opened', { sessionId, terminalId: id });
           if (disposed) {
             window.ssh.shell.close(id);
             return;
@@ -218,7 +218,7 @@ export function TerminalView({
               if (cwd && cwd !== lastCwdRef.current) {
                 lastCwdRef.current = cwd;
                 window.dispatchEvent(
-                  new CustomEvent('asprossh:terminal-cwd', {
+                  new CustomEvent('asproops:terminal-cwd', {
                     detail: { sessionId, cwd },
                   }),
                 );
@@ -258,7 +258,7 @@ export function TerminalView({
       observer?.disconnect();
       for (const unsubscribe of unsubscribers) unsubscribe();
       if (terminalIdRef.current) {
-        console.debug('[ASProSSH] shell closing', {
+        console.debug('[ASProOps] shell closing', {
           sessionId,
           terminalId: terminalIdRef.current,
         });

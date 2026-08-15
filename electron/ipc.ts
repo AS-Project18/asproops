@@ -101,6 +101,14 @@ export function registerIpc(window: BrowserWindow): void {
     appLock.disable();
     return { ok: true };
   });
+  ipcMain.handle('applock:relock', () => {
+    appLock.relock();
+    send('applock:changed', appLock.status());
+  });
+  ipcMain.handle('applock:setIdleMinutes', (_e, minutes: number) => {
+    appLock.setIdleMinutes(minutes);
+    return appLock.status();
+  });
 
   // --- Preferensi SSH -------------------------------------------------------
   ipcMain.handle('settings:sshGet', () => preferences.get());

@@ -1,6 +1,6 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import asproIcon from './assets/asprossh-icon.png';
+import asproIcon from './assets/asproops-icon.png';
 import { SessionSidebar } from './components/SessionSidebar';
 import { SessionForm } from './components/SessionForm';
 import { HostKeyDialog, useHostKeyPrompts } from './components/HostKeyDialog';
@@ -16,9 +16,10 @@ import { ProjectsPanel } from './components/ProjectsPanel';
 import { ServicesPanel } from './components/ServicesPanel';
 import { GitPanel } from './components/GitPanel';
 import { SettingsDialog } from './components/SettingsDialog';
+import { QuickConnectPalette } from './components/QuickConnectPalette';
 import { useI18n } from './i18n';
 import { useSessions } from './hooks/useSessions';
-import { formatBytes } from './lib/format';
+import { formatBytes, formatRate } from './lib/format';
 import type {
   DeployWorkspace,
   LocalTerminalProfile,
@@ -79,6 +80,7 @@ export default function App() {
    */
   const [mountedSessions, setMountedSessions] = useState<string[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [quickConnectOpen, setQuickConnectOpen] = useState(false);
 
   useEffect(() => {
     setMountedSessions((prev) => {
@@ -130,6 +132,36 @@ export default function App() {
     () => Object.values(statuses).filter((status) => status === 'connected').length,
     [statuses],
   );
+
+  // Ctrl+K = Quick Connect, dari mana saja. Ctrl+Shift+T (terminal baru)
+  // sudah ditangani lokal oleh TerminalView saat xterm sedang fokus — ini
+  // cuma fallback untuk saat fokus ada di tempat lain (mis. abis klik
+  // panel Files) tapi tab SSH masih yang aktif. Guard .xterm mencegah
+  // dobel-trigger kalau kedua handler sama-sama kena keystroke yang sama.
+  useEffect(() => {
+    const handleGlobalKeydown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && key === 'k') {
+        if (form.open || settingsOpen || importing || pendingDelete) return;
+        event.preventDefault();
+        setQuickConnectOpen(true);
+        return;
+      }
+
+      if (event.ctrlKey && event.shiftKey && key === 't') {
+        if ((event.target as HTMLElement | null)?.closest('.xterm')) return;
+        if (!activeSession) return;
+        event.preventDefault();
+        window.dispatchEvent(
+          new CustomEvent('asproops:new-terminal', { detail: { sessionId: activeSession.id } }),
+        );
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeydown);
+    return () => window.removeEventListener('keydown', handleGlobalKeydown);
+  }, [activeSession, form.open, settingsOpen, importing, pendingDelete]);
 
   /** Klik tombol nav mana pun juga membuka lagi sidebar kalau lagi disembunyikan — tujuannya kan mau lihat panelnya. */
   const selectLeftMode = (mode: LeftMode) => {
@@ -400,17 +432,17 @@ export default function App() {
           <img src={asproIcon} alt="" className="aspro-brand-icon" />
           <div>
             <div className="aspro-brand-title">
-              <strong>ASPro</strong><span>SSH</span>
+              <strong>ASPro</strong><span>Ops</span>
             </div>
             <div className="aspro-brand-subtitle">{t('app.tagline')}</div>
           </div>
         </div>
 
-        <div className="aspro-quick">
+        <button className="aspro-quick" onClick={() => setQuickConnectOpen(true)}>
           <span className="aspro-bolt">ϟ</span>
           <span className="truncate">{t('app.quickConnect')}</span>
           <span className="ml-auto text-[12px] text-faint">Ctrl + K</span>
-        </div>
+        </button>
 
         <div className="aspro-top-actions">
           <div className="hidden text-right xl:block">
@@ -1153,16 +1185,36 @@ export default function App() {
                   }
                   percent={diskPercent}
                 />
+                {monitorSnapshot && (
+                  <FooterMetric
+                    icon="NET"
+                    value={`↓${formatRate(
+                      monitorSnapshot.net.reduce((sum, n) => sum + n.rxBytesPerSec, 0),
+                    )} ↑${formatRate(
+                      monitorSnapshot.net.reduce((sum, n) => sum + n.txBytesPerSec, 0),
+                    )}`}
+                    percent={null}
+                  />
+                )}
               </>
             )}
           </>
         ) : (
           <span className="text-faint">{t('status.noActiveServer')}</span>
         )}
-        <span className="ml-auto text-[12px] text-faint">ASProSSH Desktop</span>
+        <span className="ml-auto text-[12px] text-faint">ASProOps Desktop</span>
       </footer>
 
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+
+      {quickConnectOpen && (
+        <QuickConnectPalette
+          sessions={sessions}
+          statuses={statuses}
+          onSelect={handleConnect}
+          onClose={() => setQuickConnectOpen(false)}
+        />
+      )}
 
       {form.open && (
         <SessionForm

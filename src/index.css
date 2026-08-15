@@ -596,7 +596,7 @@ button:disabled {
 
 .text-orange { color: #ff8a00; }
 
-/* Make the existing feature components inherit the ASProSSH surfaces cleanly. */
+/* Make the existing feature components inherit the ASProOps surfaces cleanly. */
 .bg-abyss { background-color: #020307; }
 .bg-panel { background-color: #0c0612; }
 .bg-raised { background-color: #12091b; }
