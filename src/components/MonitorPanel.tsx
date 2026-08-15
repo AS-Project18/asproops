@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MonitorSnapshot } from '../shared/types';
 import { Chart } from './Chart';
 import { formatBytes, formatRate, formatUptime, thresholdColor } from '../lib/format';
+import { acquireMonitor, releaseMonitor } from '../lib/monitorSubscriptions';
 import { useI18n } from '../i18n';
 
 /**
@@ -72,12 +73,12 @@ export function MonitorPanel({ sessionId }: MonitorPanelProps) {
       if (payload.sessionId === sessionId) setError(payload.message);
     });
 
-    void window.ssh.monitor.start(sessionId, POLL_INTERVAL_MS);
+    acquireMonitor(sessionId, POLL_INTERVAL_MS);
 
     return () => {
       unsubscribeSnapshot();
       unsubscribeError();
-      void window.ssh.monitor.stop(sessionId);
+      releaseMonitor(sessionId);
     };
   }, [sessionId]);
 

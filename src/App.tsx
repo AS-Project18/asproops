@@ -17,6 +17,7 @@ import { ServicesPanel } from './components/ServicesPanel';
 import { GitPanel } from './components/GitPanel';
 import { SettingsDialog } from './components/SettingsDialog';
 import { QuickConnectPalette } from './components/QuickConnectPalette';
+import { Dashboard } from './components/Dashboard';
 import { useI18n } from './i18n';
 import { useSessions } from './hooks/useSessions';
 import { formatBytes, formatRate } from './lib/format';
@@ -1060,11 +1061,7 @@ export default function App() {
                 detail={t('workspace.readingConfig')}
               />
             ) : !activeSession ? (
-              <WorkspacePlaceholder
-                icon="›_"
-                title={t('workspace.noServerSelected')}
-                detail={t('workspace.selectServer')}
-              />
+              <Dashboard sessions={sessions} statuses={statuses} onOpen={handleSelectRemote} />
             ) : activeStatus === 'connecting' || activeStatus === 'reconnecting' ? (
               <WorkspacePlaceholder
                 icon="ϟ"
