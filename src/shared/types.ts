@@ -129,3 +129,45 @@ export interface LocalTerminalWorkspace {
   profile: LocalTerminalProfile;
   createdAt: number;
 }
+
+/**
+ * Satu working directory di satu server — fondasi untuk fitur DevOps
+ * (deploy, log viewer, service manager) yang menyusul. Sengaja per-session
+ * (bukan lintas server) karena path/env/service itu spesifik ke mesin
+ * tertentu, beda dengan DeployTemplate yang memang dirancang dipakai ulang.
+ */
+export interface ProjectProfile {
+  id: string;
+  sessionId: string;
+  name: string;
+  /** Path absolut di server, mis. "/var/www/myapp". */
+  path: string;
+  env: Record<string, string>;
+  /** Diisi fitur Log Viewer nanti — daftar berkas yang mau di-tail. */
+  logPaths: string[];
+  /** Diisi fitur Service Manager nanti — nama unit systemd yang relevan. */
+  serviceNames: string[];
+  /** id DeployTemplate yang dipasangkan ke project ini, kalau ada. */
+  deployTemplateId?: string;
+  createdAt: number;
+}
+
+export interface DeployStep {
+  id: string;
+  /** Label yang ditampilkan di UI, mis. "Install dependencies". */
+  label: string;
+  /** Perintah shell mentah, dijalankan di path milik project yang memakainya. */
+  command: string;
+}
+
+/**
+ * Rangkaian langkah deploy (pull, install, migrate, build, ...) yang bisa
+ * dipasangkan ke banyak server berbeda — bukan milik satu session tertentu.
+ */
+export interface DeployTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  steps: DeployStep[];
+  createdAt: number;
+}

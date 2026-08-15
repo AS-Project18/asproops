@@ -10,6 +10,7 @@ import { FileBrowser } from './components/FileBrowser';
 import { MonitorPanel } from './components/MonitorPanel';
 import { LocalTerminalPanel } from './components/LocalTerminalPanel';
 import { LocalTerminalView } from './components/LocalTerminalView';
+import { ProjectsPanel } from './components/ProjectsPanel';
 import { SettingsDialog } from './components/SettingsDialog';
 import { useI18n } from './i18n';
 import { useSessions } from './hooks/useSessions';
@@ -17,7 +18,7 @@ import { formatBytes } from './lib/format';
 import type { LocalTerminalProfile, LocalTerminalWorkspace, MonitorSnapshot, SessionConfig } from './shared/types';
 
 type FormState = { open: false } | { open: true; editing: SessionConfig | null };
-type LeftMode = 'servers' | 'local' | 'files' | 'monitor';
+type LeftMode = 'servers' | 'local' | 'files' | 'monitor' | 'projects';
 
 export default function App() {
   const { t } = useI18n();
@@ -284,6 +285,12 @@ export default function App() {
             label={t('nav.monitor')}
             onClick={() => setLeftMode('monitor')}
           />
+          <RailButton
+            active={leftMode === 'projects'}
+            icon="▣"
+            label={t('nav.projects')}
+            onClick={() => setLeftMode('projects')}
+          />
           <div className="flex-1" />
           <RailButton icon="⚙" label={t('nav.settings')} onClick={() => setSettingsOpen(true)} />
         </aside>
@@ -349,14 +356,30 @@ export default function App() {
                 >
                   <MonitorPanel sessionId={activeSession.id} />
                 </div>
+
+                <div
+                  className={
+                    leftMode === 'projects'
+                      ? 'absolute inset-0'
+                      : 'pointer-events-none invisible absolute inset-0'
+                  }
+                >
+                  <ProjectsPanel sessionId={activeSession.id} />
+                </div>
               </>
             ) : (
-              (leftMode === 'files' || leftMode === 'monitor') && (
+              (leftMode === 'files' || leftMode === 'monitor' || leftMode === 'projects') && (
                 <div className="aspro-side-placeholder absolute inset-0">
                   <div className="aspro-side-placeholder-icon">
-                    {leftMode === 'files' ? '□' : '⌁'}
+                    {leftMode === 'files' ? '□' : leftMode === 'monitor' ? '⌁' : '▣'}
                   </div>
-                  <strong>{leftMode === 'files' ? t('placeholder.sftp') : t('placeholder.monitor')}</strong>
+                  <strong>
+                    {leftMode === 'files'
+                      ? t('placeholder.sftp')
+                      : leftMode === 'monitor'
+                        ? t('placeholder.monitor')
+                        : t('placeholder.projects')}
+                  </strong>
                   <span>{t('placeholder.connectRequired')}</span>
                 </div>
               )

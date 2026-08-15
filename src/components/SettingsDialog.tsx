@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useI18n, type AppLanguage } from '../i18n';
 import { useTerminalPrefs, type CursorStyle } from '../terminalPrefs';
+import { DeployTemplatesSettings } from './DeployTemplatesSettings';
 import type { SshPreferences, SftpPreferences, ConflictPolicy } from '../../electron/store/preferences';
 
 interface SettingsDialogProps {
@@ -101,6 +102,17 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
               </div>
             </div>
             <SftpSettings />
+          </section>
+
+          <section className="aspro-settings-section">
+            <div className="aspro-settings-section-heading">
+              <span>▣</span>
+              <div>
+                <strong>{t('settings.templates')}</strong>
+                <small>{t('settings.templatesDesc')}</small>
+              </div>
+            </div>
+            <DeployTemplatesSettings />
           </section>
         </div>
 

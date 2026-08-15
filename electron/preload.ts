@@ -4,8 +4,10 @@ import type { LockStatus, VerifyResult } from './app-lock';
 import type { SshPreferences, SftpPreferences } from './store/preferences';
 import type {
   ConnectionStatus,
+  DeployTemplate,
   LocalTerminalProfile,
   MonitorSnapshot,
+  ProjectProfile,
   RemoteFile,
   SessionConfig,
   Secret,
@@ -46,6 +48,29 @@ const api = {
     sftpUpdate: (patch: Partial<SftpPreferences>): Promise<SftpPreferences> =>
       ipcRenderer.invoke('settings:sftpUpdate', patch),
     sftpReset: (): Promise<SftpPreferences> => ipcRenderer.invoke('settings:sftpReset'),
+  },
+
+  projects: {
+    list: (sessionId: string): Promise<ProjectProfile[]> =>
+      ipcRenderer.invoke('projects:list', sessionId),
+    create: (
+      sessionId: string,
+      input: Pick<ProjectProfile, 'name' | 'path' | 'env' | 'deployTemplateId'>,
+    ): Promise<ProjectProfile> => ipcRenderer.invoke('projects:create', sessionId, input),
+    update: (id: string, patch: Partial<ProjectProfile>): Promise<ProjectProfile | undefined> =>
+      ipcRenderer.invoke('projects:update', id, patch),
+    remove: (id: string) => ipcRenderer.invoke('projects:remove', id),
+  },
+
+  templates: {
+    list: (): Promise<DeployTemplate[]> => ipcRenderer.invoke('templates:list'),
+    create: (input: Pick<DeployTemplate, 'name' | 'description'>): Promise<DeployTemplate> =>
+      ipcRenderer.invoke('templates:create', input),
+    update: (
+      id: string,
+      patch: Partial<Pick<DeployTemplate, 'name' | 'description' | 'steps'>>,
+    ): Promise<DeployTemplate | undefined> => ipcRenderer.invoke('templates:update', id, patch),
+    remove: (id: string) => ipcRenderer.invoke('templates:remove', id),
   },
 
   sessions: {

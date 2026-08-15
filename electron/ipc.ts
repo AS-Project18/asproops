@@ -13,6 +13,7 @@ import { SessionStore } from './store/sessions';
 import { LocalTerminalManager } from './local-terminal';
 import { AppLock } from './app-lock';
 import { preferences, sftpPreferences } from './store/preferences';
+import { projects } from './store/projects';
 import type { RemoteFile, SessionConfig, Secret } from '../src/shared/types';
 
 /** "foto.jpg" -> "foto (1).jpg" -> "foto (2).jpg" ... sampai ketemu yang belum dipakai. */
@@ -111,7 +112,23 @@ export function registerIpc(window: BrowserWindow): void {
   });
   ipcMain.handle('sessions:create', (_e, config, secret) => store.create(config, secret));
   ipcMain.handle('sessions:update', (_e, id, patch, secret) => store.update(id, patch, secret));
-  ipcMain.handle('sessions:remove', (_e, id) => store.remove(id));
+  ipcMain.handle('sessions:remove', (_e, id) => {
+    store.remove(id);
+    projects.removeProjectsForSession(id);
+  });
+
+  // --- Project & deploy template --------------------------------------------
+  ipcMain.handle('projects:list', (_e, sessionId: string) => projects.listProjects(sessionId));
+  ipcMain.handle('projects:create', (_e, sessionId: string, input) =>
+    projects.createProject(sessionId, input),
+  );
+  ipcMain.handle('projects:update', (_e, id: string, patch) => projects.updateProject(id, patch));
+  ipcMain.handle('projects:remove', (_e, id: string) => projects.removeProject(id));
+
+  ipcMain.handle('templates:list', () => projects.listTemplates());
+  ipcMain.handle('templates:create', (_e, input) => projects.createTemplate(input));
+  ipcMain.handle('templates:update', (_e, id: string, patch) => projects.updateTemplate(id, patch));
+  ipcMain.handle('templates:remove', (_e, id: string) => projects.removeTemplate(id));
 
   // --- Koneksi ------------------------------------------------------------
   /**
