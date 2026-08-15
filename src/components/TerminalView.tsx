@@ -6,6 +6,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import { useTerminalPrefs } from '../terminalPrefs';
+import { stripAnsi } from '../lib/ansi';
 
 function defaultFontFamily(): string {
   return (
@@ -50,13 +51,6 @@ const THEME = {
   brightCyan: '#8be7f3',
   brightWhite: '#ffffff',
 };
-
-function stripAnsi(value: string): string {
-  return value
-    .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '')
-    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
-    .replace(/\r/g, '');
-}
 
 /**
  * Deteksi direktori kerja dari prompt Linux umum:
@@ -138,12 +132,19 @@ export function TerminalView({
     // dikirim ke shell sebagai karakter kontrol.
     term.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown' || !event.ctrlKey || !event.shiftKey) return true;
-      if (event.key.toLowerCase() === 't') {
+      const key = event.key.toLowerCase();
+      if (key === 't') {
         newTabRef.current?.();
         return false;
       }
-      if (event.key.toLowerCase() === 'w') {
+      if (key === 'w') {
         closeTabRef.current?.();
+        return false;
+      }
+      // Ctrl+Shift+C (bukan Ctrl+C polos, yang dipakai shell untuk SIGINT).
+      if (key === 'c') {
+        const selection = term.getSelection();
+        if (selection) void navigator.clipboard.writeText(selection);
         return false;
       }
       return true;

@@ -250,6 +250,9 @@ button:disabled {
   color: #c87324;
   font-size: 16px;
 }
+.aspro-search.compact {
+  height: 32px;
+}
 .aspro-server-scroll {
   margin-top: 8px;
 }
@@ -1060,7 +1063,8 @@ button:disabled {
   font-size: 10px;
   font-weight: 400;
 }
-.aspro-local-title button {
+.aspro-local-title button,
+.aspro-icon-btn {
   display: grid;
   flex: 0 0 auto;
   place-items: center;
@@ -1073,9 +1077,18 @@ button:disabled {
   font-size: 15px;
   transition: background .15s ease, border-color .15s ease;
 }
-.aspro-local-title button:hover {
+.aspro-local-title button:hover,
+.aspro-icon-btn:hover {
   border-color: rgba(200, 115, 36, .6);
   background: rgba(200, 115, 36, .22);
+}
+.aspro-icon-btn:disabled {
+  cursor: not-allowed;
+  opacity: .35;
+}
+.aspro-icon-btn:disabled:hover {
+  border-color: rgba(200, 115, 36, .35);
+  background: rgba(200, 115, 36, .12);
 }
 
 .aspro-local-list {

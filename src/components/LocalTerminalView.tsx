@@ -110,6 +110,21 @@ export function LocalTerminalView({
       term.loadAddon(unicode);
       term.unicode.activeVersion = '11';
 
+      // Ctrl+Shift+C (bukan Ctrl+C polos, yang dipakai shell untuk SIGINT).
+      term.attachCustomKeyEventHandler((event) => {
+        if (
+          event.type === 'keydown' &&
+          event.ctrlKey &&
+          event.shiftKey &&
+          event.key.toLowerCase() === 'c'
+        ) {
+          const selection = term.getSelection();
+          if (selection) void navigator.clipboard.writeText(selection);
+          return false;
+        }
+        return true;
+      });
+
       term.open(container);
       termRef.current = term;
       fitRef.current = fit;
