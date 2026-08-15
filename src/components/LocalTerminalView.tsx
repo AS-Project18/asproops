@@ -6,6 +6,14 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 
 import type { LocalTerminalProfile } from '../shared/types';
+import { useTerminalPrefs } from '../terminalPrefs';
+
+function defaultFontFamily(): string {
+  return (
+    getComputedStyle(document.documentElement).getPropertyValue('--font-mono') ||
+    'Cascadia Code, Consolas, monospace'
+  );
+}
 
 interface LocalTerminalViewProps {
   workspaceId: string;
@@ -52,7 +60,11 @@ export function LocalTerminalView({
   const [error, setError] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(active);
 
+  const { prefs } = useTerminalPrefs();
+  const prefsRef = useRef(prefs);
+
   exitRef.current = onExit;
+  prefsRef.current = prefs;
 
   useEffect(() => {
     if (active) setInitialized(true);
@@ -80,13 +92,12 @@ export function LocalTerminalView({
       }
 
       const term = new Terminal({
-        fontFamily:
-          getComputedStyle(document.documentElement).getPropertyValue('--font-mono') ||
-          'Cascadia Code, Consolas, monospace',
-        fontSize: 13,
+        fontFamily: prefsRef.current.fontFamily || defaultFontFamily(),
+        fontSize: prefsRef.current.fontSize,
         lineHeight: 1.25,
-        cursorBlink: true,
-        scrollback: 10_000,
+        cursorBlink: prefsRef.current.cursorBlink,
+        cursorStyle: prefsRef.current.cursorStyle,
+        scrollback: prefsRef.current.scrollback,
         allowProposedApi: true,
         theme: THEME,
       });
@@ -191,6 +202,23 @@ export function LocalTerminalView({
   // initialized hanya berubah false -> true sekali. Setelah terminal dibuat,
   // pindah tab tidak membongkar PTY.
   }, [initialized, workspaceId, profile.id]);
+
+  // Terapkan perubahan preferensi ke terminal yang sudah terbuka, tanpa
+  // menutup PTY-nya (beda effect dari effect mount di atas).
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.fontFamily = prefs.fontFamily || defaultFontFamily();
+    term.options.fontSize = prefs.fontSize;
+    term.options.cursorBlink = prefs.cursorBlink;
+    term.options.cursorStyle = prefs.cursorStyle;
+    term.options.scrollback = prefs.scrollback;
+    try {
+      fitRef.current?.fit();
+    } catch {
+      /* container mungkin belum terlihat; ResizeObserver akan menyusul */
+    }
+  }, [prefs]);
 
   useEffect(() => {
     if (!active) return;

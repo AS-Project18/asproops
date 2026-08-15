@@ -5,6 +5,14 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
+import { useTerminalPrefs } from '../terminalPrefs';
+
+function defaultFontFamily(): string {
+  return (
+    getComputedStyle(document.documentElement).getPropertyValue('--font-mono') ||
+    'Consolas, monospace'
+  );
+}
 
 interface TerminalViewProps {
   sessionId: string;
@@ -85,28 +93,34 @@ export function TerminalView({
   const lastCwdRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const { prefs } = useTerminalPrefs();
+
   // Callback disimpan di ref supaya handler papan ketik tidak perlu dipasang
   // ulang setiap kali induk render.
   const newTabRef = useRef(onRequestNewTab);
   const closeTabRef = useRef(onRequestCloseTab);
   const exitRef = useRef(onExit);
+  // Dibaca sekali saat mount (lihat komentar effect utama di bawah) — nilai
+  // TERKINI dipakai lewat effect terpisah supaya tidak perlu buka-tutup
+  // shell ulang tiap kali preferensi berubah.
+  const prefsRef = useRef(prefs);
 
   newTabRef.current = onRequestNewTab;
   closeTabRef.current = onRequestCloseTab;
   exitRef.current = onExit;
+  prefsRef.current = prefs;
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const term = new Terminal({
-      fontFamily:
-        getComputedStyle(document.documentElement).getPropertyValue('--font-mono') ||
-        'Consolas, monospace',
-      fontSize: 13,
+      fontFamily: prefsRef.current.fontFamily || defaultFontFamily(),
+      fontSize: prefsRef.current.fontSize,
       lineHeight: 1.25,
-      cursorBlink: true,
-      scrollback: 10_000,
+      cursorBlink: prefsRef.current.cursorBlink,
+      cursorStyle: prefsRef.current.cursorStyle,
+      scrollback: prefsRef.current.scrollback,
       allowProposedApi: true,
       theme: THEME,
     });
@@ -253,6 +267,23 @@ export function TerminalView({
   // Callback UI disimpan di ref agar render ulang parent (mis. berpindah
   // File Browser ↔ Monitoring) TIDAK menutup dan membuka shell baru.
   }, [sessionId]);
+
+  // Terapkan perubahan preferensi ke terminal yang sudah terbuka, tanpa
+  // menutup shell-nya (beda effect dari effect mount di atas).
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.fontFamily = prefs.fontFamily || defaultFontFamily();
+    term.options.fontSize = prefs.fontSize;
+    term.options.cursorBlink = prefs.cursorBlink;
+    term.options.cursorStyle = prefs.cursorStyle;
+    term.options.scrollback = prefs.scrollback;
+    try {
+      fitRef.current?.fit();
+    } catch {
+      /* container mungkin belum terlihat; ResizeObserver akan menyusul */
+    }
+  }, [prefs]);
 
   useEffect(() => {
     if (!active) return;

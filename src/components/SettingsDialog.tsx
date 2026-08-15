@@ -1,15 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useI18n, type AppLanguage } from '../i18n';
+import { useTerminalPrefs, type CursorStyle } from '../terminalPrefs';
 import type { SshPreferences } from '../../electron/store/preferences';
 
 interface SettingsDialogProps {
   onClose: () => void;
 }
 
-const roadmap = [
-  ['settings.terminal', 'settings.terminalDesc', '>_'],
-  ['settings.sftp', 'settings.sftpDesc', '□'],
-] as const;
+const roadmap = [['settings.sftp', 'settings.sftpDesc', '□']] as const;
 
 export function SettingsDialog({ onClose }: SettingsDialogProps) {
   const { language, setLanguage, t } = useI18n();
@@ -83,6 +81,17 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
               </div>
             </div>
             <SshSettings />
+          </section>
+
+          <section className="aspro-settings-section">
+            <div className="aspro-settings-section-heading">
+              <span>{'>_'}</span>
+              <div>
+                <strong>{t('settings.terminal')}</strong>
+                <small>{t('settings.terminalDesc')}</small>
+              </div>
+            </div>
+            <TerminalSettings />
           </section>
 
           <section className="aspro-settings-section">
@@ -401,11 +410,13 @@ function NumberField({
   value,
   min,
   max,
+  suffix = 's',
   onCommit,
 }: {
   value: number;
   min: number;
   max: number;
+  suffix?: string;
   onCommit: (value: number) => void;
 }) {
   const [local, setLocal] = useState(String(value));
@@ -437,7 +448,150 @@ function NumberField({
         }}
         className="aspro-input w-16 px-2 py-1.5 text-right text-sm text-fg focus:border-azure focus:outline-none"
       />
-      <span className="text-xs text-faint">s</span>
+      <span className="text-xs text-faint">{suffix}</span>
     </div>
+  );
+}
+
+function TerminalSettings() {
+  const { t } = useI18n();
+  const { prefs, setPrefs, resetPrefs } = useTerminalPrefs();
+  const [fontFamily, setFontFamily] = useState(prefs.fontFamily);
+
+  useEffect(() => setFontFamily(prefs.fontFamily), [prefs.fontFamily]);
+
+  const commitFontFamily = () => {
+    if (fontFamily !== prefs.fontFamily) setPrefs({ fontFamily });
+  };
+
+  return (
+    <>
+      <div className="aspro-setting-row">
+        <div>
+          <strong>{t('settings.terminalFont')}</strong>
+          <small>{t('settings.terminalFontDesc')}</small>
+        </div>
+        <input
+          type="text"
+          value={fontFamily}
+          onChange={(e) => setFontFamily(e.target.value)}
+          onBlur={commitFontFamily}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            commitFontFamily();
+            (e.target as HTMLInputElement).blur();
+          }}
+          placeholder={t('settings.terminalFontPlaceholder')}
+          className="aspro-input w-40 shrink-0 px-3 py-1.5 text-sm text-fg focus:border-azure focus:outline-none"
+        />
+      </div>
+
+      <div className="aspro-setting-row">
+        <div>
+          <strong>{t('settings.terminalFontSize')}</strong>
+          <small>{t('settings.terminalFontSizeDesc')}</small>
+        </div>
+        <NumberField
+          value={prefs.fontSize}
+          min={8}
+          max={32}
+          suffix="px"
+          onCommit={(fontSize) => setPrefs({ fontSize })}
+        />
+      </div>
+
+      <div className="aspro-setting-row">
+        <div>
+          <strong>{t('settings.terminalCursorStyle')}</strong>
+        </div>
+        <div className="aspro-language-switch shrink-0" role="radiogroup">
+          <CursorStyleButton
+            value="block"
+            current={prefs.cursorStyle}
+            label={t('settings.terminalCursorBlock')}
+            onSelect={(cursorStyle) => setPrefs({ cursorStyle })}
+          />
+          <CursorStyleButton
+            value="underline"
+            current={prefs.cursorStyle}
+            label={t('settings.terminalCursorUnderline')}
+            onSelect={(cursorStyle) => setPrefs({ cursorStyle })}
+          />
+          <CursorStyleButton
+            value="bar"
+            current={prefs.cursorStyle}
+            label={t('settings.terminalCursorBar')}
+            onSelect={(cursorStyle) => setPrefs({ cursorStyle })}
+          />
+        </div>
+      </div>
+
+      <div className="aspro-setting-row">
+        <div>
+          <strong>{t('settings.terminalCursorBlink')}</strong>
+        </div>
+        <label className="aspro-hidden-toggle shrink-0">
+          <input
+            type="checkbox"
+            checked={prefs.cursorBlink}
+            onChange={(e) => setPrefs({ cursorBlink: e.target.checked })}
+          />
+          <span>{t(prefs.cursorBlink ? 'applock.statusEnabled' : 'applock.statusDisabled')}</span>
+        </label>
+      </div>
+
+      <div className="aspro-setting-row">
+        <div>
+          <strong>{t('settings.terminalScrollback')}</strong>
+          <small>{t('settings.terminalScrollbackDesc')}</small>
+        </div>
+        <NumberField
+          value={prefs.scrollback}
+          min={500}
+          max={100_000}
+          suffix={t('settings.terminalScrollbackUnit')}
+          onCommit={(scrollback) => setPrefs({ scrollback })}
+        />
+      </div>
+
+      <div className="aspro-setting-row">
+        <div>
+          <strong>{t('settings.terminalResetTitle')}</strong>
+          <small>{t('settings.terminalResetDesc')}</small>
+        </div>
+        <button
+          type="button"
+          onClick={resetPrefs}
+          className="aspro-button aspro-button-secondary compact shrink-0"
+        >
+          {t('settings.sshReset')}
+        </button>
+      </div>
+    </>
+  );
+}
+
+function CursorStyleButton({
+  value,
+  current,
+  label,
+  onSelect,
+}: {
+  value: CursorStyle;
+  current: CursorStyle;
+  label: string;
+  onSelect: (value: CursorStyle) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={current === value}
+      className={current === value ? 'active' : ''}
+      onClick={() => onSelect(value)}
+    >
+      {label}
+    </button>
   );
 }
