@@ -17,33 +17,64 @@
     "postinstall": "npm run rebuild:native",
     "verify": "npm run typecheck",
     "rebuild:native:force": "node ./scripts/rebuild-native.mjs --force",
-    "check": "npm run typecheck && npm run build"
+    "check": "npm run typecheck && npm run build",
+    "dist:win": "npm run build && electron-builder --win --publish=never"
   },
   "dependencies": {
-    "node-pty": "1.1.0",
     "@tailwindcss/vite": "^4.0.0",
     "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-search": "^0.15.0",
     "@xterm/addon-unicode11": "^0.8.0",
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/xterm": "^5.5.0",
+    "node-pty": "1.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "ssh2": "^1.16.0",
     "tailwindcss": "^4.0.0",
-    "@xterm/addon-search": "^0.15.0",
     "uplot": "^1.6.31"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.1",
-    "electron": "37.4.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/ssh2": "^1.15.5",
     "@vitejs/plugin-react": "^4.3.0",
+    "electron": "37.4.0",
+    "electron-builder": "^26.15.3",
     "typescript": "^5.8.0",
     "vite": "^7.0.0"
   },
   "productName": "ASProOps",
-  "description": "Developer & Server Operations Workspace — SSH, SFTP, deployment, and server monitoring built with Electron and React."
+  "description": "Developer & Server Operations Workspace — SSH, SFTP, deployment, and server monitoring built with Electron and React.",
+  "build": {
+    "appId": "com.asproops.desktop",
+    "productName": "ASProOps",
+    "directories": {
+      "output": "release"
+    },
+    "npmRebuild": false,
+    "asarUnpack": [
+      "**/node_modules/node-pty/**",
+      "**/node_modules/ssh2/**",
+      "**/node_modules/cpu-features/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/asproops.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
 }

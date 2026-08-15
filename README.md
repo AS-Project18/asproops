@@ -12,7 +12,7 @@
 
 ASProOps adalah aplikasi desktop berbasis Electron yang dirancang sebagai satu workspace untuk pekerjaan administrasi server dan operasi developer. Satu aplikasi menangani sesi SSH, terminal lokal Windows, distro WSL, browser file SFTP, remote editing, monitoring resource server, sampai alur DevOps — project profile, live log viewer, service manager, status Git, dan eksekusi deploy template — tanpa harus berpindah-pindah tool.
 
-> **Status project:** aktif dikembangkan. Versi source saat ini `0.6.0`. Packaging installer publik belum difinalkan, jadi rilis saat ini masih berorientasi source/development build.
+> **Status project:** aktif dikembangkan. Versi source saat ini `0.6.0`. Installer Windows (`.exe`) sudah bisa dibuat lewat `npm run dist:win`, tapi belum ditandatangani (code signing) dan belum punya auto-update — lihat [Installer / Release Binary](#installer--release-binary).
 
 ---
 
@@ -195,6 +195,7 @@ Vite akan menjalankan renderer development server dan Electron akan terbuka otom
 | `npm run check` | Typecheck lalu build |
 | `npm run rebuild:native` | Rebuild `node-pty` jika signature berubah |
 | `npm run rebuild:native:force` | Paksa rebuild `node-pty` |
+| `npm run dist:win` | Build lalu package installer Windows (`.exe`) ke `release/` |
 
 ---
 
@@ -506,20 +507,30 @@ npm run start
 
 ### Installer / Release Binary
 
-Pipeline installer `.exe`, code signing, auto-update, dan release channel **belum difinalkan pada versi 0.6.0**.
+ASProOps di-package menjadi installer Windows (`.exe`, NSIS) memakai [electron-builder](https://www.electron.build/):
 
-Sebelum ASProOps dinyatakan siap untuk pengguna umum, release pipeline direncanakan mencakup:
+```powershell
+npm run dist:win
+```
 
-1. packaging Windows x64
-2. icon executable ASProOps (asset pack sudah tersedia di `assets/`)
-3. installer
-4. version metadata
-5. release notes
-6. code signing bila tersedia
-7. update strategy
-8. checksum artifact
+Perintah ini menjalankan `npm run build` lalu membungkusnya jadi installer. Hasilnya ditempatkan di:
 
-Dengan pemisahan ini, `npm run build` tidak disalahartikan sebagai pembuatan installer final.
+```text
+release/
+  ASProOps Setup <versi>.exe   ← installer yang dibagikan ke pengguna
+  win-unpacked/                ← build tanpa installer, untuk uji cepat (jalankan ASProOps.exe langsung)
+```
+
+Installer bersifat non-oneClick (pengguna bisa memilih lokasi instalasi) dan otomatis membuat shortcut Desktop serta Start Menu. Konfigurasi packaging ada di field `"build"` pada `package.json` — icon executable memakai `assets/asproops.ico`, dan native module (`node-pty`, `ssh2`, `cpu-features`) di-unpack dari asar karena binding native tidak bisa dimuat langsung dari dalam arsip `.asar`.
+
+`npmRebuild` sengaja dimatikan (`false`): electron-builder secara default mencoba rebuild ulang native module dari source sebelum packaging, padahal binary prebuilt yang sudah ada di `node_modules` (lihat [Native Module dan Rebuild](#native-module-dan-rebuild)) sudah cocok dengan versi Electron yang dipakai — rebuild ulang di sini hanya menambah waktu build dan risiko gagal di lingkungan yang belum siap toolchain native (Visual Studio Build Tools, dsb).
+
+Yang **belum difinalkan** pada versi 0.6.0:
+
+- code signing (installer saat ini tidak ditandatangani — Windows SmartScreen kemungkinan akan memperingatkan saat instalasi)
+- auto-update
+- release channel / checksum artifact publik
+- build untuk arch selain x64 (arm64 Windows, serta macOS/Linux — belum diuji meski `node-pty` menyediakan prebuild untuk platform tersebut)
 
 ---
 
@@ -611,7 +622,7 @@ Saat repository publik sudah ditetapkan, bagian ini dapat diperluas dengan workf
 
 Beberapa area yang direncanakan untuk pengembangan berikutnya:
 
-- packaging installer Windows (`.exe`, code signing, auto-update)
+- code signing dan auto-update untuk installer Windows (packaging dasarnya sudah ada, lihat [Installer / Release Binary](#installer--release-binary))
 - module icon (Terminal/Monitoring) dari asset pack untuk ikon rail/tab, saat ini baru dipakai di identitas aplikasi utama
 - riwayat/log hasil deploy yang tersimpan (saat ini hanya sebatas tab workspace yang sedang berjalan)
 - push dari Git Panel (saat ini sengaja dibatasi ke fetch/pull)

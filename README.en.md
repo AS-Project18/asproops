@@ -12,7 +12,7 @@
 
 ASProOps is an Electron-based desktop application designed as a single workspace for server administration and developer operations. One app handles SSH sessions, local Windows terminals, WSL distros, an SFTP file browser, remote editing, server resource monitoring, and a full DevOps flow — project profiles, a live log viewer, service manager, Git status, and deploy template execution — without switching between tools.
 
-> **Project status:** actively developed. Current source version `0.6.0`. Public installer packaging isn't finalized yet, so the current release is still source/development-build oriented.
+> **Project status:** actively developed. Current source version `0.6.0`. A Windows installer (`.exe`) can already be built via `npm run dist:win`, but it isn't code-signed yet and has no auto-update — see [Installer / Release Binary](#installer--release-binary).
 
 ---
 
@@ -195,6 +195,7 @@ Vite starts the renderer dev server and Electron opens automatically.
 | `npm run check` | Typecheck, then build |
 | `npm run rebuild:native` | Rebuilds `node-pty` if the signature changed |
 | `npm run rebuild:native:force` | Forces a `node-pty` rebuild |
+| `npm run dist:win` | Builds, then packages a Windows installer (`.exe`) into `release/` |
 
 ---
 
@@ -506,20 +507,30 @@ npm run start
 
 ### Installer / Release Binary
 
-The `.exe` installer pipeline, code signing, auto-update, and release channel **aren't finalized as of version 0.6.0**.
+ASProOps is packaged into a Windows installer (`.exe`, NSIS) using [electron-builder](https://www.electron.build/):
 
-Before ASProOps is declared ready for general users, the release pipeline is planned to cover:
+```powershell
+npm run dist:win
+```
 
-1. Windows x64 packaging
-2. ASProOps executable icon (asset pack already available under `assets/`)
-3. installer
-4. version metadata
-5. release notes
-6. code signing, where available
-7. update strategy
-8. checksum artifacts
+This runs `npm run build` and then wraps the output into an installer. Results land in:
 
-This separation keeps `npm run build` from being mistaken for producing a final installer.
+```text
+release/
+  ASProOps Setup <version>.exe   ← the installer shared with users
+  win-unpacked/                  ← installer-free build, for quick testing (run ASProOps.exe directly)
+```
+
+The installer is non-oneClick (users can pick an install location) and automatically creates Desktop and Start Menu shortcuts. Packaging config lives in the `"build"` field in `package.json` — the executable icon uses `assets/asproops.ico`, and native modules (`node-pty`, `ssh2`, `cpu-features`) are unpacked from the asar archive because native bindings can't be loaded directly from inside a `.asar`.
+
+`npmRebuild` is deliberately disabled (`false`): electron-builder by default tries to rebuild native modules from source before packaging, but the prebuilt binaries already present in `node_modules` (see [Native Modules and Rebuilding](#native-modules-and-rebuilding)) already match the Electron version in use — rebuilding here only adds build time and risks failure on environments without the native toolchain set up (Visual Studio Build Tools, etc.).
+
+Still **not finalized** as of version 0.6.0:
+
+- code signing (the installer is currently unsigned — Windows SmartScreen will likely warn during install)
+- auto-update
+- a public release channel / checksum artifacts
+- builds for architectures other than x64 (Windows arm64, plus macOS/Linux — untested even though `node-pty` ships prebuilds for those platforms)
 
 ---
 
@@ -611,7 +622,7 @@ Once the repository goes public, this section can be expanded with a branching w
 
 A few areas planned for future work:
 
-- Windows installer packaging (`.exe`, code signing, auto-update)
+- code signing and auto-update for the Windows installer (basic packaging already exists, see [Installer / Release Binary](#installer--release-binary))
 - Terminal/Monitoring module icons from the asset pack for rail/tab icons — currently only used for the main app identity
 - persisted deploy run history (currently limited to the workspace tab while it's running)
 - push support in the Git Panel (currently deliberately limited to fetch/pull)
