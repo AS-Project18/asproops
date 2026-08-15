@@ -642,9 +642,14 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
 
       <div className="aspro-file-subbar">
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
-          <span className="mr-0.5 shrink-0 font-mono text-[11px] text-faint">
-            {selected.size > 0 ? t('sftp.selected', { count: selected.size }) : ''}
-          </span>
+          {selected.size > 0 && (
+            <span
+              title={t('sftp.selected', { count: selected.size })}
+              className="mr-0.5 shrink-0 rounded-full bg-active px-1.5 py-0.5 text-center font-mono text-[10px] text-dim"
+            >
+              {selected.size}
+            </span>
+          )}
           <ActionButton
             icon="edit"
             label={t('sftp.actionEdit')}

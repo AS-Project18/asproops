@@ -56,6 +56,7 @@ export default function App() {
   const [leftMode, setLeftMode] = useState<LeftMode>('servers');
   const [leftWidth, setLeftWidth] = useState(330);
   const [resizingLeft, setResizingLeft] = useState(false);
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [monitorSnapshot, setMonitorSnapshot] = useState<MonitorSnapshot | null>(null);
   const [form, setForm] = useState<FormState>({ open: false });
   const [pendingDelete, setPendingDelete] = useState<SessionConfig | null>(null);
@@ -129,6 +130,12 @@ export default function App() {
     () => Object.values(statuses).filter((status) => status === 'connected').length,
     [statuses],
   );
+
+  /** Klik tombol nav mana pun juga membuka lagi sidebar kalau lagi disembunyikan — tujuannya kan mau lihat panelnya. */
+  const selectLeftMode = (mode: LeftMode) => {
+    setLeftMode(mode);
+    setLeftCollapsed(false);
+  };
 
   const handleSelectRemote = (id: string) => {
     setActiveLocalId(null);
@@ -428,7 +435,9 @@ export default function App() {
       <div
         className={`aspro-workspace ${resizingLeft ? 'is-resizing' : ''}`}
         style={{
-          gridTemplateColumns: `78px ${leftWidth}px minmax(420px, 1fr)`,
+          gridTemplateColumns: leftCollapsed
+            ? '78px minmax(420px, 1fr)'
+            : `78px ${leftWidth}px minmax(420px, 1fr)`,
         }}
       >
         <aside className="aspro-rail" aria-label={t('nav.connections')}>
@@ -436,48 +445,54 @@ export default function App() {
             active={leftMode === 'servers'}
             icon="▦"
             label={t('nav.connections')}
-            onClick={() => setLeftMode('servers')}
+            onClick={() => selectLeftMode('servers')}
           />
           <RailButton
             active={leftMode === 'local'}
             icon=">_"
             label={t('nav.local')}
-            onClick={() => setLeftMode('local')}
+            onClick={() => selectLeftMode('local')}
           />
           <RailButton
             active={leftMode === 'files'}
             icon="□"
             label={t('nav.sftp')}
-            onClick={() => setLeftMode('files')}
+            onClick={() => selectLeftMode('files')}
           />
           <RailButton
             active={leftMode === 'monitor'}
             icon="⌁"
             label={t('nav.monitor')}
-            onClick={() => setLeftMode('monitor')}
+            onClick={() => selectLeftMode('monitor')}
           />
           <RailButton
             active={leftMode === 'projects'}
             icon="▣"
             label={t('nav.projects')}
-            onClick={() => setLeftMode('projects')}
-          />
-          <RailButton
-            active={leftMode === 'services'}
-            icon="⏻"
-            label={t('nav.services')}
-            onClick={() => setLeftMode('services')}
+            onClick={() => selectLeftMode('projects')}
           />
           <RailButton
             active={leftMode === 'git'}
             icon="⎇"
             label={t('nav.git')}
-            onClick={() => setLeftMode('git')}
+            onClick={() => selectLeftMode('git')}
+          />
+          <RailButton
+            active={leftMode === 'services'}
+            icon="⏻"
+            label={t('nav.services')}
+            onClick={() => selectLeftMode('services')}
           />
           <div className="flex-1" />
+          <RailButton
+            icon={leftCollapsed ? '⇥' : '⇤'}
+            label={leftCollapsed ? t('nav.showSidebar') : t('nav.hideSidebar')}
+            onClick={() => setLeftCollapsed((v) => !v)}
+          />
           <RailButton icon="⚙" label={t('nav.settings')} onClick={() => setSettingsOpen(true)} />
         </aside>
 
+        {!leftCollapsed && (
         <aside className="aspro-left-dock">
           <div className="relative min-h-0 flex-1 overflow-hidden">
             <div
@@ -617,6 +632,7 @@ export default function App() {
             title="Geser untuk mengubah lebar sidebar"
           />
         </aside>
+        )}
 
         <main className="aspro-center">
           <div className="aspro-workspace-tabs">
