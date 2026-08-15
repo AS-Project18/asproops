@@ -41,6 +41,16 @@ export class SshConnection extends EventEmitter {
   private reconnectTimer: NodeJS.Timeout | null = null;
   /** Disengaja ditutup pengguna — jangan reconnect. */
   private closedByUser = false;
+  /**
+   * Naik tiap kali connect() atau disconnect() dipanggil. Event dari
+   * percobaan koneksi yang sudah usang (mis. 'close' yang datang setelah
+   * pengguna menekan disconnect, atau setelah percobaan reconnect baru
+   * sudah dimulai) dicek terhadap ini sebelum diizinkan mengubah status
+   * atau memicu scheduleReconnect — tanpa ini, percobaan lama yang masih
+   * "hidup" di latar belakang bisa menyalakan ulang siklus reconnect
+   * walaupun pengguna sudah menekan Disconnect.
+   */
+  private generation = 0;
 
   constructor(
     private readonly config: SessionConfig,
@@ -142,6 +152,8 @@ export class SshConnection extends EventEmitter {
     if (this.status === 'connected' || this.status === 'connecting') return;
 
     this.closedByUser = false;
+    this.generation += 1;
+    const generation = this.generation;
     this.setStatus(this.reconnectAttempt > 0 ? 'reconnecting' : 'connecting');
 
     const config = await this.buildConnectConfig();
@@ -151,6 +163,15 @@ export class SshConnection extends EventEmitter {
     await new Promise<void>((resolve, reject) => {
       const onReady = () => {
         client.removeListener('error', onError);
+        if (generation !== this.generation) {
+          // Percobaan ini sudah usang — pengguna sudah disconnect, atau
+          // connect() lain sudah dimulai selagi ini masih menunggu server.
+          // Tutup diam-diam, jangan sentuh status milik percobaan yang
+          // lebih baru.
+          client.end();
+          resolve();
+          return;
+        }
         this.reconnectAttempt = 0;
         this.setStatus('connected');
         resolve();
@@ -159,7 +180,7 @@ export class SshConnection extends EventEmitter {
       const onError = (err: Error) => {
         client.removeListener('ready', onReady);
         const message = this.explainError(err);
-        this.setStatus('error', message);
+        if (generation === this.generation) this.setStatus('error', message);
         reject(new Error(message));
       };
 
@@ -173,10 +194,18 @@ export class SshConnection extends EventEmitter {
       });
 
       client.on('close', () => {
+        if (this.client === client) this.client = null;
         this.sftpPromise = null;
-        this.client = null;
-        if (!this.closedByUser) this.scheduleReconnect();
-        else this.setStatus('disconnected');
+        if (generation === this.generation) {
+          if (!this.closedByUser) this.scheduleReconnect();
+          else this.setStatus('disconnected');
+        }
+        // 'close' bisa datang sebelum 'ready'/'error' kalau koneksinya
+        // diakhiri paksa di tengah handshake (mis. disconnect() memanggil
+        // client.end() selagi masih connecting) — tanpa reject ini, promise
+        // di atas menggantung selamanya dan pemanggilnya (ConnectionManager
+        // .open) tidak pernah tahu percobaan ini sudah berakhir.
+        reject(new Error('Koneksi ditutup sebelum siap.'));
       });
 
       client.connect(config);
@@ -231,9 +260,13 @@ export class SshConnection extends EventEmitter {
     const delay =
       RECONNECT_DELAYS_MS[Math.min(this.reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
     this.reconnectAttempt += 1;
+    const generation = this.generation;
     this.setStatus('reconnecting', `Mencoba ulang dalam ${delay / 1000}s`);
 
     this.reconnectTimer = setTimeout(() => {
+      // Jaga-jaga kalau clearTimeout di disconnect() entah bagaimana
+      // terlewat — generasi yang sudah usang tidak boleh mulai connect().
+      if (generation !== this.generation) return;
       this.connect().catch(() => {
         /* error sudah dilaporkan lewat event status; biarkan siklus berulang */
       });
@@ -296,6 +329,8 @@ export class SshConnection extends EventEmitter {
 
   disconnect(): void {
     this.closedByUser = true;
+    this.generation += 1;
+    this.reconnectAttempt = 0;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     this.client?.end();
