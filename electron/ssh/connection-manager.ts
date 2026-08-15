@@ -308,6 +308,19 @@ export class SshConnection extends EventEmitter {
     });
   }
 
+  /**
+   * Channel non-interaktif untuk perintah yang jalan terus, mis. `tail -f`.
+   * Beda dari exec(): stream mentahnya dikembalikan apa adanya, bukan
+   * dikumpulkan sampai selesai — pemanggil yang menangani data seiring
+   * datangnya (perintahnya sendiri memang tidak akan pernah "selesai").
+   */
+  async execStream(command: string): Promise<ClientChannel> {
+    const client = this.requireClient();
+    return new Promise((resolve, reject) => {
+      client.exec(command, (err, stream) => (err ? reject(err) : resolve(stream)));
+    });
+  }
+
   /** SFTP subsystem dibuka sekali lalu dipakai ulang oleh file browser. */
   async getSftp(): Promise<SFTPWrapper> {
     const client = this.requireClient();
@@ -372,6 +385,7 @@ function isChannelExhaustion(error: unknown): boolean {
 export interface SessionChannels {
   openShell(cols: number, rows: number): Promise<ClientChannel>;
   exec(command: string): Promise<{ stdout: string; stderr: string; code: number }>;
+  execStream(command: string): Promise<ClientChannel>;
   getSftp(): Promise<SFTPWrapper>;
 }
 
@@ -428,6 +442,10 @@ export class SessionPool implements SessionChannels {
 
   exec(command: string): Promise<{ stdout: string; stderr: string; code: number }> {
     return this.withCapacity((connection) => connection.exec(command));
+  }
+
+  execStream(command: string): Promise<ClientChannel> {
+    return this.withCapacity((connection) => connection.execStream(command));
   }
 
   getSftp(): Promise<SFTPWrapper> {

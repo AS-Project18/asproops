@@ -71,7 +71,8 @@ export class ProjectStore {
 
   createProject(
     sessionId: string,
-    input: Pick<ProjectProfile, 'name' | 'path' | 'env' | 'deployTemplateId'>,
+    input: Pick<ProjectProfile, 'name' | 'path' | 'env' | 'deployTemplateId'> &
+      Partial<Pick<ProjectProfile, 'logPaths'>>,
   ): ProjectProfile {
     const project: ProjectProfile = {
       id: randomUUID(),
@@ -79,7 +80,7 @@ export class ProjectStore {
       name: input.name,
       path: input.path,
       env: input.env ?? {},
-      logPaths: [],
+      logPaths: input.logPaths ?? [],
       serviceNames: [],
       deployTemplateId: input.deployTemplateId,
       createdAt: Date.now(),

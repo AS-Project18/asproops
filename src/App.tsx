@@ -10,12 +10,23 @@ import { FileBrowser } from './components/FileBrowser';
 import { MonitorPanel } from './components/MonitorPanel';
 import { LocalTerminalPanel } from './components/LocalTerminalPanel';
 import { LocalTerminalView } from './components/LocalTerminalView';
+import { LogView } from './components/LogView';
 import { ProjectsPanel } from './components/ProjectsPanel';
 import { SettingsDialog } from './components/SettingsDialog';
 import { useI18n } from './i18n';
 import { useSessions } from './hooks/useSessions';
 import { formatBytes } from './lib/format';
-import type { LocalTerminalProfile, LocalTerminalWorkspace, MonitorSnapshot, SessionConfig } from './shared/types';
+import type {
+  LocalTerminalProfile,
+  LocalTerminalWorkspace,
+  LogWorkspace,
+  MonitorSnapshot,
+  SessionConfig,
+} from './shared/types';
+
+function basename(path: string): string {
+  return path.split('/').filter(Boolean).pop() ?? path;
+}
 
 type FormState = { open: false } | { open: true; editing: SessionConfig | null };
 type LeftMode = 'servers' | 'local' | 'files' | 'monitor' | 'projects';
@@ -28,9 +39,11 @@ export default function App() {
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeLocalId, setActiveLocalId] = useState<string | null>(null);
+  const [activeLogId, setActiveLogId] = useState<string | null>(null);
   const [localProfiles, setLocalProfiles] = useState<LocalTerminalProfile[]>([]);
   const [localProfilesLoading, setLocalProfilesLoading] = useState(true);
   const [localWorkspaces, setLocalWorkspaces] = useState<LocalTerminalWorkspace[]>([]);
+  const [logWorkspaces, setLogWorkspaces] = useState<LogWorkspace[]>([]);
   const [leftMode, setLeftMode] = useState<LeftMode>('servers');
   const [leftWidth, setLeftWidth] = useState(330);
   const [resizingLeft, setResizingLeft] = useState(false);
@@ -101,6 +114,7 @@ export default function App() {
   const activeSession = sessions.find((s) => s.id === activeId) ?? null;
   const activeLocal =
     localWorkspaces.find((workspace) => workspace.id === activeLocalId) ?? null;
+  const activeLog = logWorkspaces.find((workspace) => workspace.id === activeLogId) ?? null;
   const connectedCount = useMemo(
     () => Object.values(statuses).filter((status) => status === 'connected').length,
     [statuses],
@@ -108,21 +122,31 @@ export default function App() {
 
   const handleSelectRemote = (id: string) => {
     setActiveLocalId(null);
+    setActiveLogId(null);
     setActiveId(id);
   };
 
   const activateRemoteWorkspace = (id: string) => {
     setActiveLocalId(null);
+    setActiveLogId(null);
     setActiveId(id);
   };
 
   const activateLocalWorkspace = (workspaceId: string) => {
+    setActiveLogId(null);
     setActiveLocalId(workspaceId);
+  };
+
+  const activateLogWorkspace = (workspaceId: string) => {
+    setActiveLocalId(null);
+    setActiveId(null);
+    setActiveLogId(workspaceId);
   };
 
   const handleConnect = (id: string) => {
     setOpenSessions((prev) => (prev.includes(id) ? prev : [...prev, id]));
     setActiveLocalId(null);
+    setActiveLogId(null);
     setActiveId(id);
     void connect(id);
   };
@@ -140,8 +164,28 @@ export default function App() {
     };
 
     setLocalWorkspaces((current) => [...current, workspace]);
+    setActiveLogId(null);
     setActiveLocalId(workspace.id);
     setLeftMode('local');
+  };
+
+  /**
+   * Dipanggil dari ProjectsPanel. Kalau log path yang sama di session yang
+   * sama sudah punya tab, cukup fokuskan — supaya klik berulang tidak
+   * numpuk tab identik.
+   */
+  const openLogView = (sessionId: string, path: string) => {
+    const existing = logWorkspaces.find((w) => w.sessionId === sessionId && w.path === path);
+    if (existing) {
+      activateLogWorkspace(existing.id);
+      return;
+    }
+
+    const workspace: LogWorkspace = { id: crypto.randomUUID(), sessionId, path, createdAt: Date.now() };
+    setLogWorkspaces((current) => [...current, workspace]);
+    setActiveLocalId(null);
+    setActiveId(null);
+    setActiveLogId(workspace.id);
   };
 
   const closeLocalTerminal = (workspaceId: string) => {
@@ -156,6 +200,10 @@ export default function App() {
         setActiveLocalId(null);
         const lastRemote = openSessions.at(-1);
         if (lastRemote) setActiveId(lastRemote);
+        else {
+          const lastLog = logWorkspaces.at(-1);
+          if (lastLog) setActiveLogId(lastLog.id);
+        }
       }
     }
   };
@@ -177,6 +225,30 @@ export default function App() {
         setActiveId(null);
         const lastLocal = localWorkspaces.at(-1);
         if (lastLocal) setActiveLocalId(lastLocal.id);
+        else {
+          const lastLog = logWorkspaces.at(-1);
+          if (lastLog) setActiveLogId(lastLog.id);
+        }
+      }
+    }
+  };
+
+  const closeLogView = (workspaceId: string) => {
+    const remaining = logWorkspaces.filter((item) => item.id !== workspaceId);
+    setLogWorkspaces(remaining);
+
+    if (activeLogId === workspaceId) {
+      const nextLog = remaining.at(-1);
+      if (nextLog) {
+        setActiveLogId(nextLog.id);
+      } else {
+        setActiveLogId(null);
+        const lastLocal = localWorkspaces.at(-1);
+        if (lastLocal) setActiveLocalId(lastLocal.id);
+        else {
+          const lastRemote = openSessions.at(-1);
+          if (lastRemote) setActiveId(lastRemote);
+        }
       }
     }
   };
@@ -364,7 +436,7 @@ export default function App() {
                       : 'pointer-events-none invisible absolute inset-0'
                   }
                 >
-                  <ProjectsPanel sessionId={activeSession.id} />
+                  <ProjectsPanel sessionId={activeSession.id} onOpenLog={openLogView} />
                 </div>
               </>
             ) : (
@@ -488,13 +560,70 @@ export default function App() {
               );
             })}
 
-            {openSessions.length === 0 && localWorkspaces.length === 0 && (
+            {logWorkspaces.map((workspace) => {
+              const isActive = activeLogId === workspace.id;
+
+              return (
+                <button
+                  key={`log:${workspace.id}`}
+                  className={`aspro-workspace-tab ${isActive ? 'active' : ''}`}
+                  onClick={() => activateLogWorkspace(workspace.id)}
+                  title={workspace.path}
+                >
+                  <span className="aspro-workspace-tab-dot log" />
+                  <span className="truncate">{basename(workspace.path)}</span>
+                  <span className="aspro-workspace-tab-kind">LOG</span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="aspro-workspace-tab-close"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      closeLogView(workspace.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        closeLogView(workspace.id);
+                      }
+                    }}
+                    title="Tutup log viewer"
+                  >
+                    ×
+                  </span>
+                </button>
+              );
+            })}
+
+            {openSessions.length === 0 && localWorkspaces.length === 0 && logWorkspaces.length === 0 && (
               <span className="aspro-workspace-tabs-empty">{t('workspace.none')}</span>
             )}
           </div>
 
           <div className="aspro-session-header">
-            {activeLocal ? (
+            {activeLog ? (
+              <>
+                <div className="aspro-live-dot online" />
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-fg">
+                    {basename(activeLog.path)}
+                  </div>
+                  <div className="truncate font-mono text-[12px] text-faint">{activeLog.path}</div>
+                </div>
+                <span className="aspro-local-chip">LOG</span>
+                <span className="aspro-status-chip connected">{t('workspace.active')}</span>
+
+                <div className="ml-auto">
+                  <button
+                    onClick={() => closeLogView(activeLog.id)}
+                    className="aspro-button aspro-button-danger"
+                  >
+                    {t('workspace.close')}
+                  </button>
+                </div>
+              </>
+            ) : activeLocal ? (
               <>
                 <div className="aspro-live-dot online" />
                 <div className="min-w-0">
@@ -625,7 +754,25 @@ export default function App() {
               </div>
             ))}
 
-            {activeLocal ? null : loading ? (
+            {logWorkspaces.map((workspace) => (
+              <div
+                key={workspace.id}
+                className={
+                  workspace.id === activeLogId
+                    ? 'absolute inset-0'
+                    : 'pointer-events-none invisible absolute inset-0'
+                }
+              >
+                <LogView
+                  sessionId={workspace.sessionId}
+                  path={workspace.path}
+                  active={workspace.id === activeLogId}
+                  onExit={() => closeLogView(workspace.id)}
+                />
+              </div>
+            ))}
+
+            {activeLog || activeLocal ? null : loading ? (
               <WorkspacePlaceholder
                 icon="⌁"
                 title={t('workspace.loadingServers')}
@@ -671,7 +818,15 @@ export default function App() {
 
       <footer className="aspro-statusbar">
         <span className="text-orange">◇</span>
-        {activeLocal ? (
+        {activeLog ? (
+          <>
+            <span className="text-mint">● {basename(activeLog.path)}</span>
+            <span className="aspro-divider" />
+            <span>LOG</span>
+            <span className="aspro-divider" />
+            <span className="font-mono">{activeLog.path}</span>
+          </>
+        ) : activeLocal ? (
           <>
             <span className="text-mint">
               ● {activeLocal.profile.kind === 'wsl' ? `WSL · ${activeLocal.profile.name}` : activeLocal.profile.name}
@@ -795,6 +950,7 @@ export default function App() {
             await remove(pendingDelete.id);
             if (activeId === pendingDelete.id) setActiveId(null);
             setOpenSessions((prev) => prev.filter((id) => id !== pendingDelete.id));
+            setLogWorkspaces((prev) => prev.filter((w) => w.sessionId !== pendingDelete.id));
             setPendingDelete(null);
           }}
           onCancel={() => setPendingDelete(null)}

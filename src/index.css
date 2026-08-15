@@ -1210,6 +1210,10 @@ button:disabled {
   background: #ff9700;
   box-shadow: 0 0 6px rgba(255, 151, 0, .38);
 }
+.aspro-workspace-tab-dot.log {
+  background: #ffd23b;
+  box-shadow: 0 0 6px rgba(255, 210, 59, .40);
+}
 .aspro-workspace-tab-dot.pending {
   background: #ffb52e;
   box-shadow: 0 0 6px rgba(255, 181, 46, .45);

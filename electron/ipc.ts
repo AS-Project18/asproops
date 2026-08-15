@@ -43,8 +43,15 @@ let localTerminals: LocalTerminalManager;
 
 /** terminalId -> channel shell yang sedang terbuka. */
 const shells = new Map<string, ClientChannel>();
+/** tailId -> channel `tail -f` yang sedang berjalan. */
+const logTails = new Map<string, ClientChannel>();
 /** Callback host key yang sedang menunggu jawaban pengguna. */
 const pendingHostKeys = new Map<string, (trust: boolean) => void>();
+
+/** Bungkus path dengan tanda kutip tunggal supaya aman dipakai di shell remote. */
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
 
 async function resolveSession(id: string): Promise<{ config: SessionConfig; secret: Secret }> {
   const config = store.get(id);
@@ -234,6 +241,35 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.on('shell:close', (_e, terminalId: string) => {
     shells.get(terminalId)?.end();
     shells.delete(terminalId);
+  });
+
+  // --- Live log viewer ------------------------------------------------------
+  // `tail -F` (huruf besar) mengikuti rotasi log (logrotate) — beda dari
+  // `-f` yang berhenti kalau berkasnya diganti. -n 200 kasih konteks awal
+  // supaya panel tidak polos kosong sebelum baris baru muncul.
+  ipcMain.handle('log:open', async (_e, sessionId: string, path: string) => {
+    const connection = connections.require(sessionId);
+    const stream = await connection.execStream(`tail -F -n 200 -- ${shellQuote(path)}`);
+    const tailId = randomUUID();
+    logTails.set(tailId, stream);
+
+    stream.on('data', (chunk: Buffer) =>
+      send('log:data', { tailId, data: chunk.toString('utf8') }),
+    );
+    stream.stderr.on('data', (chunk: Buffer) =>
+      send('log:data', { tailId, data: chunk.toString('utf8') }),
+    );
+    stream.on('close', () => {
+      logTails.delete(tailId);
+      send('log:close', { tailId });
+    });
+
+    return tailId;
+  });
+
+  ipcMain.on('log:close', (_e, tailId: string) => {
+    logTails.get(tailId)?.close();
+    logTails.delete(tailId);
   });
 
   // --- Terminal lokal Windows / WSL --------------------------------------

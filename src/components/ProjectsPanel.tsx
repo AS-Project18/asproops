@@ -10,11 +10,16 @@ import { useI18n } from '../i18n';
 
 interface ProjectsPanelProps {
   sessionId: string;
+  onOpenLog: (sessionId: string, path: string) => void;
+}
+
+function basename(path: string): string {
+  return path.split('/').filter(Boolean).pop() ?? path;
 }
 
 type FormState = { open: false } | { open: true; editing: ProjectProfile | null };
 
-export function ProjectsPanel({ sessionId }: ProjectsPanelProps) {
+export function ProjectsPanel({ sessionId, onOpenLog }: ProjectsPanelProps) {
   const { t } = useI18n();
   const [projectList, setProjectList] = useState<ProjectProfile[]>([]);
   const [templates, setTemplates] = useState<DeployTemplate[]>([]);
@@ -60,28 +65,45 @@ export function ProjectsPanel({ sessionId }: ProjectsPanelProps) {
       ) : (
         <div className="aspro-local-list">
           {projectList.map((project) => (
-            <div key={project.id} className="aspro-local-row group">
-              <span className="aspro-local-icon">▣</span>
-              <button
-                className="min-w-0 flex-1 text-left"
-                onClick={() => setForm({ open: true, editing: project })}
-              >
-                <strong>{project.name}</strong>
-                <small className="font-mono">{project.path}</small>
-                {project.deployTemplateId && templateName(project.deployTemplateId) && (
-                  <small>⇪ {templateName(project.deployTemplateId)}</small>
-                )}
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPendingDelete(project);
-                }}
-                title={t('project.delete')}
-                className="shrink-0 rounded px-1.5 py-1 text-faint opacity-0 hover:bg-line hover:text-fg focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-azure group-hover:opacity-100"
-              >
-                ✕
-              </button>
+            <div key={project.id}>
+              <div className="aspro-local-row group">
+                <span className="aspro-local-icon">▣</span>
+                <button
+                  className="min-w-0 flex-1 text-left"
+                  onClick={() => setForm({ open: true, editing: project })}
+                >
+                  <strong>{project.name}</strong>
+                  <small className="font-mono">{project.path}</small>
+                  {project.deployTemplateId && templateName(project.deployTemplateId) && (
+                    <small>⇪ {templateName(project.deployTemplateId)}</small>
+                  )}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPendingDelete(project);
+                  }}
+                  title={t('project.delete')}
+                  className="shrink-0 rounded px-1.5 py-1 text-faint opacity-0 hover:bg-line hover:text-fg focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-azure group-hover:opacity-100"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {project.logPaths.length > 0 && (
+                <div className="mb-1.5 mt-1 flex flex-wrap gap-1.5 pl-[39px]">
+                  {project.logPaths.map((logPath) => (
+                    <button
+                      key={logPath}
+                      onClick={() => onOpenLog(project.sessionId, logPath)}
+                      title={logPath}
+                      className="rounded border border-line px-2 py-1 font-mono text-[10px] text-dim hover:border-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+                    >
+                      ▶ {basename(logPath)}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -152,6 +174,7 @@ function ProjectFormDialog({
   const [env, setEnv] = useState<Array<{ key: string; value: string }>>(
     existing ? Object.entries(existing.env).map(([key, value]) => ({ key, value })) : [],
   );
+  const [logPaths, setLogPaths] = useState<string[]>(existing?.logPaths ?? []);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -161,6 +184,14 @@ function ProjectFormDialog({
 
   const removeEnvRow = (index: number) => {
     setEnv((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const updateLogPath = (index: number, value: string) => {
+    setLogPaths((prev) => prev.map((p, i) => (i === index ? value : p)));
+  };
+
+  const removeLogPath = (index: number) => {
+    setLogPaths((prev) => prev.filter((_, i) => i !== index));
   };
 
   const submit = async (event: FormEvent) => {
@@ -179,6 +210,7 @@ function ProjectFormDialog({
         name: name.trim(),
         path: path.trim(),
         env: envRecord,
+        logPaths: logPaths.map((p) => p.trim()).filter(Boolean),
         deployTemplateId: deployTemplateId || undefined,
       };
       if (existing) await window.ssh.projects.update(existing.id, input);
@@ -273,6 +305,37 @@ function ProjectFormDialog({
                 className="text-xs text-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
               >
                 {t('project.envAdd')}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <span className="mb-1.5 block text-xs text-muted">{t('project.logPaths')}</span>
+            <div className="space-y-2">
+              {logPaths.map((logPath, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    value={logPath}
+                    onChange={(e) => updateLogPath(index, e.target.value)}
+                    placeholder={t('project.logPathPlaceholder')}
+                    spellCheck={false}
+                    className="aspro-input w-full px-2 py-1.5 font-mono text-xs text-fg placeholder-faint focus:border-azure focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeLogPath(index)}
+                    className="shrink-0 rounded px-1.5 py-1 text-faint hover:bg-line hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setLogPaths((prev) => [...prev, ''])}
+                className="text-xs text-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+              >
+                {t('project.logPathAdd')}
               </button>
             </div>
           </div>

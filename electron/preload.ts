@@ -55,7 +55,8 @@ const api = {
       ipcRenderer.invoke('projects:list', sessionId),
     create: (
       sessionId: string,
-      input: Pick<ProjectProfile, 'name' | 'path' | 'env' | 'deployTemplateId'>,
+      input: Pick<ProjectProfile, 'name' | 'path' | 'env' | 'deployTemplateId'> &
+        Partial<Pick<ProjectProfile, 'logPaths'>>,
     ): Promise<ProjectProfile> => ipcRenderer.invoke('projects:create', sessionId, input),
     update: (id: string, patch: Partial<ProjectProfile>): Promise<ProjectProfile | undefined> =>
       ipcRenderer.invoke('projects:update', id, patch),
@@ -107,6 +108,15 @@ const api = {
     onData: (handler: (p: { terminalId: string; data: string }) => void) =>
       subscribe('shell:data', handler),
     onClose: (handler: (p: { terminalId: string }) => void) => subscribe('shell:close', handler),
+  },
+
+  log: {
+    open: (sessionId: string, path: string): Promise<string> =>
+      ipcRenderer.invoke('log:open', sessionId, path),
+    close: (tailId: string) => ipcRenderer.send('log:close', tailId),
+    onData: (handler: (p: { tailId: string; data: string }) => void) =>
+      subscribe('log:data', handler),
+    onClose: (handler: (p: { tailId: string }) => void) => subscribe('log:close', handler),
   },
 
   local: {

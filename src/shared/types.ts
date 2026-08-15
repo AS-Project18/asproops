@@ -130,6 +130,14 @@ export interface LocalTerminalWorkspace {
   createdAt: number;
 }
 
+/** Satu tab live log viewer yang sedang terbuka di workspace. */
+export interface LogWorkspace {
+  id: string;
+  sessionId: string;
+  path: string;
+  createdAt: number;
+}
+
 /**
  * Satu working directory di satu server — fondasi untuk fitur DevOps
  * (deploy, log viewer, service manager) yang menyusul. Sengaja per-session
