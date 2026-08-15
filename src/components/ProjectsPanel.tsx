@@ -13,6 +13,7 @@ interface ProjectsPanelProps {
   onOpenLog: (sessionId: string, path: string) => void;
   onOpenService: (unit: string) => void;
   onOpenGit: (projectId: string) => void;
+  onOpenDeploy: (project: ProjectProfile, templateName: string) => void;
 }
 
 function basename(path: string): string {
@@ -21,13 +22,20 @@ function basename(path: string): string {
 
 type FormState = { open: false } | { open: true; editing: ProjectProfile | null };
 
-export function ProjectsPanel({ sessionId, onOpenLog, onOpenService, onOpenGit }: ProjectsPanelProps) {
+export function ProjectsPanel({
+  sessionId,
+  onOpenLog,
+  onOpenService,
+  onOpenGit,
+  onOpenDeploy,
+}: ProjectsPanelProps) {
   const { t } = useI18n();
   const [projectList, setProjectList] = useState<ProjectProfile[]>([]);
   const [templates, setTemplates] = useState<DeployTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<FormState>({ open: false });
   const [pendingDelete, setPendingDelete] = useState<ProjectProfile | null>(null);
+  const [pendingDeploy, setPendingDeploy] = useState<ProjectProfile | null>(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -100,6 +108,15 @@ export function ProjectsPanel({ sessionId, onOpenLog, onOpenService, onOpenGit }
                 >
                   ⎇ {t('project.gitStatus')}
                 </button>
+                {project.deployTemplateId && templateName(project.deployTemplateId) && (
+                  <button
+                    onClick={() => setPendingDeploy(project)}
+                    title={t('deploy.trigger', { template: templateName(project.deployTemplateId) ?? '' })}
+                    className="rounded border border-line px-2 py-1 font-mono text-[10px] text-dim hover:border-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+                  >
+                    ▶ {t('deploy.deployChip')}
+                  </button>
+                )}
                 {project.logPaths.map((logPath) => (
                   <button
                     key={`log-${logPath}`}
@@ -162,6 +179,41 @@ export function ProjectsPanel({ sessionId, onOpenLog, onOpenService, onOpenGit }
                 className="rounded bg-coral px-4 py-2 text-sm font-medium text-abyss hover:bg-coral-bright focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
               >
                 {t('project.delete')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingDeploy && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
+          <div className="w-full max-w-sm rounded-lg border border-line bg-raised p-6">
+            <h2 className="break-all text-sm font-semibold text-fg">
+              {t('deploy.confirmTitle', { name: pendingDeploy.name })}
+            </h2>
+            <p className="mt-2 text-xs text-muted">
+              {t('deploy.confirmDesc', {
+                template: templateName(pendingDeploy.deployTemplateId) ?? '',
+                count:
+                  templates.find((tpl) => tpl.id === pendingDeploy.deployTemplateId)?.steps.length ?? 0,
+              })}
+            </p>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                onClick={() => setPendingDeploy(null)}
+                className="rounded px-4 py-2 text-sm text-dim hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+              >
+                {t('project.cancel')}
+              </button>
+              <button
+                onClick={() => {
+                  const template = templateName(pendingDeploy.deployTemplateId) ?? '';
+                  onOpenDeploy(pendingDeploy, template);
+                  setPendingDeploy(null);
+                }}
+                className="aspro-button aspro-button-primary"
+              >
+                {t('deploy.confirmRun')}
               </button>
             </div>
           </div>

@@ -11,6 +11,7 @@ import { MonitorPanel } from './components/MonitorPanel';
 import { LocalTerminalPanel } from './components/LocalTerminalPanel';
 import { LocalTerminalView } from './components/LocalTerminalView';
 import { LogView } from './components/LogView';
+import { DeployView } from './components/DeployView';
 import { ProjectsPanel } from './components/ProjectsPanel';
 import { ServicesPanel } from './components/ServicesPanel';
 import { GitPanel } from './components/GitPanel';
@@ -19,10 +20,12 @@ import { useI18n } from './i18n';
 import { useSessions } from './hooks/useSessions';
 import { formatBytes } from './lib/format';
 import type {
+  DeployWorkspace,
   LocalTerminalProfile,
   LocalTerminalWorkspace,
   LogWorkspace,
   MonitorSnapshot,
+  ProjectProfile,
   SessionConfig,
 } from './shared/types';
 
@@ -42,10 +45,12 @@ export default function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeLocalId, setActiveLocalId] = useState<string | null>(null);
   const [activeLogId, setActiveLogId] = useState<string | null>(null);
+  const [activeDeployId, setActiveDeployId] = useState<string | null>(null);
   const [localProfiles, setLocalProfiles] = useState<LocalTerminalProfile[]>([]);
   const [localProfilesLoading, setLocalProfilesLoading] = useState(true);
   const [localWorkspaces, setLocalWorkspaces] = useState<LocalTerminalWorkspace[]>([]);
   const [logWorkspaces, setLogWorkspaces] = useState<LogWorkspace[]>([]);
+  const [deployWorkspaces, setDeployWorkspaces] = useState<DeployWorkspace[]>([]);
   const [serviceFocus, setServiceFocus] = useState<string | null>(null);
   const [gitFocusProjectId, setGitFocusProjectId] = useState<string | null>(null);
   const [leftMode, setLeftMode] = useState<LeftMode>('servers');
@@ -119,6 +124,7 @@ export default function App() {
   const activeLocal =
     localWorkspaces.find((workspace) => workspace.id === activeLocalId) ?? null;
   const activeLog = logWorkspaces.find((workspace) => workspace.id === activeLogId) ?? null;
+  const activeDeploy = deployWorkspaces.find((workspace) => workspace.id === activeDeployId) ?? null;
   const connectedCount = useMemo(
     () => Object.values(statuses).filter((status) => status === 'connected').length,
     [statuses],
@@ -127,30 +133,42 @@ export default function App() {
   const handleSelectRemote = (id: string) => {
     setActiveLocalId(null);
     setActiveLogId(null);
+    setActiveDeployId(null);
     setActiveId(id);
   };
 
   const activateRemoteWorkspace = (id: string) => {
     setActiveLocalId(null);
     setActiveLogId(null);
+    setActiveDeployId(null);
     setActiveId(id);
   };
 
   const activateLocalWorkspace = (workspaceId: string) => {
     setActiveLogId(null);
+    setActiveDeployId(null);
     setActiveLocalId(workspaceId);
   };
 
   const activateLogWorkspace = (workspaceId: string) => {
     setActiveLocalId(null);
     setActiveId(null);
+    setActiveDeployId(null);
     setActiveLogId(workspaceId);
+  };
+
+  const activateDeployWorkspace = (workspaceId: string) => {
+    setActiveLocalId(null);
+    setActiveId(null);
+    setActiveLogId(null);
+    setActiveDeployId(workspaceId);
   };
 
   const handleConnect = (id: string) => {
     setOpenSessions((prev) => (prev.includes(id) ? prev : [...prev, id]));
     setActiveLocalId(null);
     setActiveLogId(null);
+    setActiveDeployId(null);
     setActiveId(id);
     void connect(id);
   };
@@ -169,6 +187,7 @@ export default function App() {
 
     setLocalWorkspaces((current) => [...current, workspace]);
     setActiveLogId(null);
+    setActiveDeployId(null);
     setActiveLocalId(workspace.id);
     setLeftMode('local');
   };
@@ -189,6 +208,7 @@ export default function App() {
     setLogWorkspaces((current) => [...current, workspace]);
     setActiveLocalId(null);
     setActiveId(null);
+    setActiveDeployId(null);
     setActiveLogId(workspace.id);
   };
 
@@ -208,6 +228,29 @@ export default function App() {
     setLeftMode('git');
   };
 
+  /**
+   * Dipanggil dari ProjectsPanel setelah pengguna konfirmasi menjalankan
+   * deploy. Beda dari openLogView: selalu bikin tab baru (tidak dedup) —
+   * tiap run deploy itu proses sekali-jalan yang independen, jejak run
+   * sebelumnya tetap berguna dilihat, bukan sesuatu yang harus difokuskan
+   * ulang seperti stream log yang sama.
+   */
+  const openDeployView = (project: ProjectProfile, templateName: string) => {
+    const workspace: DeployWorkspace = {
+      id: crypto.randomUUID(),
+      sessionId: project.sessionId,
+      projectId: project.id,
+      projectName: project.name,
+      templateName,
+      createdAt: Date.now(),
+    };
+    setDeployWorkspaces((current) => [...current, workspace]);
+    setActiveLocalId(null);
+    setActiveId(null);
+    setActiveLogId(null);
+    setActiveDeployId(workspace.id);
+  };
+
   const closeLocalTerminal = (workspaceId: string) => {
     const remaining = localWorkspaces.filter((item) => item.id !== workspaceId);
     setLocalWorkspaces(remaining);
@@ -223,6 +266,10 @@ export default function App() {
         else {
           const lastLog = logWorkspaces.at(-1);
           if (lastLog) setActiveLogId(lastLog.id);
+          else {
+            const lastDeploy = deployWorkspaces.at(-1);
+            if (lastDeploy) setActiveDeployId(lastDeploy.id);
+          }
         }
       }
     }
@@ -248,6 +295,10 @@ export default function App() {
         else {
           const lastLog = logWorkspaces.at(-1);
           if (lastLog) setActiveLogId(lastLog.id);
+          else {
+            const lastDeploy = deployWorkspaces.at(-1);
+            if (lastDeploy) setActiveDeployId(lastDeploy.id);
+          }
         }
       }
     }
@@ -268,6 +319,34 @@ export default function App() {
         else {
           const lastRemote = openSessions.at(-1);
           if (lastRemote) setActiveId(lastRemote);
+          else {
+            const lastDeploy = deployWorkspaces.at(-1);
+            if (lastDeploy) setActiveDeployId(lastDeploy.id);
+          }
+        }
+      }
+    }
+  };
+
+  const closeDeployView = (workspaceId: string) => {
+    const remaining = deployWorkspaces.filter((item) => item.id !== workspaceId);
+    setDeployWorkspaces(remaining);
+
+    if (activeDeployId === workspaceId) {
+      const nextDeploy = remaining.at(-1);
+      if (nextDeploy) {
+        setActiveDeployId(nextDeploy.id);
+      } else {
+        setActiveDeployId(null);
+        const lastLocal = localWorkspaces.at(-1);
+        if (lastLocal) setActiveLocalId(lastLocal.id);
+        else {
+          const lastRemote = openSessions.at(-1);
+          if (lastRemote) setActiveId(lastRemote);
+          else {
+            const lastLog = logWorkspaces.at(-1);
+            if (lastLog) setActiveLogId(lastLog.id);
+          }
         }
       }
     }
@@ -473,6 +552,7 @@ export default function App() {
                     onOpenLog={openLogView}
                     onOpenService={openServiceManager}
                     onOpenGit={openGitPanel}
+                    onOpenDeploy={openDeployView}
                   />
                 </div>
 
@@ -669,13 +749,75 @@ export default function App() {
               );
             })}
 
-            {openSessions.length === 0 && localWorkspaces.length === 0 && logWorkspaces.length === 0 && (
-              <span className="aspro-workspace-tabs-empty">{t('workspace.none')}</span>
-            )}
+            {deployWorkspaces.map((workspace) => {
+              const isActive = activeDeployId === workspace.id;
+
+              return (
+                <button
+                  key={`deploy:${workspace.id}`}
+                  className={`aspro-workspace-tab ${isActive ? 'active' : ''}`}
+                  onClick={() => activateDeployWorkspace(workspace.id)}
+                  title={`${workspace.projectName} · ${workspace.templateName}`}
+                >
+                  <span className="aspro-workspace-tab-dot deploy" />
+                  <span className="truncate">{workspace.projectName}</span>
+                  <span className="aspro-workspace-tab-kind">DEPLOY</span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="aspro-workspace-tab-close"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      closeDeployView(workspace.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        closeDeployView(workspace.id);
+                      }
+                    }}
+                    title="Tutup deploy"
+                  >
+                    ×
+                  </span>
+                </button>
+              );
+            })}
+
+            {openSessions.length === 0 &&
+              localWorkspaces.length === 0 &&
+              logWorkspaces.length === 0 &&
+              deployWorkspaces.length === 0 && (
+                <span className="aspro-workspace-tabs-empty">{t('workspace.none')}</span>
+              )}
           </div>
 
           <div className="aspro-session-header">
-            {activeLog ? (
+            {activeDeploy ? (
+              <>
+                <div className="aspro-live-dot online" />
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-fg">
+                    {activeDeploy.projectName}
+                  </div>
+                  <div className="truncate font-mono text-[12px] text-faint">
+                    {activeDeploy.templateName}
+                  </div>
+                </div>
+                <span className="aspro-local-chip">DEPLOY</span>
+                <span className="aspro-status-chip connected">{t('workspace.active')}</span>
+
+                <div className="ml-auto">
+                  <button
+                    onClick={() => closeDeployView(activeDeploy.id)}
+                    className="aspro-button aspro-button-danger"
+                  >
+                    {t('workspace.close')}
+                  </button>
+                </div>
+              </>
+            ) : activeLog ? (
               <>
                 <div className="aspro-live-dot online" />
                 <div className="min-w-0">
@@ -845,7 +987,25 @@ export default function App() {
               </div>
             ))}
 
-            {activeLog || activeLocal ? null : loading ? (
+            {deployWorkspaces.map((workspace) => (
+              <div
+                key={workspace.id}
+                className={
+                  workspace.id === activeDeployId
+                    ? 'absolute inset-0'
+                    : 'pointer-events-none invisible absolute inset-0'
+                }
+              >
+                <DeployView
+                  sessionId={workspace.sessionId}
+                  projectId={workspace.projectId}
+                  active={workspace.id === activeDeployId}
+                  onExit={() => closeDeployView(workspace.id)}
+                />
+              </div>
+            ))}
+
+            {activeLog || activeLocal || activeDeploy ? null : loading ? (
               <WorkspacePlaceholder
                 icon="⌁"
                 title={t('workspace.loadingServers')}
@@ -891,7 +1051,15 @@ export default function App() {
 
       <footer className="aspro-statusbar">
         <span className="text-orange">◇</span>
-        {activeLog ? (
+        {activeDeploy ? (
+          <>
+            <span className="text-mint">● {activeDeploy.projectName}</span>
+            <span className="aspro-divider" />
+            <span>DEPLOY</span>
+            <span className="aspro-divider" />
+            <span className="font-mono">{activeDeploy.templateName}</span>
+          </>
+        ) : activeLog ? (
           <>
             <span className="text-mint">● {basename(activeLog.path)}</span>
             <span className="aspro-divider" />
@@ -1024,6 +1192,7 @@ export default function App() {
             if (activeId === pendingDelete.id) setActiveId(null);
             setOpenSessions((prev) => prev.filter((id) => id !== pendingDelete.id));
             setLogWorkspaces((prev) => prev.filter((w) => w.sessionId !== pendingDelete.id));
+            setDeployWorkspaces((prev) => prev.filter((w) => w.sessionId !== pendingDelete.id));
             setPendingDelete(null);
           }}
           onCancel={() => setPendingDelete(null)}

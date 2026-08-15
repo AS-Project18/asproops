@@ -8,6 +8,7 @@ import { ConnectionManager, type SshConnection } from './ssh/connection-manager'
 import { RemoteMonitor } from './ssh/monitor';
 import { listServices, runServiceAction } from './ssh/services';
 import { getGitStatus, runGitAction } from './ssh/git';
+import { runDeploy, type DeployRunHandle } from './ssh/deploy';
 import { trustHostKey } from './ssh/known-hosts';
 import { parseSshConfig } from './ssh/ssh-config';
 import { RemoteEditManager } from './ssh/remote-edit';
@@ -53,6 +54,8 @@ let localTerminals: LocalTerminalManager;
 const shells = new Map<string, ClientChannel>();
 /** tailId -> channel `tail -f` yang sedang berjalan. */
 const logTails = new Map<string, ClientChannel>();
+/** runId -> handle proses deploy yang sedang berjalan. */
+const deployRuns = new Map<string, DeployRunHandle>();
 /** Callback host key yang sedang menunggu jawaban pengguna. */
 const pendingHostKeys = new Map<string, (trust: boolean) => void>();
 
@@ -525,12 +528,49 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle('git:action', (_e, sessionId: string, path: string, action: GitAction) =>
     runGitAction(connections.require(sessionId), path, action),
   );
+
+  // --- Deploy ------------------------------------------------------------
+  ipcMain.handle('deploy:run', async (_e, sessionId: string, projectId: string) => {
+    const project = projects.getProject(projectId);
+    if (!project) throw new Error('Project tidak ditemukan.');
+    if (!project.deployTemplateId) {
+      throw new Error('Project ini belum dipasangkan ke deploy template.');
+    }
+    const template = projects.getTemplate(project.deployTemplateId);
+    if (!template) throw new Error('Deploy template tidak ditemukan.');
+    if (template.steps.length === 0) throw new Error('Deploy template ini belum punya langkah.');
+
+    const connection = connections.require(sessionId);
+    const runId = randomUUID();
+
+    const handle = runDeploy(connection, project.path, project.env, template.steps, {
+      onStepStart: (stepIndex, stepLabel) =>
+        send('deploy:event', { runId, type: 'stepStart', stepIndex, stepLabel }),
+      onOutput: (data) => send('deploy:event', { runId, type: 'output', data }),
+      onStepEnd: (stepIndex, exitCode) =>
+        send('deploy:event', { runId, type: 'stepEnd', stepIndex, exitCode }),
+      onDone: (success, message) => {
+        deployRuns.delete(runId);
+        send('deploy:event', { runId, type: 'done', success, message });
+      },
+    });
+    deployRuns.set(runId, handle);
+
+    return runId;
+  });
+
+  ipcMain.on('deploy:cancel', (_e, runId: string) => {
+    deployRuns.get(runId)?.cancel();
+    deployRuns.delete(runId);
+  });
 }
 
 export function shutdown(): void {
   edits?.closeAll();
   for (const stream of shells.values()) stream.end();
   shells.clear();
+  for (const handle of deployRuns.values()) handle.cancel();
+  deployRuns.clear();
   connections.closeAll();
   store.close();
 }

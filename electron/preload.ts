@@ -4,6 +4,7 @@ import type { LockStatus, VerifyResult } from './app-lock';
 import type { SshPreferences, SftpPreferences } from './store/preferences';
 import type {
   ConnectionStatus,
+  DeployRunEvent,
   DeployTemplate,
   GitAction,
   GitStatus,
@@ -216,6 +217,13 @@ const api = {
       ipcRenderer.invoke('git:status', sessionId, path),
     action: (sessionId: string, path: string, action: GitAction): Promise<string> =>
       ipcRenderer.invoke('git:action', sessionId, path, action),
+  },
+
+  deploy: {
+    run: (sessionId: string, projectId: string): Promise<string> =>
+      ipcRenderer.invoke('deploy:run', sessionId, projectId),
+    cancel: (runId: string) => ipcRenderer.send('deploy:cancel', runId),
+    onEvent: (handler: (event: DeployRunEvent) => void) => subscribe('deploy:event', handler),
   },
 };
 

@@ -69,6 +69,10 @@ export class ProjectStore {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  getProject(id: string): ProjectProfile | undefined {
+    return this.data.projects.find((p) => p.id === id);
+  }
+
   createProject(
     sessionId: string,
     input: Pick<ProjectProfile, 'name' | 'path' | 'env' | 'deployTemplateId'> &
@@ -113,6 +117,10 @@ export class ProjectStore {
 
   listTemplates(): DeployTemplate[] {
     return [...this.data.templates].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  getTemplate(id: string): DeployTemplate | undefined {
+    return this.data.templates.find((t) => t.id === id);
   }
 
   createTemplate(input: Pick<DeployTemplate, 'name' | 'description'>): DeployTemplate {

@@ -215,3 +215,25 @@ export interface DeployTemplate {
   steps: DeployStep[];
   createdAt: number;
 }
+
+/** Event streaming satu proses deploy — dikirim lewat channel global 'deploy:event', disaring di renderer lewat runId. */
+export interface DeployRunEvent {
+  runId: string;
+  type: 'stepStart' | 'output' | 'stepEnd' | 'done';
+  stepIndex?: number;
+  stepLabel?: string;
+  data?: string;
+  exitCode?: number;
+  success?: boolean;
+  message?: string;
+}
+
+/** Satu tab deploy yang sedang berjalan/baru selesai di workspace. */
+export interface DeployWorkspace {
+  id: string;
+  sessionId: string;
+  projectId: string;
+  projectName: string;
+  templateName: string;
+  createdAt: number;
+}
