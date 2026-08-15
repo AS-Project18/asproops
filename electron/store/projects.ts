@@ -24,6 +24,60 @@ interface StoreFile {
 
 const EMPTY: StoreFile = { version: 1, projects: [], templates: [] };
 
+/**
+ * Template bawaan untuk stack yang umum dipakai — titik awal yang masuk
+ * akal, bukan preskriptif. Dicocokkan lewat nama supaya idempoten: aman
+ * dipanggil ulang setiap start tanpa membuat duplikat, dan tidak menimpa
+ * kalau pengguna sudah mengubah/menghapus salah satunya.
+ */
+const DEFAULT_TEMPLATES: Array<{
+  name: string;
+  description: string;
+  steps: Array<{ label: string; command: string }>;
+}> = [
+  {
+    name: 'CodeIgniter 4',
+    description: 'Pull, install dependencies, migrasi, bersihkan cache. Sesuaikan step restart (PHP-FPM/systemd) dengan setup server.',
+    steps: [
+      { label: 'Pull terbaru', command: 'git pull' },
+      { label: 'Install dependencies', command: 'composer install --no-dev --optimize-autoloader' },
+      { label: 'Jalankan migrasi', command: 'php spark migrate --all' },
+      { label: 'Bersihkan cache', command: 'php spark cache:clear' },
+    ],
+  },
+  {
+    name: 'Laravel',
+    description: 'Pull, install dependencies, migrasi, build asset, optimize cache. Sesuaikan step restart (queue/php-fpm) dengan setup server.',
+    steps: [
+      { label: 'Pull terbaru', command: 'git pull' },
+      { label: 'Install dependencies (Composer)', command: 'composer install --no-dev --optimize-autoloader' },
+      { label: 'Install dependencies (NPM)', command: 'npm ci' },
+      { label: 'Jalankan migrasi', command: 'php artisan migrate --force' },
+      { label: 'Build asset', command: 'npm run build' },
+      { label: 'Optimize cache', command: 'php artisan config:cache && php artisan route:cache' },
+    ],
+  },
+  {
+    name: 'Vue',
+    description: 'Pull, install dependencies, build produksi. Untuk SPA statis — tidak ada langkah restart proses.',
+    steps: [
+      { label: 'Pull terbaru', command: 'git pull' },
+      { label: 'Install dependencies', command: 'npm ci' },
+      { label: 'Build produksi', command: 'npm run build' },
+    ],
+  },
+  {
+    name: 'NestJS',
+    description: 'Pull, install dependencies, build, restart lewat PM2. Sesuaikan nama app/step restart (PM2/systemd) dengan setup server — "pm2 restart all" me-restart SEMUA app PM2 di server, ganti ke nama app spesifik kalau server ini dipakai bersama.',
+    steps: [
+      { label: 'Pull terbaru', command: 'git pull' },
+      { label: 'Install dependencies', command: 'npm ci' },
+      { label: 'Build', command: 'npm run build' },
+      { label: 'Restart service (PM2)', command: 'pm2 restart all' },
+    ],
+  },
+];
+
 export class ProjectStore {
   private readonly path: string;
   private data: StoreFile;
@@ -31,6 +85,24 @@ export class ProjectStore {
   constructor(path = join(app.getPath('userData'), 'projects.json')) {
     this.path = path;
     this.data = this.read();
+    this.seedDefaultTemplates();
+  }
+
+  private seedDefaultTemplates(): void {
+    const existingNames = new Set(this.data.templates.map((t) => t.name));
+    let changed = false;
+    for (const def of DEFAULT_TEMPLATES) {
+      if (existingNames.has(def.name)) continue;
+      this.data.templates.push({
+        id: randomUUID(),
+        name: def.name,
+        description: def.description,
+        steps: def.steps.map((step) => ({ id: randomUUID(), ...step })),
+        createdAt: Date.now(),
+      });
+      changed = true;
+    }
+    if (changed) this.flush();
   }
 
   private read(): StoreFile {

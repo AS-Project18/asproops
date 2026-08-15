@@ -51,6 +51,14 @@ export function ProjectsPanel({
     void window.ssh.templates.list().then(setTemplates);
   }, [sessionId]);
 
+  // ProjectsPanel tetap ter-mount selama session aktif (cuma disembunyikan
+  // lewat CSS saat pindah tab kiri) — tanpa ini, template baru yang dibuat
+  // di Settings tidak pernah terlihat sampai session di-reconnect, karena
+  // daftar template di atas cuma diambil sekali saat mount.
+  useEffect(() => {
+    if (form.open) void window.ssh.templates.list().then(setTemplates);
+  }, [form.open]);
+
   const templateName = (id?: string) => templates.find((tpl) => tpl.id === id)?.name;
 
   return (
