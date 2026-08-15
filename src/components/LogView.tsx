@@ -6,6 +6,7 @@ import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import { useTerminalPrefs } from '../terminalPrefs';
 import { stripAnsi } from '../lib/ansi';
+import { colorizeLine } from '../lib/logColorize';
 import { useI18n } from '../i18n';
 import { ContextMenu, ContextMenuItem, type ContextMenuPosition } from './ContextMenu';
 
@@ -84,9 +85,11 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
   const linesRef = useRef<string[]>([]);
   const partialRef = useRef('');
   const filterRef = useRef('');
+  const colorRef = useRef(true);
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('');
+  const [colorEnabled, setColorEnabled] = useState(true);
   const [matchInfo, setMatchInfo] = useState<{ index: number; count: number } | null>(null);
   const [copied, setCopied] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
@@ -152,26 +155,29 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
     let observer: ResizeObserver | null = null;
     const unsubscribers: Array<() => void> = [];
 
+    // Baris ditulis utuh (bukan chunk mentah per-karakter) supaya bisa
+    // diwarnai per baris — konsekuensinya baris yang belum diakhiri "\n"
+    // ditahan dulu di partialRef sampai lengkap, baru ditulis+diwarnai.
     const ingest = (chunk: string) => {
       const combined = partialRef.current + chunk;
       const parts = combined.split('\n');
       partialRef.current = parts.pop() ?? '';
+      if (parts.length === 0) return;
 
-      if (parts.length > 0) {
-        linesRef.current.push(...parts);
-        const overflow = linesRef.current.length - MAX_BUFFERED_LINES;
-        if (overflow > 0) linesRef.current.splice(0, overflow);
-      }
+      linesRef.current.push(...parts);
+      const overflow = linesRef.current.length - MAX_BUFFERED_LINES;
+      if (overflow > 0) linesRef.current.splice(0, overflow);
+
+      const render = (line: string) => (colorRef.current ? colorizeLine(line) : line);
 
       if (!filterRef.current) {
-        term.write(chunk);
+        term.write(parts.map(render).join('\n') + '\n');
         return;
       }
 
-      if (parts.length === 0) return;
       const query = filterRef.current.toLowerCase();
       const matched = parts.filter((line) => stripAnsi(line).toLowerCase().includes(query));
-      if (matched.length > 0) term.write(matched.join('\n') + '\n');
+      if (matched.length > 0) term.write(matched.map(render).join('\n') + '\n');
     };
 
     const initialize = () => {
@@ -285,24 +291,28 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
     addon.findNext(search, { caseSensitive: false, incremental: true, decorations: SEARCH_DECORATIONS });
   }, [search]);
 
-  // Susun ulang buffer setiap filter berubah — didebounce ringan supaya
-  // mengetik cepat tidak memicu clear+rewrite ribuan baris tiap huruf.
+  // Susun ulang buffer setiap filter atau toggle warna berubah — didebounce
+  // ringan supaya mengetik cepat tidak memicu clear+rewrite ribuan baris
+  // tiap huruf. linesRef selalu menyimpan teks polos (tidak diwarnai),
+  // pewarnaan cuma diterapkan saat ditulis ke terminal.
   useEffect(() => {
     const handle = setTimeout(() => {
       filterRef.current = filter;
+      colorRef.current = colorEnabled;
       const term = termRef.current;
       if (!term) return;
 
       term.clear();
       const query = filter.toLowerCase();
-      const rendered = filter
+      const base = filter
         ? linesRef.current.filter((line) => stripAnsi(line).toLowerCase().includes(query))
         : linesRef.current;
+      const rendered = colorEnabled ? base.map(colorizeLine) : base;
       if (rendered.length > 0) term.write(rendered.join('\n') + '\n');
       if (!filter && partialRef.current) term.write(partialRef.current);
     }, 200);
     return () => clearTimeout(handle);
-  }, [filter]);
+  }, [filter, colorEnabled]);
 
   const findNext = () => {
     if (!search) return;
@@ -407,6 +417,13 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
           />
         </div>
 
+        <button
+          className="aspro-icon-btn"
+          onClick={() => setColorEnabled((v) => !v)}
+          title={colorEnabled ? t('log.colorOn') : t('log.colorOff')}
+        >
+          {colorEnabled ? '◉' : '◎'}
+        </button>
         <button className="aspro-icon-btn" onClick={copyAll} title={t('log.copyAll')}>
           {copied ? '✓' : '⧉'}
         </button>
