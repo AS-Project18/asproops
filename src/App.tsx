@@ -48,6 +48,14 @@ export default function App() {
   const [activeLocalId, setActiveLocalId] = useState<string | null>(null);
   const [activeLogId, setActiveLogId] = useState<string | null>(null);
   const [activeDeployId, setActiveDeployId] = useState<string | null>(null);
+  /**
+   * Dashboard itu tab ke-5 yang selalu ada dan tidak bisa ditutup — beda
+   * dari 4 kind lain yang array-based (bisa nol atau banyak), ini cukup
+   * boolean karena cuma satu instance dan tidak pernah "tidak ada sama
+   * sekali". Defaultnya aktif supaya begitu app dibuka ada tab yang
+   * kelihatan, bukan layar kosong.
+   */
+  const [dashboardActive, setDashboardActive] = useState(true);
   const [localProfiles, setLocalProfiles] = useState<LocalTerminalProfile[]>([]);
   const [localProfilesLoading, setLocalProfilesLoading] = useState(true);
   const [localWorkspaces, setLocalWorkspaces] = useState<LocalTerminalWorkspace[]>([]);
@@ -129,6 +137,11 @@ export default function App() {
     localWorkspaces.find((workspace) => workspace.id === activeLocalId) ?? null;
   const activeLog = logWorkspaces.find((workspace) => workspace.id === activeLogId) ?? null;
   const activeDeploy = deployWorkspaces.find((workspace) => workspace.id === activeDeployId) ?? null;
+  // dashboardActive OR fallback kalau ternyata tidak ada satu pun tab lain
+  // yang aktif (mis. gara-gara ada state transition yang lupa menyalakan
+  // dashboardActive secara eksplisit) — jangan sampai layar workspace
+  // kosong sama sekali tanpa tab manapun yang kelihatan aktif.
+  const showDashboard = dashboardActive || (!activeSession && !activeLocal && !activeLog && !activeDeploy);
   const connectedCount = useMemo(
     () => Object.values(statuses).filter((status) => status === 'connected').length,
     [statuses],
@@ -170,10 +183,20 @@ export default function App() {
     setLeftCollapsed(false);
   };
 
+  /** Tab Dashboard tetap "diingat" (activeId dkk tidak disentuh) — buka lagi lewat rail sama seperti sebelumnya. */
+  const activateDashboard = () => {
+    setActiveLocalId(null);
+    setActiveId(null);
+    setActiveLogId(null);
+    setActiveDeployId(null);
+    setDashboardActive(true);
+  };
+
   const handleSelectRemote = (id: string) => {
     setActiveLocalId(null);
     setActiveLogId(null);
     setActiveDeployId(null);
+    setDashboardActive(false);
     setActiveId(id);
   };
 
@@ -181,12 +204,14 @@ export default function App() {
     setActiveLocalId(null);
     setActiveLogId(null);
     setActiveDeployId(null);
+    setDashboardActive(false);
     setActiveId(id);
   };
 
   const activateLocalWorkspace = (workspaceId: string) => {
     setActiveLogId(null);
     setActiveDeployId(null);
+    setDashboardActive(false);
     setActiveLocalId(workspaceId);
   };
 
@@ -194,6 +219,7 @@ export default function App() {
     setActiveLocalId(null);
     setActiveId(null);
     setActiveDeployId(null);
+    setDashboardActive(false);
     setActiveLogId(workspaceId);
   };
 
@@ -201,6 +227,7 @@ export default function App() {
     setActiveLocalId(null);
     setActiveId(null);
     setActiveLogId(null);
+    setDashboardActive(false);
     setActiveDeployId(workspaceId);
   };
 
@@ -209,6 +236,7 @@ export default function App() {
     setActiveLocalId(null);
     setActiveLogId(null);
     setActiveDeployId(null);
+    setDashboardActive(false);
     setActiveId(id);
     void connect(id);
   };
@@ -228,6 +256,7 @@ export default function App() {
     setLocalWorkspaces((current) => [...current, workspace]);
     setActiveLogId(null);
     setActiveDeployId(null);
+    setDashboardActive(false);
     setActiveLocalId(workspace.id);
     setLeftMode('local');
   };
@@ -249,6 +278,7 @@ export default function App() {
     setActiveLocalId(null);
     setActiveId(null);
     setActiveDeployId(null);
+    setDashboardActive(false);
     setActiveLogId(workspace.id);
   };
 
@@ -288,6 +318,7 @@ export default function App() {
     setActiveLocalId(null);
     setActiveId(null);
     setActiveLogId(null);
+    setDashboardActive(false);
     setActiveDeployId(workspace.id);
   };
 
@@ -309,6 +340,7 @@ export default function App() {
           else {
             const lastDeploy = deployWorkspaces.at(-1);
             if (lastDeploy) setActiveDeployId(lastDeploy.id);
+            else setDashboardActive(true);
           }
         }
       }
@@ -338,6 +370,7 @@ export default function App() {
           else {
             const lastDeploy = deployWorkspaces.at(-1);
             if (lastDeploy) setActiveDeployId(lastDeploy.id);
+            else setDashboardActive(true);
           }
         }
       }
@@ -362,6 +395,7 @@ export default function App() {
           else {
             const lastDeploy = deployWorkspaces.at(-1);
             if (lastDeploy) setActiveDeployId(lastDeploy.id);
+            else setDashboardActive(true);
           }
         }
       }
@@ -386,6 +420,7 @@ export default function App() {
           else {
             const lastLog = logWorkspaces.at(-1);
             if (lastLog) setActiveLogId(lastLog.id);
+            else setDashboardActive(true);
           }
         }
       }
@@ -669,6 +704,15 @@ export default function App() {
 
         <main className="aspro-center">
           <div className="aspro-workspace-tabs">
+            <button
+              className={`aspro-workspace-tab ${dashboardActive ? 'active' : ''}`}
+              onClick={activateDashboard}
+              title={t('dashboard.title')}
+            >
+              <span className="aspro-workspace-tab-dot dashboard" />
+              <span className="truncate">{t('dashboard.title')}</span>
+            </button>
+
             {openSessions.map((id) => {
               const session = sessions.find((item) => item.id === id);
               if (!session) return null;
@@ -834,16 +878,17 @@ export default function App() {
               );
             })}
 
-            {openSessions.length === 0 &&
-              localWorkspaces.length === 0 &&
-              logWorkspaces.length === 0 &&
-              deployWorkspaces.length === 0 && (
-                <span className="aspro-workspace-tabs-empty">{t('workspace.none')}</span>
-              )}
           </div>
 
           <div className="aspro-session-header">
-            {activeDeploy ? (
+            {showDashboard ? (
+              <div>
+                <div className="text-sm font-semibold text-fg">{t('dashboard.title')}</div>
+                <div className="text-[12px] text-faint">
+                  {t('dashboard.subtitle', { count: connectedCount })}
+                </div>
+              </div>
+            ) : activeDeploy ? (
               <>
                 <div className="aspro-live-dot online" />
                 <div className="min-w-0">
@@ -974,14 +1019,7 @@ export default function App() {
                   )}
                 </div>
               </>
-            ) : (
-              <div>
-                <div className="text-sm font-semibold text-fg">Workspace</div>
-                <div className="text-[12px] text-faint">
-                  {t('workspace.choose')}
-                </div>
-              </div>
-            )}
+            ) : null}
           </div>
 
           <div className="aspro-terminal-card">
@@ -1054,15 +1092,21 @@ export default function App() {
               </div>
             ))}
 
-            {activeLog || activeLocal || activeDeploy ? null : loading ? (
+            <div
+              className={
+                showDashboard ? 'absolute inset-0' : 'pointer-events-none invisible absolute inset-0'
+              }
+            >
+              <Dashboard sessions={sessions} statuses={statuses} onOpen={handleSelectRemote} />
+            </div>
+
+            {showDashboard || activeLog || activeLocal || activeDeploy ? null : loading ? (
               <WorkspacePlaceholder
                 icon="⌁"
                 title={t('workspace.loadingServers')}
                 detail={t('workspace.readingConfig')}
               />
-            ) : !activeSession ? (
-              <Dashboard sessions={sessions} statuses={statuses} onOpen={handleSelectRemote} />
-            ) : activeStatus === 'connecting' || activeStatus === 'reconnecting' ? (
+            ) : !activeSession ? null : activeStatus === 'connecting' || activeStatus === 'reconnecting' ? (
               <WorkspacePlaceholder
                 icon="ϟ"
                 title={t('workspace.connectingTo', { name: activeSession.name })}
@@ -1096,7 +1140,13 @@ export default function App() {
 
       <footer className="aspro-statusbar">
         <span className="text-orange">◇</span>
-        {activeDeploy ? (
+        {showDashboard ? (
+          <>
+            <span className="text-mint">● {t('dashboard.title')}</span>
+            <span className="aspro-divider" />
+            <span>{t('dashboard.subtitle', { count: connectedCount })}</span>
+          </>
+        ) : activeDeploy ? (
           <>
             <span className="text-mint">● {activeDeploy.projectName}</span>
             <span className="aspro-divider" />
@@ -1196,9 +1246,7 @@ export default function App() {
               </>
             )}
           </>
-        ) : (
-          <span className="text-faint">{t('status.noActiveServer')}</span>
-        )}
+        ) : null}
         <span className="ml-auto text-[12px] text-faint">ASProOps Desktop</span>
       </footer>
 
@@ -1254,7 +1302,10 @@ export default function App() {
           session={pendingDelete}
           onConfirm={async () => {
             await remove(pendingDelete.id);
-            if (activeId === pendingDelete.id) setActiveId(null);
+            if (activeId === pendingDelete.id) {
+              setActiveId(null);
+              setDashboardActive(true);
+            }
             setOpenSessions((prev) => prev.filter((id) => id !== pendingDelete.id));
             setLogWorkspaces((prev) => prev.filter((w) => w.sessionId !== pendingDelete.id));
             setDeployWorkspaces((prev) => prev.filter((w) => w.sessionId !== pendingDelete.id));
