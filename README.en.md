@@ -12,7 +12,7 @@
 
 ASProOps is an Electron-based desktop application designed as a single workspace for server administration and developer operations. One app handles SSH sessions, local Windows terminals, WSL distros, an SFTP file browser, remote editing, server resource monitoring, and a full DevOps flow — project profiles, a live log viewer, service manager, Git status, and deploy template execution — without switching between tools.
 
-> **Project status:** actively developed. Current source version `0.6.0`. A Windows installer (`.exe`) can already be built via `npm run dist:win`, but it isn't code-signed yet and has no auto-update — see [Installer / Release Binary](#installer--release-binary).
+> **Project status:** actively developed. Current source version `1.0.0`. A Windows installer (`.exe`) can already be built via `npm run dist:win`, but it isn't code-signed yet and has no auto-update — see [Installer / Release Binary](#installer--release-binary).
 
 ---
 
@@ -525,7 +525,7 @@ The installer is non-oneClick (users can pick an install location) and automatic
 
 `npmRebuild` is deliberately disabled (`false`): electron-builder by default tries to rebuild native modules from source before packaging, but the prebuilt binaries already present in `node_modules` (see [Native Modules and Rebuilding](#native-modules-and-rebuilding)) already match the Electron version in use — rebuilding here only adds build time and risks failure on environments without the native toolchain set up (Visual Studio Build Tools, etc.).
 
-Still **not finalized** as of version 0.6.0:
+Still **not finalized** as of version 1.0.0:
 
 - code signing (the installer is currently unsigned — Windows SmartScreen will likely warn during install)
 - auto-update
@@ -636,9 +636,7 @@ The roadmap may change as core features stabilize.
 
 ## License
 
-The project's distribution license **hasn't been set** as of this version.
-
-Before the repository or binaries are released publicly, add a `LICENSE` file and choose an appropriate license. Until then, don't assume this source is automatically open-source licensed.
+ASProOps is released under the [Apache License 2.0](LICENSE).
 
 ---
 

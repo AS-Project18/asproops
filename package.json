@@ -1,7 +1,13 @@
 {
   "name": "asproops",
-  "version": "0.6.0",
+  "version": "1.0.0",
   "private": true,
+  "license": "Apache-2.0",
+  "author": "AS-Project18",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AS-Project18/asproops.git"
+  },
   "type": "module",
   "main": "out/main.cjs",
   "engines": {

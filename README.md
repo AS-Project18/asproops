@@ -12,7 +12,7 @@
 
 ASProOps adalah aplikasi desktop berbasis Electron yang dirancang sebagai satu workspace untuk pekerjaan administrasi server dan operasi developer. Satu aplikasi menangani sesi SSH, terminal lokal Windows, distro WSL, browser file SFTP, remote editing, monitoring resource server, sampai alur DevOps — project profile, live log viewer, service manager, status Git, dan eksekusi deploy template — tanpa harus berpindah-pindah tool.
 
-> **Status project:** aktif dikembangkan. Versi source saat ini `0.6.0`. Installer Windows (`.exe`) sudah bisa dibuat lewat `npm run dist:win`, tapi belum ditandatangani (code signing) dan belum punya auto-update — lihat [Installer / Release Binary](#installer--release-binary).
+> **Status project:** aktif dikembangkan. Versi source saat ini `1.0.0`. Installer Windows (`.exe`) sudah bisa dibuat lewat `npm run dist:win`, tapi belum ditandatangani (code signing) dan belum punya auto-update — lihat [Installer / Release Binary](#installer--release-binary).
 
 ---
 
@@ -525,7 +525,7 @@ Installer bersifat non-oneClick (pengguna bisa memilih lokasi instalasi) dan oto
 
 `npmRebuild` sengaja dimatikan (`false`): electron-builder secara default mencoba rebuild ulang native module dari source sebelum packaging, padahal binary prebuilt yang sudah ada di `node_modules` (lihat [Native Module dan Rebuild](#native-module-dan-rebuild)) sudah cocok dengan versi Electron yang dipakai — rebuild ulang di sini hanya menambah waktu build dan risiko gagal di lingkungan yang belum siap toolchain native (Visual Studio Build Tools, dsb).
 
-Yang **belum difinalkan** pada versi 0.6.0:
+Yang **belum difinalkan** pada versi 1.0.0:
 
 - code signing (installer saat ini tidak ditandatangani — Windows SmartScreen kemungkinan akan memperingatkan saat instalasi)
 - auto-update
@@ -636,9 +636,7 @@ Roadmap dapat berubah mengikuti stabilitas fitur inti.
 
 ## Lisensi
 
-Lisensi distribusi project **belum ditetapkan** pada versi ini.
-
-Sebelum repository atau binary dirilis ke publik, tambahkan file `LICENSE` dan tentukan lisensi yang sesuai. Sampai lisensi tersebut ditetapkan, jangan mengasumsikan source ini otomatis berlisensi open-source.
+ASProOps dirilis di bawah lisensi [Apache License 2.0](LICENSE).
 
 ---
 
