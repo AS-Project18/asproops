@@ -7,6 +7,7 @@ import type { ClientChannel } from 'ssh2';
 import { ConnectionManager, type SshConnection } from './ssh/connection-manager';
 import { RemoteMonitor } from './ssh/monitor';
 import { listServices, runServiceAction } from './ssh/services';
+import { getGitStatus, runGitAction } from './ssh/git';
 import { trustHostKey } from './ssh/known-hosts';
 import { parseSshConfig } from './ssh/ssh-config';
 import { RemoteEditManager } from './ssh/remote-edit';
@@ -15,7 +16,13 @@ import { LocalTerminalManager } from './local-terminal';
 import { AppLock } from './app-lock';
 import { preferences, sftpPreferences } from './store/preferences';
 import { projects } from './store/projects';
-import type { RemoteFile, ServiceAction, SessionConfig, Secret } from '../src/shared/types';
+import type {
+  GitAction,
+  RemoteFile,
+  ServiceAction,
+  SessionConfig,
+  Secret,
+} from '../src/shared/types';
 
 /** "foto.jpg" -> "foto (1).jpg" -> "foto (2).jpg" ... sampai ketemu yang belum dipakai. */
 function uniqueLocalPath(target: string): string {
@@ -509,6 +516,14 @@ export function registerIpc(window: BrowserWindow): void {
     'service:action',
     (_e, sessionId: string, unit: string, action: ServiceAction) =>
       runServiceAction(connections.require(sessionId), unit, action),
+  );
+
+  // --- Git remote ------------------------------------------------------------
+  ipcMain.handle('git:status', (_e, sessionId: string, path: string) =>
+    getGitStatus(connections.require(sessionId), path),
+  );
+  ipcMain.handle('git:action', (_e, sessionId: string, path: string, action: GitAction) =>
+    runGitAction(connections.require(sessionId), path, action),
   );
 }
 

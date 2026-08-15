@@ -12,6 +12,7 @@ interface ProjectsPanelProps {
   sessionId: string;
   onOpenLog: (sessionId: string, path: string) => void;
   onOpenService: (unit: string) => void;
+  onOpenGit: (projectId: string) => void;
 }
 
 function basename(path: string): string {
@@ -20,7 +21,7 @@ function basename(path: string): string {
 
 type FormState = { open: false } | { open: true; editing: ProjectProfile | null };
 
-export function ProjectsPanel({ sessionId, onOpenLog, onOpenService }: ProjectsPanelProps) {
+export function ProjectsPanel({ sessionId, onOpenLog, onOpenService, onOpenGit }: ProjectsPanelProps) {
   const { t } = useI18n();
   const [projectList, setProjectList] = useState<ProjectProfile[]>([]);
   const [templates, setTemplates] = useState<DeployTemplate[]>([]);
@@ -91,30 +92,35 @@ export function ProjectsPanel({ sessionId, onOpenLog, onOpenService }: ProjectsP
                 </button>
               </div>
 
-              {(project.logPaths.length > 0 || project.serviceNames.length > 0) && (
-                <div className="mb-1.5 mt-1 flex flex-wrap gap-1.5 pl-[39px]">
-                  {project.logPaths.map((logPath) => (
-                    <button
-                      key={`log-${logPath}`}
-                      onClick={() => onOpenLog(project.sessionId, logPath)}
-                      title={logPath}
-                      className="rounded border border-line px-2 py-1 font-mono text-[10px] text-dim hover:border-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
-                    >
-                      ▶ {basename(logPath)}
-                    </button>
-                  ))}
-                  {project.serviceNames.map((unit) => (
-                    <button
-                      key={`svc-${unit}`}
-                      onClick={() => onOpenService(unit)}
-                      title={unit}
-                      className="rounded border border-line px-2 py-1 font-mono text-[10px] text-dim hover:border-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
-                    >
-                      ⏻ {unit}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div className="mb-1.5 mt-1 flex flex-wrap gap-1.5 pl-[39px]">
+                <button
+                  onClick={() => onOpenGit(project.id)}
+                  title={t('project.gitStatus')}
+                  className="rounded border border-line px-2 py-1 font-mono text-[10px] text-dim hover:border-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+                >
+                  ⎇ {t('project.gitStatus')}
+                </button>
+                {project.logPaths.map((logPath) => (
+                  <button
+                    key={`log-${logPath}`}
+                    onClick={() => onOpenLog(project.sessionId, logPath)}
+                    title={logPath}
+                    className="rounded border border-line px-2 py-1 font-mono text-[10px] text-dim hover:border-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+                  >
+                    ▶ {basename(logPath)}
+                  </button>
+                ))}
+                {project.serviceNames.map((unit) => (
+                  <button
+                    key={`svc-${unit}`}
+                    onClick={() => onOpenService(unit)}
+                    title={unit}
+                    className="rounded border border-line px-2 py-1 font-mono text-[10px] text-dim hover:border-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+                  >
+                    ⏻ {unit}
+                  </button>
+                ))}
+              </div>
             </div>
           ))}
         </div>

@@ -13,6 +13,7 @@ import { LocalTerminalView } from './components/LocalTerminalView';
 import { LogView } from './components/LogView';
 import { ProjectsPanel } from './components/ProjectsPanel';
 import { ServicesPanel } from './components/ServicesPanel';
+import { GitPanel } from './components/GitPanel';
 import { SettingsDialog } from './components/SettingsDialog';
 import { useI18n } from './i18n';
 import { useSessions } from './hooks/useSessions';
@@ -30,7 +31,7 @@ function basename(path: string): string {
 }
 
 type FormState = { open: false } | { open: true; editing: SessionConfig | null };
-type LeftMode = 'servers' | 'local' | 'files' | 'monitor' | 'projects' | 'services';
+type LeftMode = 'servers' | 'local' | 'files' | 'monitor' | 'projects' | 'services' | 'git';
 
 export default function App() {
   const { t } = useI18n();
@@ -46,6 +47,7 @@ export default function App() {
   const [localWorkspaces, setLocalWorkspaces] = useState<LocalTerminalWorkspace[]>([]);
   const [logWorkspaces, setLogWorkspaces] = useState<LogWorkspace[]>([]);
   const [serviceFocus, setServiceFocus] = useState<string | null>(null);
+  const [gitFocusProjectId, setGitFocusProjectId] = useState<string | null>(null);
   const [leftMode, setLeftMode] = useState<LeftMode>('servers');
   const [leftWidth, setLeftWidth] = useState(330);
   const [resizingLeft, setResizingLeft] = useState(false);
@@ -199,6 +201,11 @@ export default function App() {
   const openServiceManager = (unit: string) => {
     setServiceFocus(unit);
     setLeftMode('services');
+  };
+
+  const openGitPanel = (projectId: string) => {
+    setGitFocusProjectId(projectId);
+    setLeftMode('git');
   };
 
   const closeLocalTerminal = (workspaceId: string) => {
@@ -382,6 +389,12 @@ export default function App() {
             label={t('nav.services')}
             onClick={() => setLeftMode('services')}
           />
+          <RailButton
+            active={leftMode === 'git'}
+            icon="⎇"
+            label={t('nav.git')}
+            onClick={() => setLeftMode('git')}
+          />
           <div className="flex-1" />
           <RailButton icon="⚙" label={t('nav.settings')} onClick={() => setSettingsOpen(true)} />
         </aside>
@@ -459,6 +472,7 @@ export default function App() {
                     sessionId={activeSession.id}
                     onOpenLog={openLogView}
                     onOpenService={openServiceManager}
+                    onOpenGit={openGitPanel}
                   />
                 </div>
 
@@ -471,12 +485,23 @@ export default function App() {
                 >
                   <ServicesPanel sessionId={activeSession.id} focusService={serviceFocus} />
                 </div>
+
+                <div
+                  className={
+                    leftMode === 'git'
+                      ? 'absolute inset-0'
+                      : 'pointer-events-none invisible absolute inset-0'
+                  }
+                >
+                  <GitPanel sessionId={activeSession.id} focusProjectId={gitFocusProjectId} />
+                </div>
               </>
             ) : (
               (leftMode === 'files' ||
                 leftMode === 'monitor' ||
                 leftMode === 'projects' ||
-                leftMode === 'services') && (
+                leftMode === 'services' ||
+                leftMode === 'git') && (
                 <div className="aspro-side-placeholder absolute inset-0">
                   <div className="aspro-side-placeholder-icon">
                     {leftMode === 'files'
@@ -485,7 +510,9 @@ export default function App() {
                         ? '⌁'
                         : leftMode === 'services'
                           ? '⏻'
-                          : '▣'}
+                          : leftMode === 'git'
+                            ? '⎇'
+                            : '▣'}
                   </div>
                   <strong>
                     {leftMode === 'files'
@@ -494,7 +521,9 @@ export default function App() {
                         ? t('placeholder.monitor')
                         : leftMode === 'services'
                           ? t('placeholder.services')
-                          : t('placeholder.projects')}
+                          : leftMode === 'git'
+                            ? t('placeholder.git')
+                            : t('placeholder.projects')}
                   </strong>
                   <span>{t('placeholder.connectRequired')}</span>
                 </div>

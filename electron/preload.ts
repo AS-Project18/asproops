@@ -5,6 +5,8 @@ import type { SshPreferences, SftpPreferences } from './store/preferences';
 import type {
   ConnectionStatus,
   DeployTemplate,
+  GitAction,
+  GitStatus,
   LocalTerminalProfile,
   MonitorSnapshot,
   ProjectProfile,
@@ -207,6 +209,13 @@ const api = {
       ipcRenderer.invoke('service:list', sessionId),
     action: (sessionId: string, unit: string, action: ServiceAction): Promise<void> =>
       ipcRenderer.invoke('service:action', sessionId, unit, action),
+  },
+
+  git: {
+    status: (sessionId: string, path: string): Promise<GitStatus> =>
+      ipcRenderer.invoke('git:status', sessionId, path),
+    action: (sessionId: string, path: string, action: GitAction): Promise<string> =>
+      ipcRenderer.invoke('git:action', sessionId, path, action),
   },
 };
 

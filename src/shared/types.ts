@@ -171,6 +171,31 @@ export interface ServiceInfo {
 
 export type ServiceAction = 'start' | 'stop' | 'restart';
 
+export interface GitFileStatus {
+  /** Kode 2 karakter dari `git status --porcelain`, mis. " M", "??", "A ". */
+  code: string;
+  path: string;
+}
+
+export interface GitStatus {
+  isRepo: boolean;
+  branch?: string;
+  /** mis. "origin/main". Tidak ada kalau branch ini tidak melacak remote apa pun. */
+  upstream?: string;
+  ahead?: number;
+  behind?: number;
+  lastCommit?: {
+    hash: string;
+    author: string;
+    relativeDate: string;
+    subject: string;
+  };
+  remoteUrl?: string;
+  files: GitFileStatus[];
+}
+
+export type GitAction = 'fetch' | 'pull';
+
 export interface DeployStep {
   id: string;
   /** Label yang ditampilkan di UI, mis. "Install dependencies". */
