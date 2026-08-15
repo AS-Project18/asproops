@@ -443,7 +443,7 @@ export default function App() {
         <aside className="aspro-rail" aria-label={t('nav.connections')}>
           <RailButton
             active={leftMode === 'servers'}
-            icon="▦"
+            icon="$_"
             label={t('nav.connections')}
             onClick={() => selectLeftMode('servers')}
           />

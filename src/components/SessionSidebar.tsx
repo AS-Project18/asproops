@@ -221,14 +221,29 @@ export function SessionSidebar({
                       >
                         <span className="aspro-drag-grip" title={t('sidebar.dragToGroup')}>⋮⋮</span>
 
+                        <span
+                          className="aspro-server-avatar"
+                          style={
+                            session.color
+                              ? {
+                                  color: session.color,
+                                  borderColor: `${session.color}45`,
+                                  background: `${session.color}1a`,
+                                }
+                              : undefined
+                          }
+                        >
+                          {session.name.trim().charAt(0).toUpperCase() || '?'}
+                        </span>
+
                         <button
                           onClick={() => onSelect(session.id)}
                           onDoubleClick={() => onConnect(session.id)}
                           className="min-w-0 flex-1 text-left"
                         >
                           <span className="flex items-center gap-2">
-                            <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-                            <span className="truncate text-xs font-medium text-dim">
+                            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${style.dot}`} />
+                            <span className="truncate text-[13px] font-semibold text-dim">
                               {session.name}
                             </span>
                           </span>

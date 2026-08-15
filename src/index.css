@@ -161,6 +161,7 @@ button:disabled {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
   padding: 8px 5px;
   border: 1px solid rgba(108, 44, 136, .27);
   border-radius: 10px;
@@ -1433,6 +1434,20 @@ button:disabled {
 }
 .aspro-server-row:active .aspro-drag-grip {
   cursor: grabbing;
+}
+
+.aspro-server-avatar {
+  width: 27px;
+  height: 27px;
+  flex: 0 0 27px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(164, 65, 204, .27);
+  border-radius: 7px;
+  background: rgba(69, 22, 88, .16);
+  color: #b088c2;
+  font-size: 11px;
+  font-weight: 700;
 }
 
 /* Duplicate SERVERS/LOCAL/FILES/MONITOR tabs retired. */
