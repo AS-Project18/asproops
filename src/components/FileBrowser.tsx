@@ -134,16 +134,6 @@ function uniqueRemoteName(name: string, existing: Set<string>): string {
   return candidate;
 }
 
-function breadcrumbs(path: string): Array<{ label: string; path: string }> {
-  const crumbs = [{ label: '/', path: '/' }];
-  let current = '';
-  for (const segment of path.split('/').filter(Boolean)) {
-    current += `/${segment}`;
-    crumbs.push({ label: segment, path: current });
-  }
-  return crumbs;
-}
-
 interface FileBrowserProps {
   sessionId: string;
 }
@@ -651,19 +641,51 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
       </div>
 
       <div className="aspro-file-subbar">
-        <nav className="flex min-w-0 flex-1 items-center overflow-x-auto font-mono text-[11px]">
-          {breadcrumbs(path).map((crumb, index, all) => (
-            <span key={crumb.path} className="flex shrink-0 items-center">
-              <button
-                onClick={() => void load(crumb.path)}
-                className={index === all.length - 1 ? 'text-orange' : 'text-muted hover:text-fg'}
-              >
-                {crumb.label}
-              </button>
-              {index < all.length - 1 && index > 0 && <span className="mx-0.5 text-ghost">/</span>}
-            </span>
-          ))}
-        </nav>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="mr-0.5 shrink-0 font-mono text-[11px] text-faint">
+            {selected.size > 0 ? t('sftp.selected', { count: selected.size }) : ''}
+          </span>
+          <ActionButton
+            icon="edit"
+            label={t('sftp.actionEdit')}
+            disabled={!(selectedFiles.length === 1 && !selectedFiles[0].isDirectory)}
+            onClick={() => void handleEdit(selectedFiles[0])}
+          />
+          <ActionButton
+            icon="download"
+            label={t('sftp.actionDownload')}
+            disabled={!(selectedFiles.length === 1 && !selectedFiles[0].isDirectory)}
+            onClick={() => void handleDownload(selectedFiles[0])}
+          />
+          <ActionButton
+            icon="rename"
+            label={t('sftp.actionRename')}
+            disabled={selectedFiles.length !== 1}
+            onClick={() => setRenaming({ file: selectedFiles[0], value: selectedFiles[0].name })}
+          />
+          <ActionButton
+            icon="info"
+            label={t('sftp.actionInfo')}
+            disabled={selectedFiles.length !== 1}
+            onClick={() => setInfoFile(selectedFiles[0])}
+          />
+          <ActionButton
+            icon="delete"
+            danger
+            label={t('sftp.actionDelete')}
+            disabled={selectedFiles.length === 0}
+            onClick={() => setPendingDelete(selectedFiles)}
+          />
+          {selected.size > 0 && (
+            <button
+              onClick={() => setSelected(new Set())}
+              title={t('sftp.clearSelection')}
+              className="ml-0.5 shrink-0 rounded px-1.5 py-1 text-faint hover:bg-line hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+            >
+              ✕
+            </button>
+          )}
+        </div>
 
         <div className="aspro-file-filter">
           <span>⌕</span>
@@ -689,62 +711,6 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
         <p className="border-b border-line bg-panel px-4 py-1.5 text-xs text-amber">
           {t('sftp.crowded', { count: entries.length.toLocaleString(locale) })}
         </p>
-      )}
-
-      {selected.size > 0 && (
-        <div className="flex items-center gap-2 border-b border-line bg-panel px-3 py-1.5">
-          <span className="text-xs text-dim">{t('sftp.selected', { count: selected.size })}</span>
-          <div className="ml-auto flex items-center gap-1">
-            {selectedFiles.length === 1 && !selectedFiles[0].isDirectory && (
-              <SelectionActionButton
-                label={t('sftp.actionEdit')}
-                onClick={() => void handleEdit(selectedFiles[0])}
-              >
-                ✐
-              </SelectionActionButton>
-            )}
-            {selectedFiles.length === 1 && !selectedFiles[0].isDirectory && (
-              <SelectionActionButton
-                label={t('sftp.actionDownload')}
-                onClick={() => void handleDownload(selectedFiles[0])}
-              >
-                ↓
-              </SelectionActionButton>
-            )}
-            {selectedFiles.length === 1 && (
-              <SelectionActionButton
-                label={t('sftp.actionRename')}
-                onClick={() =>
-                  setRenaming({ file: selectedFiles[0], value: selectedFiles[0].name })
-                }
-              >
-                ✎
-              </SelectionActionButton>
-            )}
-            {selectedFiles.length === 1 && (
-              <SelectionActionButton
-                label={t('sftp.actionInfo')}
-                onClick={() => setInfoFile(selectedFiles[0])}
-              >
-                ⓘ
-              </SelectionActionButton>
-            )}
-            <SelectionActionButton
-              label={t('sftp.actionDelete')}
-              danger
-              onClick={() => setPendingDelete(selectedFiles)}
-            >
-              ✕
-            </SelectionActionButton>
-            <button
-              onClick={() => setSelected(new Set())}
-              title={t('sftp.clearSelection')}
-              className="ml-1 rounded px-1.5 py-1 text-faint hover:bg-line hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
       )}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-x-auto">
@@ -1292,27 +1258,76 @@ function ColumnMenu({
   );
 }
 
-function SelectionActionButton({
+type ActionIconKind = 'edit' | 'download' | 'rename' | 'info' | 'delete';
+
+function ActionIcon({ kind }: { kind: ActionIconKind }) {
+  switch (kind) {
+    case 'edit':
+      return (
+        <svg viewBox="0 0 18 18" aria-hidden className="aspro-action-icon">
+          <path d="M12.6 2.6a1.7 1.7 0 0 1 2.4 2.4L6.4 13.6l-3.4.9.9-3.4z" />
+          <path d="M11 4.2l2.4 2.4" />
+        </svg>
+      );
+    case 'download':
+      return (
+        <svg viewBox="0 0 18 18" aria-hidden className="aspro-action-icon">
+          <path d="M9 2.5v8.2" />
+          <path d="M5.4 7.4 9 11l3.6-3.6" />
+          <path d="M3 14h12" />
+        </svg>
+      );
+    case 'rename':
+      return (
+        <svg viewBox="0 0 18 18" aria-hidden className="aspro-action-icon">
+          <path d="M9 3.2v11.6" />
+          <path d="M6.2 3.2h5.6" />
+          <path d="M6.2 14.8h5.6" />
+        </svg>
+      );
+    case 'info':
+      return (
+        <svg viewBox="0 0 18 18" aria-hidden className="aspro-action-icon">
+          <circle cx="9" cy="9" r="6.3" />
+          <path d="M9 8.3v4.2" />
+          <circle cx="9" cy="5.7" r="0.9" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case 'delete':
+      return (
+        <svg viewBox="0 0 18 18" aria-hidden className="aspro-action-icon">
+          <path d="M3.2 5h11.6" />
+          <path d="M7 5V3.6c0-.4.3-.7.7-.7h2.6c.4 0 .7.3.7.7V5" />
+          <path d="M4.8 5l.6 8.4c0 .7.6 1.3 1.3 1.3h4.6c.7 0 1.3-.6 1.3-1.3L13.2 5" />
+          <path d="M7.4 7.6v5" />
+          <path d="M10.6 7.6v5" />
+        </svg>
+      );
+  }
+}
+
+function ActionButton({
+  icon,
   onClick,
   label,
   danger,
-  children,
+  disabled,
 }: {
+  icon: ActionIconKind;
   onClick: () => void;
   label: string;
   danger?: boolean;
-  children: ReactNode;
+  disabled?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       title={label}
       aria-label={label}
-      className={`grid h-7 w-7 place-items-center rounded text-sm hover:bg-line focus:outline-none focus-visible:ring-2 focus-visible:ring-azure ${
-        danger ? 'text-coral hover:text-coral' : 'text-dim hover:text-fg'
-      }`}
+      className={`aspro-file-icon shrink-0 ${danger ? 'danger' : ''}`}
     >
-      {children}
+      <ActionIcon kind={icon} />
     </button>
   );
 }

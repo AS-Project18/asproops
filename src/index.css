@@ -686,6 +686,8 @@ button:disabled {
 .aspro-file-icon {
   width: 28px;
   height: 28px;
+  display: grid;
+  place-items: center;
   border: 1px solid rgba(119, 54, 144, .26);
   border-radius: 5px;
   background: rgba(6, 3, 9, .55);
@@ -694,6 +696,27 @@ button:disabled {
 .aspro-file-icon:hover:not(:disabled) {
   border-color: rgba(192, 77, 239, .42);
   color: #f0e6f4;
+}
+.aspro-file-icon:disabled {
+  cursor: not-allowed;
+  opacity: .35;
+}
+.aspro-file-icon.danger {
+  color: #ff8f97;
+}
+.aspro-file-icon.danger:hover:not(:disabled) {
+  border-color: rgba(255, 90, 104, .5);
+  color: #ff5a68;
+}
+.aspro-action-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .aspro-path-box {
   height: 29px;
