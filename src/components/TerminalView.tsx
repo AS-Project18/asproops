@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -7,6 +7,8 @@ import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import { useTerminalPrefs } from '../terminalPrefs';
 import { stripAnsi } from '../lib/ansi';
+import { ContextMenu, ContextMenuItem, type ContextMenuPosition } from './ContextMenu';
+import { useI18n } from '../i18n';
 
 function defaultFontFamily(): string {
   return (
@@ -86,7 +88,9 @@ export function TerminalView({
   const outputTailRef = useRef('');
   const lastCwdRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
 
+  const { t } = useI18n();
   const { prefs } = useTerminalPrefs();
 
   // Callback disimpan di ref supaya handler papan ketik tidak perlu dipasang
@@ -144,7 +148,12 @@ export function TerminalView({
       // Ctrl+Shift+C (bukan Ctrl+C polos, yang dipakai shell untuk SIGINT).
       if (key === 'c') {
         const selection = term.getSelection();
-        if (selection) void navigator.clipboard.writeText(selection);
+        if (selection) window.ssh.clipboard.writeText(selection);
+        return false;
+      }
+      if (key === 'v') {
+        const text = window.ssh.clipboard.readText();
+        if (text && terminalIdRef.current) window.ssh.shell.write(terminalIdRef.current, text);
         return false;
       }
       return true;
@@ -314,5 +323,38 @@ export function TerminalView({
     );
   }
 
-  return <div ref={containerRef} className="aspro-xterm h-full w-full bg-abyss p-2" />;
+  const handleContextMenu = (event: ReactMouseEvent) => {
+    event.preventDefault();
+    setContextMenu({ x: event.clientX, y: event.clientY });
+  };
+
+  const copySelection = () => {
+    const selection = termRef.current?.getSelection();
+    if (selection) window.ssh.clipboard.writeText(selection);
+    setContextMenu(null);
+  };
+
+  const pasteClipboard = () => {
+    const text = window.ssh.clipboard.readText();
+    if (text && terminalIdRef.current) window.ssh.shell.write(terminalIdRef.current, text);
+    setContextMenu(null);
+  };
+
+  return (
+    <>
+      <div
+        ref={containerRef}
+        className="aspro-xterm h-full w-full bg-abyss p-2"
+        onContextMenu={handleContextMenu}
+      />
+      {contextMenu && (
+        <ContextMenu position={contextMenu} onClose={() => setContextMenu(null)}>
+          <ContextMenuItem onClick={copySelection} disabled={!termRef.current?.hasSelection()}>
+            {t('menu.copy')}
+          </ContextMenuItem>
+          <ContextMenuItem onClick={pasteClipboard}>{t('menu.paste')}</ContextMenuItem>
+        </ContextMenu>
+      )}
+    </>
+  );
 }

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { clipboard, contextBridge, ipcRenderer } from 'electron';
 import type { EditStatus } from './ssh/remote-edit';
 import type { LockStatus, VerifyResult } from './app-lock';
 import type { SshPreferences, SftpPreferences } from './store/preferences';
@@ -31,6 +31,15 @@ function subscribe<T>(channel: string, handler: (payload: T) => void): Unsubscri
 }
 
 const api = {
+  // navigator.clipboard.readText() tidak konsisten di Electron (butuh fokus
+  // dokumen tertentu dan bisa ditolak diam-diam) — modul clipboard Electron
+  // langsung tersedia di preload karena sandbox:false, jadi dipakai di sini
+  // supaya copy/paste terminal dan log selalu bekerja.
+  clipboard: {
+    readText: (): string => clipboard.readText(),
+    writeText: (text: string): void => clipboard.writeText(text),
+  },
+
   appLock: {
     status: (): Promise<LockStatus> => ipcRenderer.invoke('applock:status'),
     setup: (pin: string): Promise<LockStatus> => ipcRenderer.invoke('applock:setup', pin),

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -7,6 +7,8 @@ import '@xterm/xterm/css/xterm.css';
 
 import type { LocalTerminalProfile } from '../shared/types';
 import { useTerminalPrefs } from '../terminalPrefs';
+import { ContextMenu, ContextMenuItem, type ContextMenuPosition } from './ContextMenu';
+import { useI18n } from '../i18n';
 
 function defaultFontFamily(): string {
   return (
@@ -59,7 +61,9 @@ export function LocalTerminalView({
   const exitRef = useRef(onExit);
   const [error, setError] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(active);
+  const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
 
+  const { t } = useI18n();
   const { prefs } = useTerminalPrefs();
   const prefsRef = useRef(prefs);
 
@@ -110,16 +114,18 @@ export function LocalTerminalView({
       term.loadAddon(unicode);
       term.unicode.activeVersion = '11';
 
-      // Ctrl+Shift+C (bukan Ctrl+C polos, yang dipakai shell untuk SIGINT).
+      // Ctrl+Shift+C/V (bukan Ctrl+C/V polos, yang dipakai shell untuk SIGINT/dll).
       term.attachCustomKeyEventHandler((event) => {
-        if (
-          event.type === 'keydown' &&
-          event.ctrlKey &&
-          event.shiftKey &&
-          event.key.toLowerCase() === 'c'
-        ) {
+        if (event.type !== 'keydown' || !event.ctrlKey || !event.shiftKey) return true;
+        const key = event.key.toLowerCase();
+        if (key === 'c') {
           const selection = term.getSelection();
-          if (selection) void navigator.clipboard.writeText(selection);
+          if (selection) window.ssh.clipboard.writeText(selection);
+          return false;
+        }
+        if (key === 'v') {
+          const text = window.ssh.clipboard.readText();
+          if (text && terminalIdRef.current) window.ssh.local.write(terminalIdRef.current, text);
           return false;
         }
         return true;
@@ -271,5 +277,38 @@ export function LocalTerminalView({
     );
   }
 
-  return <div ref={containerRef} className="aspro-xterm h-full w-full bg-abyss p-2" />;
+  const handleContextMenu = (event: ReactMouseEvent) => {
+    event.preventDefault();
+    setContextMenu({ x: event.clientX, y: event.clientY });
+  };
+
+  const copySelection = () => {
+    const selection = termRef.current?.getSelection();
+    if (selection) window.ssh.clipboard.writeText(selection);
+    setContextMenu(null);
+  };
+
+  const pasteClipboard = () => {
+    const text = window.ssh.clipboard.readText();
+    if (text && terminalIdRef.current) window.ssh.local.write(terminalIdRef.current, text);
+    setContextMenu(null);
+  };
+
+  return (
+    <>
+      <div
+        ref={containerRef}
+        className="aspro-xterm h-full w-full bg-abyss p-2"
+        onContextMenu={handleContextMenu}
+      />
+      {contextMenu && (
+        <ContextMenu position={contextMenu} onClose={() => setContextMenu(null)}>
+          <ContextMenuItem onClick={copySelection} disabled={!termRef.current?.hasSelection()}>
+            {t('menu.copy')}
+          </ContextMenuItem>
+          <ContextMenuItem onClick={pasteClipboard}>{t('menu.paste')}</ContextMenuItem>
+        </ContextMenu>
+      )}
+    </>
+  );
 }

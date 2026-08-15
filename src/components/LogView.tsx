@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -7,6 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 import { useTerminalPrefs } from '../terminalPrefs';
 import { stripAnsi } from '../lib/ansi';
 import { useI18n } from '../i18n';
+import { ContextMenu, ContextMenuItem, type ContextMenuPosition } from './ContextMenu';
 
 /**
  * Viewer log live — `tail -F` yang streaming ke xterm read-only.
@@ -88,6 +89,7 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
   const [filter, setFilter] = useState('');
   const [matchInfo, setMatchInfo] = useState<{ index: number; count: number } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuPosition | null>(null);
 
   const { prefs } = useTerminalPrefs();
   const exitRef = useRef(onExit);
@@ -135,7 +137,7 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
         event.key.toLowerCase() === 'c'
       ) {
         const selection = term.getSelection();
-        if (selection) void navigator.clipboard.writeText(selection);
+        if (selection) window.ssh.clipboard.writeText(selection);
         return false;
       }
       return true;
@@ -322,16 +324,26 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
       : linesRef.current;
     const text = source.map(stripAnsi).join('\n');
     if (!text) return;
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    });
+    window.ssh.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
   };
 
   const clearScreen = () => {
     linesRef.current = [];
     partialRef.current = '';
     termRef.current?.clear();
+  };
+
+  const copySelection = () => {
+    const selection = termRef.current?.getSelection();
+    if (selection) window.ssh.clipboard.writeText(selection);
+    setContextMenu(null);
+  };
+
+  const handleContextMenu = (event: ReactMouseEvent) => {
+    event.preventDefault();
+    setContextMenu({ x: event.clientX, y: event.clientY });
   };
 
   if (error) {
@@ -403,7 +415,19 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
         </button>
       </div>
 
-      <div ref={containerRef} className="aspro-xterm min-h-0 w-full flex-1 bg-abyss p-2" />
+      <div
+        ref={containerRef}
+        className="aspro-xterm min-h-0 w-full flex-1 bg-abyss p-2"
+        onContextMenu={handleContextMenu}
+      />
+
+      {contextMenu && (
+        <ContextMenu position={contextMenu} onClose={() => setContextMenu(null)}>
+          <ContextMenuItem onClick={copySelection} disabled={!termRef.current?.hasSelection()}>
+            {t('menu.copy')}
+          </ContextMenuItem>
+        </ContextMenu>
+      )}
     </div>
   );
 }
