@@ -135,68 +135,103 @@ export function TerminalView({
       return true;
     });
 
-    term.open(container);
     termRef.current = term;
     fitRef.current = fit;
-    fit.fit();
 
     let disposed = false;
+    let opened = false;
+    let frame = 0;
+    let observer: ResizeObserver | null = null;
     const unsubscribers: Array<() => void> = [];
 
-    void (async () => {
-      try {
-        const id = await window.ssh.shell.open(sessionId, term.cols, term.rows);
-        console.debug('[ASProSSH] shell opened', { sessionId, terminalId: id });
-        if (disposed) {
-          window.ssh.shell.close(id);
-          return;
+    const initialize = () => {
+      if (disposed) return;
+
+      // xterm mengukur sel karakter langsung dari DOM saat open(). Container
+      // yang belum masuk layout (mis. baru saja dipasang di tab yang baru
+      // aktif) diukur sebagai nol, dan proses internal xterm yang berjalan
+      // lewat setTimeout crash beberapa saat kemudian ("Cannot read
+      // properties of undefined (reading 'dimensions')") — sama seperti
+      // yang sudah ditangani di LocalTerminalView.
+      if (container.clientWidth < 20 || container.clientHeight < 20) {
+        frame = requestAnimationFrame(initialize);
+        return;
+      }
+
+      opened = true;
+      term.open(container);
+
+      // Tunggu satu frame lagi setelah open agar renderer xterm selesai
+      // mengukur font/canvas sebelum FitAddon dipanggil.
+      requestAnimationFrame(() => {
+        if (!disposed && container.clientWidth > 0 && container.clientHeight > 0) {
+          try {
+            fit.fit();
+          } catch {
+            // ResizeObserver akan mencoba lagi ketika layout stabil.
+          }
         }
-        terminalIdRef.current = id;
+      });
 
-        unsubscribers.push(
-          window.ssh.shell.onData(({ terminalId: source, data }) => {
-            if (source !== id) return;
+      void (async () => {
+        try {
+          const id = await window.ssh.shell.open(sessionId, term.cols, term.rows);
+          console.debug('[ASProSSH] shell opened', { sessionId, terminalId: id });
+          if (disposed) {
+            window.ssh.shell.close(id);
+            return;
+          }
+          terminalIdRef.current = id;
 
-            term.write(data);
+          unsubscribers.push(
+            window.ssh.shell.onData(({ terminalId: source, data }) => {
+              if (source !== id) return;
 
-            outputTailRef.current = (outputTailRef.current + data).slice(-4096);
-            const cwd = detectPromptCwd(outputTailRef.current);
-            if (cwd && cwd !== lastCwdRef.current) {
-              lastCwdRef.current = cwd;
-              window.dispatchEvent(
-                new CustomEvent('asprossh:terminal-cwd', {
-                  detail: { sessionId, cwd },
-                }),
-              );
-            }
-          }),
-          window.ssh.shell.onClose(({ terminalId: source }) => {
-            if (source !== id) return;
-            term.write('\r\n\x1b[33mKoneksi shell ditutup.\x1b[0m\r\n');
-            exitRef.current?.();
-          }),
-        );
+              term.write(data);
 
-        term.onData((data) => window.ssh.shell.write(id, data));
-      } catch (err) {
-        setError((err as Error).message);
-      }
-    })();
+              outputTailRef.current = (outputTailRef.current + data).slice(-4096);
+              const cwd = detectPromptCwd(outputTailRef.current);
+              if (cwd && cwd !== lastCwdRef.current) {
+                lastCwdRef.current = cwd;
+                window.dispatchEvent(
+                  new CustomEvent('asprossh:terminal-cwd', {
+                    detail: { sessionId, cwd },
+                  }),
+                );
+              }
+            }),
+            window.ssh.shell.onClose(({ terminalId: source }) => {
+              if (source !== id) return;
+              term.write('\r\n\x1b[33mKoneksi shell ditutup.\x1b[0m\r\n');
+              exitRef.current?.();
+            }),
+          );
 
-    const observer = new ResizeObserver(() => {
-      // Lebar nol berarti terminal sedang disembunyikan. Mengukur ulang saat
-      // itu akan menyetel ukurannya ke 1x1 dan merusak tampilan saat muncul.
-      if (container.clientWidth === 0) return;
-      fit.fit();
-      if (terminalIdRef.current) {
-        window.ssh.shell.resize(terminalIdRef.current, term.cols, term.rows);
-      }
-    });
-    observer.observe(container);
+          term.onData((data) => window.ssh.shell.write(id, data));
+        } catch (err) {
+          setError((err as Error).message);
+        }
+      })();
+
+      observer = new ResizeObserver(() => {
+        // Lebar nol berarti terminal sedang disembunyikan. Mengukur ulang
+        // saat itu akan menyetel ukurannya ke 1x1 dan merusak tampilan
+        // saat muncul.
+        if (container.clientWidth === 0) return;
+        fit.fit();
+        if (terminalIdRef.current) {
+          window.ssh.shell.resize(terminalIdRef.current, term.cols, term.rows);
+        }
+      });
+      observer.observe(container);
+    };
+
+    frame = requestAnimationFrame(initialize);
 
     return () => {
       disposed = true;
-      observer.disconnect();
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
       for (const unsubscribe of unsubscribers) unsubscribe();
       if (terminalIdRef.current) {
         console.debug('[ASProSSH] shell closing', {
@@ -205,7 +240,9 @@ export function TerminalView({
         });
         window.ssh.shell.close(terminalIdRef.current);
       }
-      term.dispose();
+      // term.dispose() sebelum open() sungguh terpasang bisa memicu ulang
+      // internal yang sama dengan bug di atas — lewati kalau belum dibuka.
+      if (opened) term.dispose();
       termRef.current = null;
       fitRef.current = null;
       terminalIdRef.current = null;

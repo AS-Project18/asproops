@@ -233,13 +233,13 @@ export function SessionSidebar({
                             </span>
                           </span>
 
-                          <span className="mt-0.5 block truncate pl-3.5 font-mono text-[9px] text-faint">
+                          <span className="mt-0.5 block truncate pl-3.5 font-mono text-[11px] text-faint">
                             {session.username}@{session.host}
                             {session.port !== 22 && `:${session.port}`}
                           </span>
 
                           {status === 'error' && errors[session.id] && (
-                            <span className="mt-1 block truncate pl-3.5 text-[9px] text-coral">
+                            <span className="mt-1 block truncate pl-3.5 text-[11px] text-coral">
                               {errors[session.id]}
                             </span>
                           )}

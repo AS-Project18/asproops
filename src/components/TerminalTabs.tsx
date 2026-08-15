@@ -143,7 +143,15 @@ export function TerminalTabs({ sessionId, visible }: TerminalTabsProps) {
           <div
             key={tab.id}
             role="tabpanel"
-            className={tab.id === activeId ? 'h-full' : 'hidden'}
+            // display:none membuat xterm gagal mengukur dimensinya saat
+            // TerminalView baru dipasang di tab yang tidak sedang aktif
+            // (mis. koneksi selesai sementara user melihat tab lain).
+            // visibility:hidden tetap menjaga layout box-nya utuh.
+            className={
+              tab.id === activeId
+                ? 'absolute inset-0'
+                : 'pointer-events-none invisible absolute inset-0'
+            }
           >
             <TerminalTabPane
               sessionId={sessionId}
@@ -158,7 +166,7 @@ export function TerminalTabs({ sessionId, visible }: TerminalTabsProps) {
       </div>
 
       {tabs.length === 1 && (
-        <div className="flex items-center justify-between border-t border-line bg-panel/70 px-4 py-1.5 text-[10px] text-faint">
+        <div className="flex items-center justify-between border-t border-line bg-panel/70 px-4 py-1.5 text-[12px] text-faint">
           <span>Ctrl+Shift+T untuk terminal baru</span>
           <button
             onClick={addTab}

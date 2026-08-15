@@ -133,7 +133,7 @@ export function MonitorPanel({ sessionId }: MonitorPanelProps) {
 
   return (
     <div className="aspro-monitor h-full overflow-y-auto bg-abyss p-3">
-      <div className="aspro-monitor-summary mb-3 grid grid-cols-3 gap-2 text-[9px] text-faint">
+      <div className="aspro-monitor-summary mb-3 grid grid-cols-3 gap-2 text-[11px] text-faint">
         <span>
           {t('monitor.active')} <span className="text-dim">{formatUptime(snapshot.uptimeSeconds)}</span>
         </span>
@@ -179,7 +179,7 @@ export function MonitorPanel({ sessionId }: MonitorPanelProps) {
 
       <section className="mt-2 grid gap-2 2xl:grid-cols-2">
         <div className="aspro-monitor-card rounded-lg border border-line bg-panel p-3">
-          <h3 className="mb-2 text-[9px] uppercase tracking-[0.14em] text-faint">{t('monitor.memory')}</h3>
+          <h3 className="mb-2 text-[11px] uppercase tracking-[0.14em] text-faint">{t('monitor.memory')}</h3>
           <Bar
             label="RAM"
             usedBytes={snapshot.mem.usedBytes}
@@ -199,7 +199,7 @@ export function MonitorPanel({ sessionId }: MonitorPanelProps) {
         </div>
 
         <div className="aspro-monitor-card rounded-lg border border-line bg-panel p-3">
-          <h3 className="mb-2 text-[9px] uppercase tracking-[0.14em] text-faint">{t('monitor.storage')}</h3>
+          <h3 className="mb-2 text-[11px] uppercase tracking-[0.14em] text-faint">{t('monitor.storage')}</h3>
           <div className="space-y-3">
             {snapshot.disks.map((disk) => (
               <Bar
@@ -215,10 +215,10 @@ export function MonitorPanel({ sessionId }: MonitorPanelProps) {
       </section>
 
       <section className="mt-2 rounded-lg border border-line bg-panel">
-        <h3 className="border-b border-line px-3 py-2 text-[9px] uppercase tracking-[0.14em] text-faint">
+        <h3 className="border-b border-line px-3 py-2 text-[11px] uppercase tracking-[0.14em] text-faint">
           {t('monitor.topProcesses')}
         </h3>
-        <div className="overflow-x-auto"><table className="w-full min-w-[420px] text-[10px]">
+        <div className="overflow-x-auto"><table className="w-full min-w-[420px] text-[12px]">
           <thead>
             <tr className="text-left text-faint">
               <th className="px-4 py-2 font-normal">PID</th>

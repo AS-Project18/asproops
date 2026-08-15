@@ -38,21 +38,38 @@ export default function App() {
   const [pendingDelete, setPendingDelete] = useState<SessionConfig | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
-  const [liveSessions, setLiveSessions] = useState<string[]>([]);
+  /**
+   * Sesi SSH yang punya tab terbuka — simetris dengan `localWorkspaces`.
+   * Diisi begitu user menekan connect, bukan menunggu status 'connected',
+   * supaya tab (dan tombol tutupnya) langsung ada meski koneksi masih
+   * berjalan atau gagal. Tab tidak hilang otomatis saat disconnect; hanya
+   * tombol tutup yang melepasnya, sama seperti terminal lokal.
+   */
+  const [openSessions, setOpenSessions] = useState<string[]>([]);
+  /**
+   * Subset dari openSessions yang TerminalTabs-nya sungguh dipasang. Begitu
+   * sebuah sesi tersambung sekali, tetap dipasang selama statusnya bukan
+   * 'disconnected' (termasuk saat reconnecting/error) supaya scrollback
+   * tidak hilang gara-gara koneksi sempat putus — beda dari openSessions
+   * yang menentukan tab-nya masih tampil atau tidak.
+   */
+  const [mountedSessions, setMountedSessions] = useState<string[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
-    setLiveSessions((prev) => {
+    setMountedSessions((prev) => {
       const ready = Object.entries(statuses)
-        .filter(([, status]) => status === 'connected')
+        .filter(([id, status]) => status === 'connected' && openSessions.includes(id))
         .map(([id]) => id);
 
-      const kept = prev.filter((id) => statuses[id] && statuses[id] !== 'disconnected');
+      const kept = prev.filter(
+        (id) => openSessions.includes(id) && statuses[id] && statuses[id] !== 'disconnected',
+      );
       const next = [...new Set([...kept, ...ready])];
 
       return next.length === prev.length && next.every((id, i) => id === prev[i]) ? prev : next;
     });
-  }, [statuses]);
+  }, [statuses, openSessions]);
 
 
   const refreshLocalProfiles = async () => {
@@ -103,6 +120,7 @@ export default function App() {
   };
 
   const handleConnect = (id: string) => {
+    setOpenSessions((prev) => (prev.includes(id) ? prev : [...prev, id]));
     setActiveLocalId(null);
     setActiveId(id);
     void connect(id);
@@ -135,8 +153,29 @@ export default function App() {
         setActiveLocalId(nextLocal.id);
       } else {
         setActiveLocalId(null);
-        const lastRemote = liveSessions.at(-1);
+        const lastRemote = openSessions.at(-1);
         if (lastRemote) setActiveId(lastRemote);
+      }
+    }
+  };
+
+  const closeRemoteSession = (sessionId: string) => {
+    const status = statuses[sessionId];
+    if (status === 'connected' || status === 'connecting' || status === 'reconnecting') {
+      void disconnect(sessionId);
+    }
+
+    const remaining = openSessions.filter((id) => id !== sessionId);
+    setOpenSessions(remaining);
+
+    if (activeId === sessionId) {
+      const nextRemote = remaining.at(-1);
+      if (nextRemote) {
+        setActiveId(nextRemote);
+      } else {
+        setActiveId(null);
+        const lastLocal = localWorkspaces.at(-1);
+        if (lastLocal) setActiveLocalId(lastLocal.id);
       }
     }
   };
@@ -191,12 +230,12 @@ export default function App() {
         <div className="aspro-quick">
           <span className="aspro-bolt">ϟ</span>
           <span className="truncate">{t('app.quickConnect')}</span>
-          <span className="ml-auto text-[10px] text-faint">Ctrl + K</span>
+          <span className="ml-auto text-[12px] text-faint">Ctrl + K</span>
         </div>
 
         <div className="aspro-top-actions">
           <div className="hidden text-right xl:block">
-            <div className="text-[10px] uppercase tracking-[0.18em] text-faint">{t('app.activeServers')}</div>
+            <div className="text-[12px] uppercase tracking-[0.18em] text-faint">{t('app.activeServers')}</div>
             <div className="text-xs text-dim">{connectedCount} {t('app.of')} {sessions.length}</div>
           </div>
           <button
@@ -333,10 +372,11 @@ export default function App() {
 
         <main className="aspro-center">
           <div className="aspro-workspace-tabs">
-            {liveSessions.map((id) => {
+            {openSessions.map((id) => {
               const session = sessions.find((item) => item.id === id);
               if (!session) return null;
               const isActive = !activeLocalId && activeId === id;
+              const status = statuses[id] ?? 'disconnected';
 
               return (
                 <button
@@ -345,9 +385,36 @@ export default function App() {
                   onClick={() => activateRemoteWorkspace(id)}
                   title={`${session.username}@${session.host}:${session.port}`}
                 >
-                  <span className="aspro-workspace-tab-dot ssh" />
+                  <span
+                    className={`aspro-workspace-tab-dot ssh ${
+                      status === 'connecting' || status === 'reconnecting'
+                        ? 'pending'
+                        : status === 'error'
+                          ? 'error'
+                          : ''
+                    }`}
+                  />
                   <span className="truncate">{session.name}</span>
                   <span className="aspro-workspace-tab-kind">SSH</span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="aspro-workspace-tab-close"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      closeRemoteSession(id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        closeRemoteSession(id);
+                      }
+                    }}
+                    title="Tutup sesi SSH"
+                  >
+                    ×
+                  </span>
                 </button>
               );
             })}
@@ -398,7 +465,7 @@ export default function App() {
               );
             })}
 
-            {liveSessions.length === 0 && localWorkspaces.length === 0 && (
+            {openSessions.length === 0 && localWorkspaces.length === 0 && (
               <span className="aspro-workspace-tabs-empty">{t('workspace.none')}</span>
             )}
           </div>
@@ -413,7 +480,7 @@ export default function App() {
                       ? `WSL · ${activeLocal.profile.name}`
                       : activeLocal.profile.name}
                   </div>
-                  <div className="truncate font-mono text-[10px] text-faint">
+                  <div className="truncate font-mono text-[12px] text-faint">
                     {t('workspace.localTerminal')} · {activeLocal.profile.command}
                   </div>
                 </div>
@@ -446,7 +513,7 @@ export default function App() {
                 />
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold text-fg">{activeSession.name}</div>
-                  <div className="truncate font-mono text-[10px] text-faint">
+                  <div className="truncate font-mono text-[12px] text-faint">
                     {activeSession.username}@{activeSession.host}:{activeSession.port}
                   </div>
                 </div>
@@ -494,7 +561,7 @@ export default function App() {
             ) : (
               <div>
                 <div className="text-sm font-semibold text-fg">Workspace</div>
-                <div className="text-[10px] text-faint">
+                <div className="text-[12px] text-faint">
                   {t('workspace.choose')}
                 </div>
               </div>
@@ -502,22 +569,29 @@ export default function App() {
           </div>
 
           <div className="aspro-terminal-card">
-            {liveSessions.map((id) => (
-              <div
-                key={id}
-                className={!activeLocalId && statuses[id] === 'connected' && id === activeId ? 'h-full' : 'hidden'}
-              >
-                <TerminalTabs
-                  sessionId={id}
-                  visible={!activeLocalId && statuses[id] === 'connected' && id === activeId}
-                />
-              </div>
-            ))}
+            {mountedSessions.map((id) => {
+              const isActive = !activeLocalId && statuses[id] === 'connected' && id === activeId;
+              return (
+                <div
+                  key={id}
+                  // display:none di sini bikin xterm gagal ukur dimensi
+                  // saat TerminalView baru dipasang sementara tabnya tidak
+                  // aktif (mis. connect selesai saat user lihat tab lain).
+                  className={isActive ? 'absolute inset-0' : 'pointer-events-none invisible absolute inset-0'}
+                >
+                  <TerminalTabs sessionId={id} visible={isActive} />
+                </div>
+              );
+            })}
 
             {localWorkspaces.map((workspace) => (
               <div
                 key={workspace.id}
-                className={workspace.id === activeLocalId ? 'h-full' : 'hidden'}
+                className={
+                  workspace.id === activeLocalId
+                    ? 'absolute inset-0'
+                    : 'pointer-events-none invisible absolute inset-0'
+                }
               >
                 <LocalTerminalView
                   workspaceId={workspace.id}
@@ -650,7 +724,7 @@ export default function App() {
         ) : (
           <span className="text-faint">{t('status.noActiveServer')}</span>
         )}
-        <span className="ml-auto text-[10px] text-faint">ASProSSH Desktop</span>
+        <span className="ml-auto text-[12px] text-faint">ASProSSH Desktop</span>
       </footer>
 
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
@@ -697,6 +771,7 @@ export default function App() {
           onConfirm={async () => {
             await remove(pendingDelete.id);
             if (activeId === pendingDelete.id) setActiveId(null);
+            setOpenSessions((prev) => prev.filter((id) => id !== pendingDelete.id));
             setPendingDelete(null);
           }}
           onCancel={() => setPendingDelete(null)}
@@ -789,7 +864,7 @@ function ConfirmDelete({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-6 backdrop-blur-sm">
       <div className="aspro-dialog w-full max-w-sm p-6">
-        <div className="mb-1 text-[10px] uppercase tracking-[0.2em] text-orange">Konfirmasi</div>
+        <div className="mb-1 text-[12px] uppercase tracking-[0.2em] text-orange">Konfirmasi</div>
         <h2 className="text-base font-semibold">Hapus {session.name}?</h2>
         <p className="mt-2 text-sm text-muted">
           Konfigurasi dan kredensial tersimpan akan dihapus. Server remote tidak terpengaruh.

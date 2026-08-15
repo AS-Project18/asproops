@@ -9,6 +9,8 @@ import { parseSshConfig } from './ssh/ssh-config';
 import { RemoteEditManager } from './ssh/remote-edit';
 import { SessionStore } from './store/sessions';
 import { LocalTerminalManager } from './local-terminal';
+import { AppLock } from './app-lock';
+import { preferences } from './store/preferences';
 import type { RemoteFile, SessionConfig, Secret } from '../src/shared/types';
 
 /**
@@ -20,6 +22,7 @@ import type { RemoteFile, SessionConfig, Secret } from '../src/shared/types';
 const store = new SessionStore();
 const connections = new ConnectionManager();
 const monitor = new RemoteMonitor();
+const appLock = new AppLock();
 let edits: RemoteEditManager;
 let localTerminals: LocalTerminalManager;
 
@@ -46,8 +49,40 @@ export function registerIpc(window: BrowserWindow): void {
     (terminalId, exitCode) => send('local:close', { terminalId, exitCode }),
   );
 
+  // --- Kunci aplikasi -------------------------------------------------------
+  ipcMain.handle('applock:status', () => appLock.status());
+  ipcMain.handle('applock:setup', (_e, pin: string) => {
+    appLock.setPin(pin);
+    return appLock.status();
+  });
+  ipcMain.handle('applock:verify', (_e, pin: string) => appLock.verify(pin));
+  ipcMain.handle('applock:changePin', (_e, currentPin: string, newPin: string) => {
+    const result = appLock.verify(currentPin);
+    if (!result.ok) return result;
+    appLock.setPin(newPin);
+    return { ok: true };
+  });
+  ipcMain.handle('applock:disable', (_e, currentPin: string) => {
+    const result = appLock.verify(currentPin);
+    if (!result.ok) return result;
+    appLock.disable();
+    return { ok: true };
+  });
+
+  // --- Preferensi SSH -------------------------------------------------------
+  ipcMain.handle('settings:sshGet', () => preferences.get());
+  ipcMain.handle('settings:sshUpdate', (_e, patch) => preferences.update(patch));
+  ipcMain.handle('settings:sshReset', () => preferences.reset());
+
   // --- Session CRUD -------------------------------------------------------
-  ipcMain.handle('sessions:list', () => store.list());
+  // sessions:list dan ssh:connect digerbangi eksplisit: keduanya yang
+  // membuka daftar server dan memakai password/passphrase tersimpan untuk
+  // login sungguhan. Handler lain tidak menyentuh kredensial sama sekali,
+  // atau baru bisa dipakai setelah sessionId hasil connect diketahui.
+  ipcMain.handle('sessions:list', () => {
+    if (appLock.isLocked()) throw new Error('Aplikasi terkunci.');
+    return store.list();
+  });
   ipcMain.handle('sessions:create', (_e, config, secret) => store.create(config, secret));
   ipcMain.handle('sessions:update', (_e, id, patch, secret) => store.update(id, patch, secret));
   ipcMain.handle('sessions:remove', (_e, id) => store.remove(id));
@@ -89,6 +124,7 @@ export function registerIpc(window: BrowserWindow): void {
   };
 
   ipcMain.handle('ssh:connect', async (_e, sessionId: string) => {
+    if (appLock.isLocked()) throw new Error('Aplikasi terkunci.');
     const { config, secret } = await resolveSession(sessionId);
     const connection = await connections.open(config, secret, resolveSession, bindConnection);
     store.touch(sessionId);
@@ -106,6 +142,16 @@ export function registerIpc(window: BrowserWindow): void {
     monitor.stop(sessionId);
     await edits.closeSession(sessionId);
     connections.close(sessionId);
+  });
+
+  /**
+   * Query tanpa efek samping, dipakai renderer saat mount untuk menyamakan
+   * status awal dengan koneksi yang mungkin masih hidup di main process
+   * (mis. setelah reload window) — beda dari `ssh:connect` yang membuat
+   * koneksi baru kalau belum ada.
+   */
+  ipcMain.handle('ssh:status', (_e, sessionId: string) => {
+    return connections.get(sessionId)?.getStatus() ?? 'disconnected';
   });
 
   // --- Terminal -----------------------------------------------------------

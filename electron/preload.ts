@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { EditStatus } from './ssh/remote-edit';
+import type { LockStatus, VerifyResult } from './app-lock';
+import type { SshPreferences } from './store/preferences';
 import type {
+  ConnectionStatus,
   LocalTerminalProfile,
   MonitorSnapshot,
   RemoteFile,
@@ -24,6 +27,23 @@ function subscribe<T>(channel: string, handler: (payload: T) => void): Unsubscri
 }
 
 const api = {
+  appLock: {
+    status: (): Promise<LockStatus> => ipcRenderer.invoke('applock:status'),
+    setup: (pin: string): Promise<LockStatus> => ipcRenderer.invoke('applock:setup', pin),
+    verify: (pin: string): Promise<VerifyResult> => ipcRenderer.invoke('applock:verify', pin),
+    changePin: (currentPin: string, newPin: string): Promise<VerifyResult> =>
+      ipcRenderer.invoke('applock:changePin', currentPin, newPin),
+    disable: (currentPin: string): Promise<VerifyResult> =>
+      ipcRenderer.invoke('applock:disable', currentPin),
+  },
+
+  settings: {
+    sshGet: (): Promise<SshPreferences> => ipcRenderer.invoke('settings:sshGet'),
+    sshUpdate: (patch: Partial<SshPreferences>): Promise<SshPreferences> =>
+      ipcRenderer.invoke('settings:sshUpdate', patch),
+    sshReset: (): Promise<SshPreferences> => ipcRenderer.invoke('settings:sshReset'),
+  },
+
   sessions: {
     list: (): Promise<SessionConfig[]> => ipcRenderer.invoke('sessions:list'),
     create: (config: Omit<SessionConfig, 'id' | 'createdAt'>, secret?: Secret) =>
@@ -37,6 +57,8 @@ const api = {
     connect: (sessionId: string): Promise<string> =>
       ipcRenderer.invoke('ssh:connect', sessionId),
     disconnect: (sessionId: string) => ipcRenderer.invoke('ssh:disconnect', sessionId),
+    status: (sessionId: string): Promise<ConnectionStatus> =>
+      ipcRenderer.invoke('ssh:status', sessionId),
     respondToHostKey: (promptId: string, trust: boolean) =>
       ipcRenderer.invoke('ssh:hostKeyResponse', promptId, trust),
     onStatus: (handler: (p: { sessionId: string; status: string; detail?: string }) => void) =>

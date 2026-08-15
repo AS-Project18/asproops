@@ -15,13 +15,36 @@ export function useSessions() {
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    setSessions(await window.ssh.sessions.list());
+    const list = await window.ssh.sessions.list();
+    setSessions(list);
+    return list;
   }, []);
 
   useEffect(() => {
-    void refresh().finally(() => setLoading(false));
+    let cancelled = false;
 
-    return window.ssh.ssh.onStatus(({ sessionId, status, detail }) => {
+    // Koneksi di main process bisa saja masih hidup dari sebelum renderer
+    // ini dimuat (reload window, dsb). Tanya statusnya lewat query yang
+    // aman-null, bukan lewat connect() yang punya efek samping.
+    void refresh()
+      .then(async (list) => {
+        const statuses = await Promise.all(
+          list.map((session) => window.ssh.ssh.status(session.id)),
+        );
+        if (cancelled) return;
+        // ...prev di akhir: kalau event 'status' sudah lebih dulu datang
+        // sebelum query ini selesai, hasil query yang lebih lawas tidak
+        // boleh menimpanya.
+        setStatuses((prev) => ({
+          ...Object.fromEntries(list.map((session, i) => [session.id, statuses[i]])),
+          ...prev,
+        }));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    const unsubscribe = window.ssh.ssh.onStatus(({ sessionId, status, detail }) => {
       setStatuses((prev) => ({ ...prev, [sessionId]: status as ConnectionStatus }));
       setErrors((prev) => {
         if (status === 'error' && detail) return { ...prev, [sessionId]: detail };
@@ -29,6 +52,11 @@ export function useSessions() {
         return rest;
       });
     });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [refresh]);
 
   const connect = useCallback(

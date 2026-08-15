@@ -4,6 +4,7 @@ import { Client } from 'ssh2';
 import type { ClientChannel, ConnectConfig, SFTPWrapper } from 'ssh2';
 
 import { verifyHostKey } from './known-hosts';
+import { preferences } from '../store/preferences';
 import type { ConnectionStatus, SessionConfig, Secret } from '../../src/shared/types';
 
 /**
@@ -28,8 +29,6 @@ export interface ConnectionEvents {
   }) => void;
 }
 
-const KEEPALIVE_INTERVAL_MS = 15_000;
-const KEEPALIVE_MAX_MISSED = 3;
 const RECONNECT_DELAYS_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
 
 export class SshConnection extends EventEmitter {
@@ -63,13 +62,14 @@ export class SshConnection extends EventEmitter {
   }
 
   private async buildConnectConfig(): Promise<ConnectConfig> {
+    const prefs = preferences.get();
     const base: ConnectConfig = {
       host: this.config.host,
       port: this.config.port,
       username: this.config.username,
-      keepaliveInterval: KEEPALIVE_INTERVAL_MS,
-      keepaliveCountMax: KEEPALIVE_MAX_MISSED,
-      readyTimeout: 20_000,
+      keepaliveInterval: prefs.keepaliveIntervalMs,
+      keepaliveCountMax: prefs.keepaliveCountMax,
+      readyTimeout: prefs.timeoutMs,
       // Jika session ini lewat bastion, socket-nya adalah channel forwardOut
       // dari koneksi bastion. ssh2 memperlakukannya seperti socket biasa.
       sock: this.jumpChannel,
@@ -223,6 +223,11 @@ export class SshConnection extends EventEmitter {
   }
 
   private scheduleReconnect(): void {
+    if (!preferences.get().autoReconnect) {
+      this.setStatus('disconnected');
+      return;
+    }
+
     const delay =
       RECONNECT_DELAYS_MS[Math.min(this.reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
     this.reconnectAttempt += 1;

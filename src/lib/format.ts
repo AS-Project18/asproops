@@ -26,8 +26,8 @@ export function formatUptime(seconds: number): string {
   return `${minutes} menit`;
 }
 
-export function formatDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleString('id-ID', {
+export function formatDate(timestamp: number, locale = 'id-ID'): string {
+  return new Date(timestamp).toLocaleString(locale, {
     day: '2-digit',
     month: 'short',
     year: 'numeric',

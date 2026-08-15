@@ -1,8 +1,15 @@
-import type { ReactNode } from 'react';
+import type {
+  CSSProperties,
+  DragEvent,
+  PointerEvent as ReactPointerEvent,
+  MouseEvent as ReactMouseEvent,
+  ReactNode,
+} from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { RemoteFile, TransferProgress } from '../shared/types';
 import type { EditStatus } from '../../electron/ssh/remote-edit';
 import { useVirtualRows } from '../hooks/useVirtualRows';
+import { useI18n } from '../i18n';
 import { formatBytes, formatDate } from '../lib/format';
 
 /**
@@ -14,10 +21,92 @@ import { formatBytes, formatDate } from '../lib/format';
  */
 
 type SortKey = 'name' | 'size' | 'modified';
+type ColumnId = 'size' | 'modified' | 'permissions' | 'owner' | 'group';
+type TFunc = ReturnType<typeof useI18n>['t'];
+
+interface ColumnState {
+  id: ColumnId;
+  width: number;
+  visible: boolean;
+}
 
 const ROW_HEIGHT = 26;
 /** Di atas jumlah ini, tampilkan peringatan agar pengguna memakai penyaring. */
 const CROWDED_THRESHOLD = 2000;
+
+// Cuma batas bawah secukupnya (biar handle-nya tidak collapse total dan hilang
+// tak bisa dipegang lagi) — tidak ada batas atas, dan resize satu kolom tidak
+// pernah mengubah ukuran kolom lain.
+const MIN_COL_WIDTH = 32;
+const NAME_MIN_WIDTH = 32;
+const NAME_DEFAULT_WIDTH = 220;
+const CHECKBOX_COL_WIDTH = 24;
+
+const NAME_WIDTH_STORAGE_KEY = 'asprossh.sftpNameWidth';
+
+function loadNameWidth(): number {
+  const raw = Number(localStorage.getItem(NAME_WIDTH_STORAGE_KEY));
+  if (!Number.isFinite(raw) || raw <= 0) return NAME_DEFAULT_WIDTH;
+  return Math.max(NAME_MIN_WIDTH, raw);
+}
+
+const COLUMN_STORAGE_KEY = 'asprossh.sftpColumns';
+const DEFAULT_COLUMNS: ColumnState[] = [
+  { id: 'size', width: 76, visible: true },
+  { id: 'modified', width: 132, visible: true },
+  { id: 'permissions', width: 60, visible: true },
+  { id: 'owner', width: 64, visible: false },
+  { id: 'group', width: 64, visible: false },
+];
+
+function loadColumns(): ColumnState[] {
+  try {
+    const raw = localStorage.getItem(COLUMN_STORAGE_KEY);
+    if (!raw) return DEFAULT_COLUMNS;
+    const saved = JSON.parse(raw) as ColumnState[];
+    const validIds = new Set(DEFAULT_COLUMNS.map((c) => c.id));
+    const savedValid = saved.filter((c) => validIds.has(c.id));
+    // Kolom baru dari update aplikasi (belum ada di config tersimpan)
+    // ditambahkan di akhir supaya tetap muncul.
+    const missing = DEFAULT_COLUMNS.filter((def) => !savedValid.some((c) => c.id === def.id));
+    return [...savedValid, ...missing].map((c) => ({
+      ...c,
+      width: Math.max(MIN_COL_WIDTH, c.width),
+    }));
+  } catch {
+    return DEFAULT_COLUMNS;
+  }
+}
+
+function columnLabelKey(id: ColumnId) {
+  switch (id) {
+    case 'size':
+      return 'sftp.columnSize' as const;
+    case 'modified':
+      return 'sftp.columnModified' as const;
+    case 'permissions':
+      return 'sftp.columnPermissions' as const;
+    case 'owner':
+      return 'sftp.columnOwner' as const;
+    case 'group':
+      return 'sftp.columnGroup' as const;
+  }
+}
+
+function columnValue(id: ColumnId, file: RemoteFile): string {
+  switch (id) {
+    case 'size':
+      return file.isDirectory ? '—' : formatBytes(file.sizeBytes);
+    case 'modified':
+      return formatDate(file.modifiedAt);
+    case 'permissions':
+      return file.mode;
+    case 'owner':
+      return String(file.owner);
+    case 'group':
+      return String(file.group);
+  }
+}
 
 function parentOf(path: string): string {
   if (path === '/') return '/';
@@ -44,6 +133,9 @@ interface FileBrowserProps {
 }
 
 export function FileBrowser({ sessionId }: FileBrowserProps) {
+  const { t, language } = useI18n();
+  const locale = language === 'en' ? 'en-US' : 'id-ID';
+
   const [path, setPath] = useState('/');
   const [pathInput, setPathInput] = useState('/');
   const [homePath, setHomePath] = useState('/');
@@ -57,8 +149,30 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
   const [filter, setFilter] = useState('');
   const [transfers, setTransfers] = useState<Record<string, TransferProgress>>({});
   const [edits, setEdits] = useState<Record<string, EditStatus>>({});
-  const [pendingDelete, setPendingDelete] = useState<RemoteFile | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<RemoteFile[] | null>(null);
   const [renaming, setRenaming] = useState<{ file: RemoteFile; value: string } | null>(null);
+  const [infoFile, setInfoFile] = useState<RemoteFile | null>(null);
+
+  const [columns, setColumns] = useState<ColumnState[]>(loadColumns);
+  const [nameWidth, setNameWidth] = useState<number>(loadNameWidth);
+  const [draggingCol, setDraggingCol] = useState<ColumnId | null>(null);
+  const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
+
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    files: RemoteFile[];
+  } | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(columns));
+  }, [columns]);
+
+  useEffect(() => {
+    localStorage.setItem(NAME_WIDTH_STORAGE_KEY, String(nameWidth));
+  }, [nameWidth]);
 
   const load = useCallback(
     async (target: string) => {
@@ -163,6 +277,27 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
     });
   }, [sessionId]);
 
+  // Sesi seleksi tidak boleh menyeberang direktori — file yang terpilih di
+  // direktori sebelumnya sudah tidak relevan begitu daftar berkas berganti.
+  useEffect(() => {
+    setSelected(new Set());
+    setSelectionAnchor(null);
+  }, [path]);
+
+  useEffect(() => {
+    if (!contextMenu && !columnsMenuOpen && selected.size === 0) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (contextMenu) setContextMenu(null);
+      else if (columnsMenuOpen) setColumnsMenuOpen(false);
+      else setSelected(new Set());
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [contextMenu, columnsMenuOpen, selected.size]);
+
   const visible = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     let result = showHidden ? entries : entries.filter((e) => !e.name.startsWith('.'));
@@ -190,6 +325,19 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
   // tidak pengguna mendarat di tengah daftar yang isinya sudah berbeda.
   useEffect(() => scrollToTop(), [filter, sortKey, ascending, path, scrollToTop]);
 
+  const visibleColumns = useMemo(() => columns.filter((c) => c.visible), [columns]);
+  // Lebar total minimum tabel. Kolom-kolom fixed-width tidak boleh memeras
+  // kolom Nama saat panel menyempit (mis. sidebar di-resize) — begitu lebar
+  // panel kurang dari ini, tabel digulir horizontal, bukan diperas.
+  const totalMinWidth = useMemo(
+    () => CHECKBOX_COL_WIDTH + nameWidth + visibleColumns.reduce((sum, c) => sum + c.width, 0),
+    [visibleColumns, nameWidth],
+  );
+  const selectedFiles = useMemo(
+    () => entries.filter((f) => selected.has(f.path)),
+    [entries, selected],
+  );
+
   const goToPath = () => {
     void load(pathInput);
   };
@@ -200,6 +348,93 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
       setSortKey(key);
       setAscending(true);
     }
+  };
+
+  const toggleColumnVisibility = (id: ColumnId) => {
+    setColumns((prev) => prev.map((c) => (c.id === id ? { ...c, visible: !c.visible } : c)));
+  };
+
+  const startColumnResize = (event: ReactPointerEvent, colId: ColumnId | 'name') => {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const min = colId === 'name' ? NAME_MIN_WIDTH : MIN_COL_WIDTH;
+    const startWidth = colId === 'name' ? nameWidth : columns.find((c) => c.id === colId)?.width;
+    if (startWidth === undefined) return;
+
+    const onMove = (moveEvent: PointerEvent) => {
+      const next = Math.max(min, startWidth + (moveEvent.clientX - startX));
+      if (colId === 'name') setNameWidth(next);
+      else setColumns((prev) => prev.map((c) => (c.id === colId ? { ...c, width: next } : c)));
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const resetColumnWidth = (colId: ColumnId | 'name') => {
+    if (colId === 'name') {
+      setNameWidth(NAME_DEFAULT_WIDTH);
+      return;
+    }
+    const def = DEFAULT_COLUMNS.find((c) => c.id === colId);
+    if (def) setColumns((prev) => prev.map((c) => (c.id === colId ? { ...c, width: def.width } : c)));
+  };
+
+  const reorderColumns = (draggedId: ColumnId, targetId: ColumnId) => {
+    if (draggedId === targetId) return;
+    setColumns((prev) => {
+      const next = [...prev];
+      const from = next.findIndex((c) => c.id === draggedId);
+      const to = next.findIndex((c) => c.id === targetId);
+      if (from === -1 || to === -1) return prev;
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  };
+
+  const toggleFileSelection = (filePath: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(filePath)) next.delete(filePath);
+      else next.add(filePath);
+      return next;
+    });
+    setSelectionAnchor(filePath);
+  };
+
+  const handleRowClick = (event: ReactMouseEvent, file: RemoteFile, index: number) => {
+    if (event.shiftKey && selectionAnchor) {
+      const anchorIndex = visible.findIndex((f) => f.path === selectionAnchor);
+      if (anchorIndex !== -1) {
+        const [start, end] = anchorIndex < index ? [anchorIndex, index] : [index, anchorIndex];
+        setSelected(new Set(visible.slice(start, end + 1).map((f) => f.path)));
+        return;
+      }
+    }
+    if (event.ctrlKey || event.metaKey) {
+      toggleFileSelection(file.path);
+      return;
+    }
+    setSelected(new Set([file.path]));
+    setSelectionAnchor(file.path);
+  };
+
+  const handleContextMenu = (event: ReactMouseEvent, file: RemoteFile) => {
+    event.preventDefault();
+    let files: RemoteFile[];
+    if (selected.has(file.path) && selected.size > 1) {
+      files = selectedFiles;
+    } else {
+      setSelected(new Set([file.path]));
+      setSelectionAnchor(file.path);
+      files = [file];
+    }
+    setContextMenu({ x: event.clientX, y: event.clientY, files });
   };
 
   const handleDownload = async (file: RemoteFile) => {
@@ -241,10 +476,13 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
     });
   };
 
-  const handleDelete = async (file: RemoteFile) => {
+  const handleDelete = async (files: RemoteFile[]) => {
     try {
-      await window.ssh.sftp.remove(sessionId, file.path, file.isDirectory);
+      for (const file of files) {
+        await window.ssh.sftp.remove(sessionId, file.path, file.isDirectory);
+      }
       setPendingDelete(null);
+      setSelected(new Set());
       await load(path);
     } catch (err) {
       setError((err as Error).message);
@@ -275,17 +513,13 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
           <button
             onClick={() => void load(parentOf(path))}
             disabled={path === '/'}
-            title="Naik satu tingkat"
+            title={t('sftp.up')}
             className="aspro-file-icon"
           >
             ↑
           </button>
 
-          <button
-            onClick={() => void load(homePath)}
-            title="Home"
-            className="aspro-file-icon"
-          >
+          <button onClick={() => void load(homePath)} title={t('sftp.home')} className="aspro-file-icon">
             ⌂
           </button>
 
@@ -301,17 +535,13 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
               value={pathInput}
               onChange={(event) => setPathInput(event.target.value)}
               onFocus={() => setFollowTerminal(false)}
-              aria-label="Path remote"
+              aria-label={t('sftp.pathLabel')}
               spellCheck={false}
             />
-            <button type="submit" title="Buka path">↵</button>
+            <button type="submit" title={t('sftp.goPath')}>↵</button>
           </form>
 
-          <button
-            onClick={() => void load(path)}
-            title="Muat ulang"
-            className="aspro-file-icon"
-          >
+          <button onClick={() => void load(path)} title={t('sftp.reload')} className="aspro-file-icon">
             ⟳
           </button>
         </div>
@@ -320,9 +550,9 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
           <button
             onClick={() => setFollowTerminal((value) => !value)}
             className={`aspro-follow-button ${followTerminal ? 'active' : ''}`}
-            title="Ikuti direktori terminal jika prompt menampilkan path"
+            title={t('sftp.followHelp')}
           >
-            {followTerminal ? '⌁ Follow Terminal' : '⌁ Follow Off'}
+            {followTerminal ? t('sftp.followOn') : t('sftp.followOff')}
           </button>
 
           <label className="aspro-hidden-toggle">
@@ -331,17 +561,35 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
               checked={showHidden}
               onChange={(e) => setShowHidden(e.target.checked)}
             />
-            <span>Hidden</span>
+            <span>{t('sftp.hidden')}</span>
           </label>
 
+          <div className="relative">
+            <button
+              onClick={() => setColumnsMenuOpen((v) => !v)}
+              title={t('sftp.columns')}
+              className="aspro-file-icon"
+            >
+              ▤
+            </button>
+            {columnsMenuOpen && (
+              <ColumnMenu
+                columns={columns}
+                onToggle={toggleColumnVisibility}
+                onClose={() => setColumnsMenuOpen(false)}
+                t={t}
+              />
+            )}
+          </div>
+
           <button onClick={() => void handleUpload()} className="aspro-file-upload">
-            ⇧ Unggah
+            {t('sftp.upload')}
           </button>
         </div>
       </div>
 
       <div className="aspro-file-subbar">
-        <nav className="flex min-w-0 flex-1 items-center overflow-x-auto font-mono text-[9px]">
+        <nav className="flex min-w-0 flex-1 items-center overflow-x-auto font-mono text-[11px]">
           {breadcrumbs(path).map((crumb, index, all) => (
             <span key={crumb.path} className="flex shrink-0 items-center">
               <button
@@ -360,8 +608,8 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
           <input
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
-            placeholder="Filter..."
-            aria-label="Saring nama berkas"
+            placeholder={t('sftp.filterPlaceholder')}
+            aria-label={t('sftp.filterLabel')}
           />
         </div>
       </div>
@@ -377,132 +625,213 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
 
       {crowded && !filter && (
         <p className="border-b border-line bg-panel px-4 py-1.5 text-xs text-amber">
-          Direktori ini berisi {entries.length.toLocaleString('id-ID')} entri. Gunakan kolom
-          saring untuk mempersempit.
+          {t('sftp.crowded', { count: entries.length.toLocaleString(locale) })}
         </p>
       )}
 
-      <div className="aspro-file-head flex shrink-0 border-b border-line bg-panel px-3 py-1.5 text-[9px] text-faint">
-        <SortHeader
-          className="flex-1"
-          active={sortKey === 'name'}
-          ascending={ascending}
-          onClick={() => handleSort('name')}
-        >
-          Nama
-        </SortHeader>
-        <SortHeader
-          className="w-16 text-right"
-          active={sortKey === 'size'}
-          ascending={ascending}
-          onClick={() => handleSort('size')}
-        >
-          Ukuran
-        </SortHeader>
-        <SortHeader
-          className="w-28 pl-3"
-          active={sortKey === 'modified'}
-          ascending={ascending}
-          onClick={() => handleSort('modified')}
-        >
-          Diubah
-        </SortHeader>
-        <span className="w-12 pl-3">Izin</span>
-        <span className="w-14" />
-      </div>
-
-      <div
-        ref={rows.scrollRef}
-        onScroll={rows.onScroll}
-        className="min-h-0 flex-1 overflow-y-auto"
-        role="grid"
-        aria-rowcount={visible.length}
-      >
-        {loading ? (
-          <p className="p-8 text-center text-sm text-faint">Memuat…</p>
-        ) : visible.length === 0 ? (
-          <p className="p-8 text-center text-sm text-faint">
-            {filter
-              ? `Tidak ada yang cocok dengan "${filter}".`
-              : entries.length > 0
-                ? 'Semua isi direktori ini tersembunyi. Centang "Tersembunyi" untuk melihatnya.'
-                : 'Direktori ini kosong.'}
-          </p>
-        ) : (
-          <div style={{ height: rows.totalHeight, position: 'relative' }}>
-            <div style={{ transform: `translateY(${rows.offsetY}px)` }}>
-              {visible.slice(rows.startIndex, rows.endIndex).map((file) => (
-                <div
-                  key={file.path}
-                  role="row"
-                  style={{ height: ROW_HEIGHT }}
-                  className="aspro-file-row group flex items-center border-b border-line-soft px-3 text-[10px] hover:bg-hover"
-                >
-                  <div className="min-w-0 flex-1">
-                    {renaming?.file.path === file.path ? (
-                      <input
-                        value={renaming.value}
-                        autoFocus
-                        onChange={(e) => setRenaming({ file, value: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') void handleRename();
-                          if (e.key === 'Escape') setRenaming(null);
-                        }}
-                        onBlur={() => setRenaming(null)}
-                        className="w-full rounded border border-azure bg-abyss px-2 py-0.5 font-mono text-xs text-fg focus:outline-none"
-                      />
-                    ) : (
-                      <button
-                        onDoubleClick={() => file.isDirectory && void load(file.path)}
-                        className="flex w-full items-center gap-2 truncate text-left font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
-                      >
-                        <FileTypeIcon file={file} />
-                        <span className={`truncate ${file.isDirectory ? 'text-azure' : 'text-dim'}`}>
-                          {file.name}
-                        </span>
-                      </button>
-                    )}
-                  </div>
-
-                  <span className="w-16 shrink-0 text-right font-mono text-faint">
-                    {file.isDirectory ? '—' : formatBytes(file.sizeBytes)}
-                  </span>
-                  <span className="w-28 shrink-0 pl-3 font-mono text-faint">
-                    {formatDate(file.modifiedAt)}
-                  </span>
-                  <span className="w-12 shrink-0 pl-3 font-mono text-faint">{file.mode}</span>
-
-                  <div className="flex w-14 shrink-0 justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-                    {!file.isDirectory && (
-                      <>
-                        <RowButton label="Buka di editor" onClick={() => void handleEdit(file)}>
-                          ✐
-                        </RowButton>
-                        <RowButton label="Unduh" onClick={() => void handleDownload(file)}>
-                          ↓
-                        </RowButton>
-                      </>
-                    )}
-                    <RowButton
-                      label="Ganti nama"
-                      onClick={() => setRenaming({ file, value: file.name })}
-                    >
-                      ✎
-                    </RowButton>
-                    <RowButton label="Hapus" onClick={() => setPendingDelete(file)}>
-                      ✕
-                    </RowButton>
-                  </div>
-                </div>
-              ))}
-            </div>
+      {selected.size > 0 && (
+        <div className="flex items-center gap-2 border-b border-line bg-panel px-3 py-1.5">
+          <span className="text-xs text-dim">{t('sftp.selected', { count: selected.size })}</span>
+          <div className="ml-auto flex items-center gap-1">
+            {selectedFiles.length === 1 && !selectedFiles[0].isDirectory && (
+              <SelectionActionButton
+                label={t('sftp.actionEdit')}
+                onClick={() => void handleEdit(selectedFiles[0])}
+              >
+                ✐
+              </SelectionActionButton>
+            )}
+            {selectedFiles.length === 1 && !selectedFiles[0].isDirectory && (
+              <SelectionActionButton
+                label={t('sftp.actionDownload')}
+                onClick={() => void handleDownload(selectedFiles[0])}
+              >
+                ↓
+              </SelectionActionButton>
+            )}
+            {selectedFiles.length === 1 && (
+              <SelectionActionButton
+                label={t('sftp.actionRename')}
+                onClick={() =>
+                  setRenaming({ file: selectedFiles[0], value: selectedFiles[0].name })
+                }
+              >
+                ✎
+              </SelectionActionButton>
+            )}
+            {selectedFiles.length === 1 && (
+              <SelectionActionButton
+                label={t('sftp.actionInfo')}
+                onClick={() => setInfoFile(selectedFiles[0])}
+              >
+                ⓘ
+              </SelectionActionButton>
+            )}
+            <SelectionActionButton
+              label={t('sftp.actionDelete')}
+              danger
+              onClick={() => setPendingDelete(selectedFiles)}
+            >
+              ✕
+            </SelectionActionButton>
+            <button
+              onClick={() => setSelected(new Set())}
+              title={t('sftp.clearSelection')}
+              className="ml-1 rounded px-1.5 py-1 text-faint hover:bg-line hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+            >
+              ✕
+            </button>
           </div>
-        )}
+        </div>
+      )}
+
+      <div className="flex min-h-0 flex-1 flex-col overflow-x-auto">
+        <div
+          className="aspro-file-head flex shrink-0 items-stretch gap-3 border-b border-line bg-panel px-3 py-1.5 text-[10px] text-faint"
+          style={{ minWidth: totalMinWidth }}
+        >
+          <span className="flex w-6 shrink-0 items-center justify-center" />
+          <div className="group relative flex shrink-0 items-center" style={{ width: nameWidth }}>
+            <SortHeader
+              active={sortKey === 'name'}
+              ascending={ascending}
+              onClick={() => handleSort('name')}
+            >
+              {t('sftp.columnName')}
+            </SortHeader>
+            <span
+              onPointerDown={(e) => startColumnResize(e, 'name')}
+              onDoubleClick={() => resetColumnWidth('name')}
+              title={t('sftp.resetWidth')}
+              className="absolute right-0 top-0 h-full w-2 cursor-col-resize bg-white/[0.04] opacity-0 group-hover:opacity-100 hover:bg-azure/50"
+            />
+          </div>
+          {visibleColumns.map((col) => (
+            <ColumnHeaderCell
+              key={col.id}
+              col={col}
+              label={t(columnLabelKey(col.id))}
+              sortable={col.id === 'size' || col.id === 'modified'}
+              active={sortKey === col.id}
+              ascending={ascending}
+              onSort={() => handleSort(col.id as SortKey)}
+              onDragStart={(e) => {
+                setDraggingCol(col.id);
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/asprossh-column', col.id);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const draggedId =
+                  (e.dataTransfer.getData('text/asprossh-column') as ColumnId) || draggingCol;
+                setDraggingCol(null);
+                if (draggedId) reorderColumns(draggedId, col.id);
+              }}
+              onResetWidth={() => resetColumnWidth(col.id)}
+              resetLabel={t('sftp.resetWidth')}
+              onResizeStart={(e) => startColumnResize(e, col.id)}
+            />
+          ))}
+        </div>
+
+        <div
+          ref={rows.scrollRef}
+          onScroll={rows.onScroll}
+          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden text-[11px]"
+          style={{ minWidth: totalMinWidth }}
+          role="grid"
+          aria-rowcount={visible.length}
+        >
+          {loading ? (
+            <p className="p-8 text-center text-sm text-faint">{t('sftp.loading')}</p>
+          ) : visible.length === 0 ? (
+            <p className="p-8 text-center text-sm text-faint">
+              {filter
+                ? t('sftp.noMatch', { filter })
+                : entries.length > 0
+                  ? t('sftp.allHidden')
+                  : t('sftp.emptyDir')}
+            </p>
+          ) : (
+            <div style={{ height: rows.totalHeight, position: 'relative', minWidth: totalMinWidth }}>
+              <div style={{ transform: `translateY(${rows.offsetY}px)` }}>
+                {visible.slice(rows.startIndex, rows.endIndex).map((file, i) => {
+                  const index = rows.startIndex + i;
+                  const isSelected = selected.has(file.path);
+                  return (
+                    <div
+                      key={file.path}
+                      role="row"
+                      aria-selected={isSelected}
+                      style={{ height: ROW_HEIGHT, minWidth: totalMinWidth }}
+                      onClick={(e) => handleRowClick(e, file, index)}
+                      onContextMenu={(e) => handleContextMenu(e, file)}
+                      className={`aspro-file-row flex items-center gap-3 border-b border-line-soft px-3 hover:bg-hover ${
+                        isSelected ? 'bg-active' : ''
+                      }`}
+                    >
+                      <span className="flex w-6 shrink-0 items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={() => toggleFileSelection(file.path)}
+                          className="accent-azure"
+                        />
+                      </span>
+
+                      <div className="shrink-0 overflow-hidden" style={{ width: nameWidth }}>
+                        {renaming?.file.path === file.path ? (
+                          <input
+                            value={renaming.value}
+                            autoFocus
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => setRenaming({ file, value: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') void handleRename();
+                              if (e.key === 'Escape') setRenaming(null);
+                            }}
+                            onBlur={() => setRenaming(null)}
+                            className="w-full rounded border border-azure bg-abyss px-2 py-0.5 font-mono text-xs text-fg focus:outline-none"
+                          />
+                        ) : (
+                          <button
+                            onDoubleClick={() => file.isDirectory && void load(file.path)}
+                            className="flex w-full items-center gap-2 truncate text-left font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+                          >
+                            <FileTypeIcon file={file} />
+                            <span className={`truncate ${file.isDirectory ? 'text-azure' : 'text-dim'}`}>
+                              {file.name}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+
+                      {visibleColumns.map((col) => (
+                        <span
+                          key={col.id}
+                          style={{ width: col.width }}
+                          className={`shrink-0 truncate font-mono text-faint ${
+                            col.id === 'size' ? 'text-right' : ''
+                          }`}
+                        >
+                          {columnValue(col.id, file)}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {activeEdits.length > 0 && (
         <div className="border-t border-line bg-panel px-4 py-2.5">
-          <h3 className="mb-2 text-xs uppercase tracking-wider text-faint">Sedang diedit</h3>
+          <h3 className="mb-2 text-xs uppercase tracking-wider text-faint">
+            {t('sftp.editingSection')}
+          </h3>
           <div className="space-y-1.5">
             {activeEdits.map((edit) => (
               <div key={edit.editId} className="flex items-center gap-3 text-xs">
@@ -517,12 +846,12 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
                   }`}
                 />
                 <span className="truncate font-mono text-dim">{edit.remotePath}</span>
-                <span className="ml-auto shrink-0 text-faint">{editLabel(edit)}</span>
+                <span className="ml-auto shrink-0 text-faint">{editLabel(edit, t, locale)}</span>
                 <button
                   onClick={() => void handleStopEdit(edit.editId)}
                   className="shrink-0 rounded px-2 py-0.5 text-faint hover:bg-line hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
                 >
-                  Selesai
+                  {t('sftp.stopEdit')}
                 </button>
               </div>
             ))}
@@ -560,38 +889,62 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
       )}
 
       <div className="border-t border-line px-4 py-1.5 text-xs text-faint">
-        {visible.length.toLocaleString('id-ID')} item
-        {visible.length !== entries.length && ` dari ${entries.length.toLocaleString('id-ID')}`}
-        {' · klik ganda direktori untuk masuk'}
+        {t('sftp.footerItems', { count: visible.length.toLocaleString(locale) })}
+        {visible.length !== entries.length &&
+          ` ${t('sftp.footerOf', { total: entries.length.toLocaleString(locale) })}`}
+        {' · '}
+        {t('sftp.footerHint')}
       </div>
 
-      {pendingDelete && (
+      {pendingDelete && pendingDelete.length > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
           <div className="w-full max-w-sm rounded-lg border border-line bg-raised p-6">
             <h2 className="text-sm font-semibold text-fg">
-              Hapus {pendingDelete.isDirectory ? 'direktori' : 'berkas'} ini?
+              {pendingDelete.length === 1
+                ? t('sftp.deleteTitle', {
+                    type: pendingDelete[0].isDirectory
+                      ? t('sftp.typeDirectory')
+                      : t('sftp.typeFile'),
+                  })
+                : t('sftp.deleteTitleMulti', { count: pendingDelete.length })}
             </h2>
-            <p className="mt-2 break-all font-mono text-xs text-muted">{pendingDelete.path}</p>
-            <p className="mt-3 text-xs text-coral">
-              Berkas dihapus permanen di server — tidak masuk keranjang sampah dan tidak bisa
-              dikembalikan.
-            </p>
+            {pendingDelete.length === 1 && (
+              <p className="mt-2 break-all font-mono text-xs text-muted">{pendingDelete[0].path}</p>
+            )}
+            <p className="mt-3 text-xs text-coral">{t('sftp.deleteWarning')}</p>
             <div className="mt-5 flex justify-end gap-3">
               <button
                 onClick={() => setPendingDelete(null)}
                 className="rounded px-4 py-2 text-sm text-dim hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
               >
-                Batal
+                {t('sftp.cancel')}
               </button>
               <button
                 onClick={() => void handleDelete(pendingDelete)}
                 className="rounded bg-coral px-4 py-2 text-sm font-medium text-abyss hover:bg-coral-bright focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
               >
-                Hapus
+                {t('sftp.actionDelete')}
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {infoFile && (
+        <FileInfoDialog file={infoFile} onClose={() => setInfoFile(null)} t={t} locale={locale} />
+      )}
+
+      {contextMenu && (
+        <FileContextMenu
+          state={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onDownload={(file) => void handleDownload(file)}
+          onEdit={(file) => void handleEdit(file)}
+          onRename={(file) => setRenaming({ file, value: file.name })}
+          onDelete={(files) => setPendingDelete(files)}
+          onInfo={(file) => setInfoFile(file)}
+          t={t}
+        />
       )}
     </div>
   );
@@ -680,18 +1033,18 @@ function FileTypeIcon({ file }: { file: RemoteFile }) {
 }
 
 
-function editLabel(edit: EditStatus): string {
+function editLabel(edit: EditStatus, t: TFunc, locale: string): string {
   switch (edit.state) {
     case 'uploading':
-      return 'mengunggah…';
+      return t('sftp.editUploading');
     case 'error':
-      return 'gagal';
+      return t('sftp.editFailed');
     case 'saved':
       return edit.savedAt
-        ? `tersimpan ${new Date(edit.savedAt).toLocaleTimeString('id-ID')}`
-        : 'tersimpan';
+        ? t('sftp.editSavedAt', { time: new Date(edit.savedAt).toLocaleTimeString(locale) })
+        : t('sftp.editSaved');
     default:
-      return 'memantau perubahan';
+      return t('sftp.editWatching');
   }
 }
 
@@ -700,16 +1053,18 @@ function SortHeader({
   ascending,
   onClick,
   className,
+  style,
   children,
 }: {
   active: boolean;
   ascending: boolean;
   onClick: () => void;
   className?: string;
+  style?: CSSProperties;
   children: ReactNode;
 }) {
   return (
-    <span className={className}>
+    <span className={className} style={style}>
       <button
         onClick={onClick}
         className="hover:text-dim focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
@@ -721,13 +1076,117 @@ function SortHeader({
   );
 }
 
-function RowButton({
+function ColumnHeaderCell({
+  col,
   label,
+  sortable,
+  active,
+  ascending,
+  onSort,
+  onDragStart,
+  onDrop,
+  onResizeStart,
+  onResetWidth,
+  resetLabel,
+}: {
+  col: ColumnState;
+  label: string;
+  sortable: boolean;
+  active: boolean;
+  ascending: boolean;
+  onSort: () => void;
+  onDragStart: (e: DragEvent<HTMLDivElement>) => void;
+  onDrop: (e: DragEvent<HTMLDivElement>) => void;
+  onResizeStart: (e: ReactPointerEvent<HTMLSpanElement>) => void;
+  onResetWidth: () => void;
+  resetLabel: string;
+}) {
+  const justify = col.id === 'size' ? 'justify-end' : '';
+
+  return (
+    <div
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDrop}
+      style={{ width: col.width }}
+      className="group relative flex shrink-0 items-center"
+    >
+      {/* Grip ini satu-satunya area untuk drag-urutkan kolom, ditumpuk di
+          atas label (posisi absolute) supaya tidak menggeser posisi teksnya
+          — label harus sejajar persis dengan nilai di baris data di
+          bawahnya. Dipisah juga dari tepi kanan (drag = resize) supaya
+          ketiga gestur (sort/reorder/resize) tidak saling rebutan. */}
+      <span
+        draggable
+        onDragStart={onDragStart}
+        className="absolute inset-y-0 left-0 z-10 flex w-3 -translate-x-3 cursor-grab items-center justify-center text-faint/15 opacity-0 group-hover:opacity-100 hover:text-dim active:cursor-grabbing"
+      >
+        ⠿
+      </span>
+      {sortable ? (
+        <button
+          onClick={onSort}
+          className={`flex min-w-0 flex-1 items-center gap-1 truncate hover:text-dim focus:outline-none focus-visible:ring-2 focus-visible:ring-azure ${justify}`}
+        >
+          <span className="truncate">{label}</span>
+          {active && <span>{ascending ? '↑' : '↓'}</span>}
+        </button>
+      ) : (
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+      )}
+      <span
+        draggable={false}
+        onPointerDown={onResizeStart}
+        onDoubleClick={onResetWidth}
+        title={resetLabel}
+        className="absolute right-0 top-0 h-full w-2 cursor-col-resize bg-white/[0.04] opacity-0 group-hover:opacity-100 hover:bg-azure/50"
+      />
+    </div>
+  );
+}
+
+function ColumnMenu({
+  columns,
+  onToggle,
+  onClose,
+  t,
+}: {
+  columns: ColumnState[];
+  onToggle: (id: ColumnId) => void;
+  onClose: () => void;
+  t: TFunc;
+}) {
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="absolute right-0 top-full z-50 mt-1 min-w-[170px] rounded border border-line bg-raised p-2 text-xs shadow-lg">
+        {columns.map((col) => (
+          <label
+            key={col.id}
+            className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-hover"
+          >
+            <input
+              type="checkbox"
+              checked={col.visible}
+              onChange={() => onToggle(col.id)}
+              className="accent-azure"
+            />
+            <span className="text-dim">{t(columnLabelKey(col.id))}</span>
+          </label>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function SelectionActionButton({
   onClick,
+  label,
+  danger,
   children,
 }: {
-  label: string;
   onClick: () => void;
+  label: string;
+  danger?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -735,9 +1194,184 @@ function RowButton({
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="rounded px-1 text-faint hover:bg-line hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+      className={`grid h-7 w-7 place-items-center rounded text-sm hover:bg-line focus:outline-none focus-visible:ring-2 focus-visible:ring-azure ${
+        danger ? 'text-coral hover:text-coral' : 'text-dim hover:text-fg'
+      }`}
     >
       {children}
     </button>
+  );
+}
+
+function FileContextMenu({
+  state,
+  onClose,
+  onDownload,
+  onEdit,
+  onRename,
+  onDelete,
+  onInfo,
+  t,
+}: {
+  state: { x: number; y: number; files: RemoteFile[] };
+  onClose: () => void;
+  onDownload: (file: RemoteFile) => void;
+  onEdit: (file: RemoteFile) => void;
+  onRename: (file: RemoteFile) => void;
+  onDelete: (files: RemoteFile[]) => void;
+  onInfo: (file: RemoteFile) => void;
+  t: TFunc;
+}) {
+  const single = state.files.length === 1 ? state.files[0] : null;
+  const left = Math.min(state.x, window.innerWidth - 180);
+  const top = Math.min(state.y, window.innerHeight - 220);
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-40"
+        onClick={onClose}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onClose();
+        }}
+      />
+      <div
+        className="fixed z-50 min-w-[160px] rounded border border-line bg-raised py-1 text-xs shadow-lg"
+        style={{ left, top }}
+      >
+        {single && !single.isDirectory && (
+          <MenuItem
+            onClick={() => {
+              onEdit(single);
+              onClose();
+            }}
+          >
+            {t('sftp.actionEdit')}
+          </MenuItem>
+        )}
+        {single && !single.isDirectory && (
+          <MenuItem
+            onClick={() => {
+              onDownload(single);
+              onClose();
+            }}
+          >
+            {t('sftp.actionDownload')}
+          </MenuItem>
+        )}
+        {single && (
+          <MenuItem
+            onClick={() => {
+              onRename(single);
+              onClose();
+            }}
+          >
+            {t('sftp.actionRename')}
+          </MenuItem>
+        )}
+        <MenuItem
+          danger
+          onClick={() => {
+            onDelete(state.files);
+            onClose();
+          }}
+        >
+          {t('sftp.actionDelete')}
+        </MenuItem>
+        {single && (
+          <>
+            <div className="my-1 border-t border-line" />
+            <MenuItem
+              onClick={() => {
+                onInfo(single);
+                onClose();
+              }}
+            >
+              {t('sftp.actionInfo')}
+            </MenuItem>
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+function MenuItem({
+  onClick,
+  danger,
+  children,
+}: {
+  onClick: () => void;
+  danger?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`block w-full px-3 py-1.5 text-left hover:bg-hover focus:outline-none ${
+        danger ? 'text-coral' : 'text-dim'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function FileInfoDialog({
+  file,
+  onClose,
+  t,
+  locale,
+}: {
+  file: RemoteFile;
+  onClose: () => void;
+  t: TFunc;
+  locale: string;
+}) {
+  const typeLabel = file.isDirectory
+    ? t('sftp.infoTypeFolder')
+    : file.isSymlink
+      ? t('sftp.infoTypeSymlink')
+      : t('sftp.infoTypeFile');
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-lg border border-line bg-raised p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="truncate text-sm font-semibold text-fg">{file.name}</h2>
+        <dl className="mt-4 space-y-2 text-xs">
+          <InfoRow label={t('sftp.infoPath')} value={file.path} mono />
+          <InfoRow label={t('sftp.infoType')} value={typeLabel} />
+          {!file.isDirectory && <InfoRow label={t('sftp.columnSize')} value={formatBytes(file.sizeBytes)} />}
+          <InfoRow label={t('sftp.columnModified')} value={formatDate(file.modifiedAt, locale)} />
+          <InfoRow label={t('sftp.columnPermissions')} value={file.mode} mono />
+          <InfoRow label={t('sftp.infoOwner')} value={String(file.owner)} />
+          <InfoRow label={t('sftp.infoGroup')} value={String(file.group)} />
+        </dl>
+        <div className="mt-5 flex justify-end">
+          <button
+            onClick={onClose}
+            className="rounded px-4 py-2 text-sm text-dim hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+          >
+            {t('sftp.infoClose')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <dt className="shrink-0 text-faint">{label}</dt>
+      <dd className={`min-w-0 truncate text-right text-dim ${mono ? 'font-mono' : ''}`}>{value}</dd>
+    </div>
   );
 }

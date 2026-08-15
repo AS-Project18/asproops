@@ -122,7 +122,7 @@ button:disabled {
 .aspro-brand-subtitle {
   margin-top: 5px;
   color: #716779;
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 1.55px;
 }
 
@@ -136,7 +136,7 @@ button:disabled {
   border-radius: 11px;
   background: rgba(10, 5, 15, .75);
   color: #857a8d;
-  font-size: 11px;
+  font-size: 12px;
   box-shadow: inset 0 0 20px rgba(103, 35, 134, .05);
 }
 .aspro-bolt {
@@ -176,7 +176,7 @@ button:disabled {
   border: 1px solid transparent;
   border-radius: 8px;
   color: #746b7b;
-  font-size: 9px;
+  font-size: 11px;
 }
 .aspro-rail-button:hover {
   color: #bfb4c5;
@@ -209,14 +209,14 @@ button:disabled {
   align-items: flex-start;
   justify-content: space-between;
   color: #f1eaf4;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
 }
 .aspro-sidebar-title small {
   display: block;
   margin-top: 2px;
   color: #635b6b;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 400;
 }
 .aspro-sidebar-title button {
@@ -242,7 +242,7 @@ button:disabled {
   outline: 0;
   background: transparent;
   color: #dbd2df;
-  font-size: 10px;
+  font-size: 12px;
 }
 .aspro-search button {
   border: 0;
@@ -267,7 +267,7 @@ button:disabled {
   background: transparent;
   color: #e6dde9;
   text-align: left;
-  font-size: 10px;
+  font-size: 12px;
 }
 .aspro-group-count {
   min-width: 22px;
@@ -276,7 +276,7 @@ button:disabled {
   background: rgba(84, 38, 103, .33);
   color: #a89bae;
   text-align: center;
-  font-size: 8px;
+  font-size: 10px;
 }
 .aspro-server-row {
   min-height: 40px;
@@ -322,7 +322,7 @@ button:disabled {
   border-radius: 7px;
   background: rgba(72, 29, 4, .10);
   color: #d89440;
-  font-size: 10px;
+  font-size: 13px;
 }
 .aspro-empty-sidebar {
   display: flex;
@@ -334,11 +334,11 @@ button:disabled {
   padding: 18px;
   text-align: center;
   color: #756b7d;
-  font-size: 10px;
+  font-size: 12px;
 }
 .aspro-empty-sidebar strong {
   color: #d8cedc;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .aspro-center {
@@ -377,7 +377,7 @@ button:disabled {
   align-items: center;
   padding: 0 7px;
   border-radius: 5px;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 750;
   letter-spacing: .45px;
 }
@@ -415,7 +415,7 @@ button:disabled {
   border-top: 1px solid rgba(103, 42, 128, .25);
   background: #0a050e;
   color: #665e6d;
-  font-size: 9px;
+  font-size: 11px;
 }
 .aspro-footer-active {
   color: #f2e8db;
@@ -436,11 +436,11 @@ button:disabled {
 }
 .aspro-workspace-placeholder strong {
   color: #d8cddd;
-  font-size: 12px;
+  font-size: 13px;
 }
 .aspro-workspace-placeholder > span {
   max-width: 460px;
-  font-size: 10px;
+  font-size: 12px;
 }
 .aspro-placeholder-icon,
 .aspro-side-placeholder-icon {
@@ -479,7 +479,7 @@ button:disabled {
   border-bottom: 2px solid transparent;
   background: transparent;
   color: #776d7e;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 750;
 }
 .aspro-right-tabs button.active {
@@ -496,7 +496,7 @@ button:disabled {
   padding: 20px;
   text-align: center;
   color: #6d6474;
-  font-size: 10px;
+  font-size: 12px;
 }
 .aspro-side-placeholder strong {
   color: #d4cad9;
@@ -511,7 +511,7 @@ button:disabled {
   border-radius: 10px;
   background: rgba(8, 4, 12, .90);
   color: #8d8394;
-  font-size: 10px;
+  font-size: 12px;
 }
 .aspro-divider {
   width: 1px;
@@ -523,7 +523,7 @@ button:disabled {
   min-height: 37px;
   padding: 0 14px;
   border-radius: 7px;
-  font-size: 10px;
+  font-size: 13px;
   transition: .15s ease;
 }
 .aspro-button.compact {
@@ -586,7 +586,7 @@ button:disabled {
   border-radius: 8px;
   background: #100718;
   color: #eee8f1;
-  font-size: 11px;
+  font-size: 13px;
   box-shadow: 0 20px 60px rgba(0,0,0,.55);
 }
 
@@ -709,7 +709,7 @@ button:disabled {
   outline: 0;
   background: transparent;
   color: #dcd3e0;
-  font: 10px var(--font-mono);
+  font: 12px var(--font-mono);
 }
 .aspro-path-box button {
   border: 0;
@@ -721,7 +721,7 @@ button:disabled {
   height: 28px;
   padding: 0 8px;
   border-radius: 5px;
-  font-size: 9px;
+  font-size: 11px;
 }
 .aspro-follow-button {
   border: 1px solid rgba(129, 57, 156, .30);
@@ -745,7 +745,7 @@ button:disabled {
   gap: 5px;
   padding: 0 7px;
   color: #7f7587;
-  font-size: 9px;
+  font-size: 11px;
 }
 .aspro-hidden-toggle input {
   accent-color: #ff8a00;
@@ -774,7 +774,7 @@ button:disabled {
   outline: 0;
   background: transparent;
   color: #cfc4d4;
-  font-size: 9px;
+  font-size: 12px;
 }
 .aspro-file-head {
   background: rgba(27, 10, 37, .70);
@@ -833,7 +833,7 @@ button:disabled {
   border-bottom: 2px solid transparent;
   background: transparent;
   color: #776d7e;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 750;
   letter-spacing: .45px;
 }
@@ -905,14 +905,14 @@ button:disabled {
 }
 .aspro-footer-metric-label {
   color: #756a7d;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 750;
   letter-spacing: .35px;
 }
 .aspro-footer-metric-value {
   justify-self: end;
   color: #d6cdd9;
-  font: 10px var(--font-mono);
+  font: 12px var(--font-mono);
 }
 .aspro-footer-mini-bar {
   grid-column: 1 / -1;
@@ -967,18 +967,18 @@ button:disabled {
   border: 1px solid rgba(120, 57, 145, .26);
   background: rgba(56, 20, 70, .12);
   color: #8f8497;
-  font: 6px var(--font-mono);
+  font: 8px var(--font-mono);
   letter-spacing: -.35px;
 }
 .aspro-file-type-badge.code { color: #bc5eef; }
-.aspro-file-type-badge.config { color: #ffab31; font-size: 9px; }
-.aspro-file-type-badge.image { color: #65dce7; font-size: 9px; }
-.aspro-file-type-badge.archive { color: #ffb52e; font-size: 5px; }
+.aspro-file-type-badge.config { color: #ffab31; font-size: 10px; }
+.aspro-file-type-badge.image { color: #65dce7; font-size: 10px; }
+.aspro-file-type-badge.archive { color: #ffb52e; font-size: 8px; }
 .aspro-file-type-badge.database { color: #58e879; }
-.aspro-file-type-badge.document { color: #aaa0b2; font-size: 5px; }
-.aspro-file-type-badge.log { color: #d28bff; font-size: 5px; }
-.aspro-file-type-badge.script { color: #63ea80; font-size: 7px; }
-.aspro-file-type-badge.file { color: #716878; font-size: 10px; }
+.aspro-file-type-badge.document { color: #aaa0b2; font-size: 8px; }
+.aspro-file-type-badge.log { color: #d28bff; font-size: 8px; }
+.aspro-file-type-badge.script { color: #63ea80; font-size: 9px; }
+.aspro-file-type-badge.file { color: #716878; font-size: 11px; }
 
 /* File browser now lives in potentially narrow left dock */
 .aspro-left-dock .aspro-file-toolbar {
@@ -1031,7 +1031,7 @@ button:disabled {
   border-radius: 5px;
   background: rgba(83, 26, 105, .17);
   color: #d47fff;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: .5px;
 }
@@ -1050,14 +1050,14 @@ button:disabled {
   align-items: flex-start;
   justify-content: space-between;
   color: #f0e8f3;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
 }
 .aspro-local-title small {
   display: block;
   margin-top: 2px;
   color: #665c6d;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 400;
 }
 .aspro-local-title button {
@@ -1094,7 +1094,7 @@ button:disabled {
   display: block;
   overflow: hidden;
   color: #ded5e2;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1104,7 +1104,7 @@ button:disabled {
   margin-top: 2px;
   overflow: hidden;
   color: #6f6577;
-  font-size: 8px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1145,7 +1145,7 @@ button:disabled {
   padding: 24px;
   color: #716878;
   text-align: center;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .aspro-left-mode-tabs {
@@ -1179,7 +1179,7 @@ button:disabled {
   border-radius: 6px 6px 0 0;
   background: rgba(14, 6, 20, .66);
   color: #857a8d;
-  font-size: 9px;
+  font-size: 11px;
 }
 .aspro-workspace-tab:hover {
   color: #d2c7d7;
@@ -1210,10 +1210,18 @@ button:disabled {
   background: #ff9700;
   box-shadow: 0 0 6px rgba(255, 151, 0, .38);
 }
+.aspro-workspace-tab-dot.pending {
+  background: #ffb52e;
+  box-shadow: 0 0 6px rgba(255, 181, 46, .45);
+}
+.aspro-workspace-tab-dot.error {
+  background: #ff5a68;
+  box-shadow: 0 0 6px rgba(255, 90, 104, .45);
+}
 .aspro-workspace-tab-kind {
   margin-left: auto;
   color: #5d5464;
-  font-size: 6px;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: .4px;
 }
@@ -1237,7 +1245,7 @@ button:disabled {
   align-self: center;
   padding: 0 7px 6px;
   color: #554d5b;
-  font-size: 8px;
+  font-size: 10px;
 }
 
 
@@ -1256,7 +1264,7 @@ button:disabled {
   border: 1px dashed rgba(116, 51, 143, .22);
   border-radius: 5px;
   color: #625969;
-  font-size: 8px;
+  font-size: 10px;
 }
 .aspro-group-hint span {
   color: #a54bc9;
@@ -1314,7 +1322,7 @@ button:disabled {
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -1324,7 +1332,7 @@ button:disabled {
   border-radius: 99px;
   background: rgba(8, 74, 28, .12);
   color: #58df79;
-  font-size: 7px;
+  font-size: 10px;
 }
 
 .aspro-group-count {
@@ -1334,7 +1342,7 @@ button:disabled {
   background: rgba(82, 34, 102, .40);
   color: #9e91a5;
   text-align: center;
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .aspro-group-drop-message {
@@ -1344,7 +1352,7 @@ button:disabled {
   border-radius: 5px;
   color: #ffad31;
   text-align: center;
-  font-size: 8px;
+  font-size: 10px;
 }
 
 .aspro-server-row {
@@ -1414,7 +1422,7 @@ button:disabled {
 .aspro-settings-header p {
   margin-top: 2px;
   color: #746b7b;
-  font-size: 9px;
+  font-size: 11px;
 }
 .aspro-settings-header > button {
   width: 30px;
@@ -1467,7 +1475,7 @@ button:disabled {
 .aspro-settings-roadmap-item strong {
   display: block;
   color: #ded4e2;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 650;
 }
 .aspro-settings-section-heading small,
@@ -1477,7 +1485,7 @@ button:disabled {
   display: block;
   margin-top: 3px;
   color: #706675;
-  font-size: 8px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -1508,11 +1516,11 @@ button:disabled {
   padding: 0 10px;
   border-radius: 5px;
   color: #817687;
-  font-size: 9px;
+  font-size: 11px;
 }
 .aspro-language-switch button span {
   color: #9f92a5;
-  font: 700 7px var(--font-mono);
+  font: 700 10px var(--font-mono);
 }
 .aspro-language-switch button.active {
   background: linear-gradient(135deg, rgba(119, 39, 151, .34), rgba(72, 24, 92, .24));
@@ -1552,7 +1560,7 @@ button:disabled {
   border-radius: 99px;
   background: rgba(92, 42, 4, .10);
   color: #a56c27;
-  font-size: 6px;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: .4px;
   text-transform: uppercase;
