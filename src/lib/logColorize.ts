@@ -44,3 +44,38 @@ export function colorizeLine(line: string): string {
     return style ? `${style}${match}${RESET}` : match;
   });
 }
+
+/**
+ * Pengelompokan blok multi-baris (stack trace, "Caused by:", dst) — baris
+ * yang TIDAK diawali timestamp/level dianggap lanjutan dari entri
+ * sebelumnya, bukan entri baru. Dipakai untuk kasih penanda bar warna di
+ * kiri supaya baris panjang error/warning kelihatan masih satu blok yang
+ * sama sampai entri baru (timestamp/level lain) benar-benar muncul.
+ */
+const NEW_ENTRY_RE =
+  /^\s{0,4}\[?(?:\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}|[A-Za-z]{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}|(?:FATAL|CRITICAL|CRIT|ERROR|WARN|WARNING|INFO|NOTICE|DEBUG|TRACE)\b)/i;
+const ERROR_WORD_RE = /\b(?:FATAL|CRITICAL|CRIT|ERROR)\b/i;
+const WARN_WORD_RE = /\b(?:WARN|WARNING)\b/i;
+
+export type BlockLevel = 'error' | 'warn' | null;
+
+/**
+ * Level blok untuk baris ini. Baris yang bukan awal entri baru meneruskan
+ * level blok sebelumnya apa adanya (termasuk null — entri biasa yang bukan
+ * error/warn tidak digambar bar sama sekali).
+ */
+export function nextBlockLevel(line: string, previous: BlockLevel): BlockLevel {
+  if (!NEW_ENTRY_RE.test(line)) return previous;
+  if (ERROR_WORD_RE.test(line)) return 'error';
+  if (WARN_WORD_RE.test(line)) return 'warn';
+  return null;
+}
+
+const BLOCK_BAR: Record<'error' | 'warn', string> = {
+  error: '\x1b[91m┃\x1b[0m ',
+  warn: '\x1b[33m┃\x1b[0m ',
+};
+
+export function blockPrefix(level: BlockLevel): string {
+  return level ? BLOCK_BAR[level] : '';
+}

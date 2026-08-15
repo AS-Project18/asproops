@@ -6,7 +6,7 @@ import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import { useTerminalPrefs } from '../terminalPrefs';
 import { stripAnsi } from '../lib/ansi';
-import { colorizeLine } from '../lib/logColorize';
+import { colorizeLine, nextBlockLevel, blockPrefix, type BlockLevel } from '../lib/logColorize';
 import { useI18n } from '../i18n';
 import { ContextMenu, ContextMenuItem, type ContextMenuPosition } from './ContextMenu';
 
@@ -86,6 +86,7 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
   const partialRef = useRef('');
   const filterRef = useRef('');
   const colorRef = useRef(true);
+  const blockLevelRef = useRef<BlockLevel>(null);
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('');
@@ -168,16 +169,23 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
       const overflow = linesRef.current.length - MAX_BUFFERED_LINES;
       if (overflow > 0) linesRef.current.splice(0, overflow);
 
-      const render = (line: string) => (colorRef.current ? colorizeLine(line) : line);
+      // Pelacakan blok jalan atas SEMUA baris berurutan, bukan cuma yang
+      // lolos filter — kalau tidak, baris lanjutan yang tersaring keluar
+      // bisa membuat statusnya melenceng dari blok aslinya.
+      const rendered = parts.map((line) => {
+        const level = nextBlockLevel(line, blockLevelRef.current);
+        blockLevelRef.current = level;
+        return colorRef.current ? blockPrefix(level) + colorizeLine(line) : line;
+      });
 
       if (!filterRef.current) {
-        term.write(parts.map(render).join('\n') + '\n');
+        term.write(rendered.join('\n') + '\n');
         return;
       }
 
       const query = filterRef.current.toLowerCase();
-      const matched = parts.filter((line) => stripAnsi(line).toLowerCase().includes(query));
-      if (matched.length > 0) term.write(matched.map(render).join('\n') + '\n');
+      const matched = rendered.filter((_, i) => stripAnsi(parts[i]).toLowerCase().includes(query));
+      if (matched.length > 0) term.write(matched.join('\n') + '\n');
     };
 
     const initialize = () => {
@@ -252,6 +260,7 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
       tailIdRef.current = null;
       linesRef.current = [];
       partialRef.current = '';
+      blockLevelRef.current = null;
     };
   // sessionId+path saja sebagai dependency: buka tutup stream ulang cuma
   // kalau target log-nya sungguh berganti, bukan tiap render ulang parent.
@@ -304,11 +313,20 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
 
       term.clear();
       const query = filter.toLowerCase();
-      const base = filter
-        ? linesRef.current.filter((line) => stripAnsi(line).toLowerCase().includes(query))
-        : linesRef.current;
-      const rendered = colorEnabled ? base.map(colorizeLine) : base;
-      if (rendered.length > 0) term.write(rendered.join('\n') + '\n');
+
+      // Susun ulang dari baris PALING AWAL yang tersisa di buffer supaya
+      // pelacakan blok akurat, baru saring untuk tampilan.
+      let level: BlockLevel = null;
+      const renderedAll = linesRef.current.map((line) => {
+        level = nextBlockLevel(line, level);
+        return colorEnabled ? blockPrefix(level) + colorizeLine(line) : line;
+      });
+      blockLevelRef.current = level;
+
+      const visible = filter
+        ? renderedAll.filter((_, i) => stripAnsi(linesRef.current[i]).toLowerCase().includes(query))
+        : renderedAll;
+      if (visible.length > 0) term.write(visible.join('\n') + '\n');
       if (!filter && partialRef.current) term.write(partialRef.current);
     }, 200);
     return () => clearTimeout(handle);
@@ -342,6 +360,7 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
   const clearScreen = () => {
     linesRef.current = [];
     partialRef.current = '';
+    blockLevelRef.current = null;
     termRef.current?.clear();
   };
 
