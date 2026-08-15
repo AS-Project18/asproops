@@ -9,6 +9,8 @@ import type {
   MonitorSnapshot,
   ProjectProfile,
   RemoteFile,
+  ServiceAction,
+  ServiceInfo,
   SessionConfig,
   Secret,
   TransferProgress,
@@ -56,7 +58,7 @@ const api = {
     create: (
       sessionId: string,
       input: Pick<ProjectProfile, 'name' | 'path' | 'env' | 'deployTemplateId'> &
-        Partial<Pick<ProjectProfile, 'logPaths'>>,
+        Partial<Pick<ProjectProfile, 'logPaths' | 'serviceNames'>>,
     ): Promise<ProjectProfile> => ipcRenderer.invoke('projects:create', sessionId, input),
     update: (id: string, patch: Partial<ProjectProfile>): Promise<ProjectProfile | undefined> =>
       ipcRenderer.invoke('projects:update', id, patch),
@@ -189,6 +191,13 @@ const api = {
       subscribe('monitor:snapshot', handler),
     onError: (handler: (p: { sessionId: string; message: string }) => void) =>
       subscribe('monitor:error', handler),
+  },
+
+  service: {
+    list: (sessionId: string): Promise<ServiceInfo[]> =>
+      ipcRenderer.invoke('service:list', sessionId),
+    action: (sessionId: string, unit: string, action: ServiceAction): Promise<void> =>
+      ipcRenderer.invoke('service:action', sessionId, unit, action),
   },
 };
 

@@ -12,6 +12,7 @@ import { LocalTerminalPanel } from './components/LocalTerminalPanel';
 import { LocalTerminalView } from './components/LocalTerminalView';
 import { LogView } from './components/LogView';
 import { ProjectsPanel } from './components/ProjectsPanel';
+import { ServicesPanel } from './components/ServicesPanel';
 import { SettingsDialog } from './components/SettingsDialog';
 import { useI18n } from './i18n';
 import { useSessions } from './hooks/useSessions';
@@ -29,7 +30,7 @@ function basename(path: string): string {
 }
 
 type FormState = { open: false } | { open: true; editing: SessionConfig | null };
-type LeftMode = 'servers' | 'local' | 'files' | 'monitor' | 'projects';
+type LeftMode = 'servers' | 'local' | 'files' | 'monitor' | 'projects' | 'services';
 
 export default function App() {
   const { t } = useI18n();
@@ -44,6 +45,7 @@ export default function App() {
   const [localProfilesLoading, setLocalProfilesLoading] = useState(true);
   const [localWorkspaces, setLocalWorkspaces] = useState<LocalTerminalWorkspace[]>([]);
   const [logWorkspaces, setLogWorkspaces] = useState<LogWorkspace[]>([]);
+  const [serviceFocus, setServiceFocus] = useState<string | null>(null);
   const [leftMode, setLeftMode] = useState<LeftMode>('servers');
   const [leftWidth, setLeftWidth] = useState(330);
   const [resizingLeft, setResizingLeft] = useState(false);
@@ -186,6 +188,17 @@ export default function App() {
     setActiveLocalId(null);
     setActiveId(null);
     setActiveLogId(workspace.id);
+  };
+
+  /**
+   * Dipanggil dari ProjectsPanel saat sebuah chip layanan diklik — beda dari
+   * openLogView, ini tidak membuka tab baru, cuma memindahkan panel kiri ke
+   * Service Manager dan menyorot nama unit-nya di kotak pencarian. Selalu
+   * untuk session yang sedang aktif, jadi tidak perlu parameter sessionId.
+   */
+  const openServiceManager = (unit: string) => {
+    setServiceFocus(unit);
+    setLeftMode('services');
   };
 
   const closeLocalTerminal = (workspaceId: string) => {
@@ -363,6 +376,12 @@ export default function App() {
             label={t('nav.projects')}
             onClick={() => setLeftMode('projects')}
           />
+          <RailButton
+            active={leftMode === 'services'}
+            icon="⏻"
+            label={t('nav.services')}
+            onClick={() => setLeftMode('services')}
+          />
           <div className="flex-1" />
           <RailButton icon="⚙" label={t('nav.settings')} onClick={() => setSettingsOpen(true)} />
         </aside>
@@ -436,21 +455,46 @@ export default function App() {
                       : 'pointer-events-none invisible absolute inset-0'
                   }
                 >
-                  <ProjectsPanel sessionId={activeSession.id} onOpenLog={openLogView} />
+                  <ProjectsPanel
+                    sessionId={activeSession.id}
+                    onOpenLog={openLogView}
+                    onOpenService={openServiceManager}
+                  />
+                </div>
+
+                <div
+                  className={
+                    leftMode === 'services'
+                      ? 'absolute inset-0'
+                      : 'pointer-events-none invisible absolute inset-0'
+                  }
+                >
+                  <ServicesPanel sessionId={activeSession.id} focusService={serviceFocus} />
                 </div>
               </>
             ) : (
-              (leftMode === 'files' || leftMode === 'monitor' || leftMode === 'projects') && (
+              (leftMode === 'files' ||
+                leftMode === 'monitor' ||
+                leftMode === 'projects' ||
+                leftMode === 'services') && (
                 <div className="aspro-side-placeholder absolute inset-0">
                   <div className="aspro-side-placeholder-icon">
-                    {leftMode === 'files' ? '□' : leftMode === 'monitor' ? '⌁' : '▣'}
+                    {leftMode === 'files'
+                      ? '□'
+                      : leftMode === 'monitor'
+                        ? '⌁'
+                        : leftMode === 'services'
+                          ? '⏻'
+                          : '▣'}
                   </div>
                   <strong>
                     {leftMode === 'files'
                       ? t('placeholder.sftp')
                       : leftMode === 'monitor'
                         ? t('placeholder.monitor')
-                        : t('placeholder.projects')}
+                        : leftMode === 'services'
+                          ? t('placeholder.services')
+                          : t('placeholder.projects')}
                   </strong>
                   <span>{t('placeholder.connectRequired')}</span>
                 </div>

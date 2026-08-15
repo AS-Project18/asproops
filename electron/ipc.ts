@@ -6,6 +6,7 @@ import type { ClientChannel } from 'ssh2';
 
 import { ConnectionManager, type SshConnection } from './ssh/connection-manager';
 import { RemoteMonitor } from './ssh/monitor';
+import { listServices, runServiceAction } from './ssh/services';
 import { trustHostKey } from './ssh/known-hosts';
 import { parseSshConfig } from './ssh/ssh-config';
 import { RemoteEditManager } from './ssh/remote-edit';
@@ -14,7 +15,7 @@ import { LocalTerminalManager } from './local-terminal';
 import { AppLock } from './app-lock';
 import { preferences, sftpPreferences } from './store/preferences';
 import { projects } from './store/projects';
-import type { RemoteFile, SessionConfig, Secret } from '../src/shared/types';
+import type { RemoteFile, ServiceAction, SessionConfig, Secret } from '../src/shared/types';
 
 /** "foto.jpg" -> "foto (1).jpg" -> "foto (2).jpg" ... sampai ketemu yang belum dipakai. */
 function uniqueLocalPath(target: string): string {
@@ -499,6 +500,16 @@ export function registerIpc(window: BrowserWindow): void {
   });
 
   ipcMain.handle('monitor:stop', (_e, sessionId: string) => monitor.stop(sessionId));
+
+  // --- Service manager (systemd) ---------------------------------------------
+  ipcMain.handle('service:list', (_e, sessionId: string) =>
+    listServices(connections.require(sessionId)),
+  );
+  ipcMain.handle(
+    'service:action',
+    (_e, sessionId: string, unit: string, action: ServiceAction) =>
+      runServiceAction(connections.require(sessionId), unit, action),
+  );
 }
 
 export function shutdown(): void {

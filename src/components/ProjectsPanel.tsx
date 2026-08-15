@@ -11,6 +11,7 @@ import { useI18n } from '../i18n';
 interface ProjectsPanelProps {
   sessionId: string;
   onOpenLog: (sessionId: string, path: string) => void;
+  onOpenService: (unit: string) => void;
 }
 
 function basename(path: string): string {
@@ -19,7 +20,7 @@ function basename(path: string): string {
 
 type FormState = { open: false } | { open: true; editing: ProjectProfile | null };
 
-export function ProjectsPanel({ sessionId, onOpenLog }: ProjectsPanelProps) {
+export function ProjectsPanel({ sessionId, onOpenLog, onOpenService }: ProjectsPanelProps) {
   const { t } = useI18n();
   const [projectList, setProjectList] = useState<ProjectProfile[]>([]);
   const [templates, setTemplates] = useState<DeployTemplate[]>([]);
@@ -90,16 +91,26 @@ export function ProjectsPanel({ sessionId, onOpenLog }: ProjectsPanelProps) {
                 </button>
               </div>
 
-              {project.logPaths.length > 0 && (
+              {(project.logPaths.length > 0 || project.serviceNames.length > 0) && (
                 <div className="mb-1.5 mt-1 flex flex-wrap gap-1.5 pl-[39px]">
                   {project.logPaths.map((logPath) => (
                     <button
-                      key={logPath}
+                      key={`log-${logPath}`}
                       onClick={() => onOpenLog(project.sessionId, logPath)}
                       title={logPath}
                       className="rounded border border-line px-2 py-1 font-mono text-[10px] text-dim hover:border-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
                     >
                       ▶ {basename(logPath)}
+                    </button>
+                  ))}
+                  {project.serviceNames.map((unit) => (
+                    <button
+                      key={`svc-${unit}`}
+                      onClick={() => onOpenService(unit)}
+                      title={unit}
+                      className="rounded border border-line px-2 py-1 font-mono text-[10px] text-dim hover:border-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+                    >
+                      ⏻ {unit}
                     </button>
                   ))}
                 </div>
@@ -175,6 +186,7 @@ function ProjectFormDialog({
     existing ? Object.entries(existing.env).map(([key, value]) => ({ key, value })) : [],
   );
   const [logPaths, setLogPaths] = useState<string[]>(existing?.logPaths ?? []);
+  const [serviceNames, setServiceNames] = useState<string[]>(existing?.serviceNames ?? []);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -194,6 +206,14 @@ function ProjectFormDialog({
     setLogPaths((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const updateServiceName = (index: number, value: string) => {
+    setServiceNames((prev) => prev.map((n, i) => (i === index ? value : n)));
+  };
+
+  const removeServiceName = (index: number) => {
+    setServiceNames((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!name.trim() || !path.trim()) {
@@ -211,6 +231,7 @@ function ProjectFormDialog({
         path: path.trim(),
         env: envRecord,
         logPaths: logPaths.map((p) => p.trim()).filter(Boolean),
+        serviceNames: serviceNames.map((n) => n.trim()).filter(Boolean),
         deployTemplateId: deployTemplateId || undefined,
       };
       if (existing) await window.ssh.projects.update(existing.id, input);
@@ -336,6 +357,37 @@ function ProjectFormDialog({
                 className="text-xs text-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
               >
                 {t('project.logPathAdd')}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <span className="mb-1.5 block text-xs text-muted">{t('project.serviceNames')}</span>
+            <div className="space-y-2">
+              {serviceNames.map((unit, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    value={unit}
+                    onChange={(e) => updateServiceName(index, e.target.value)}
+                    placeholder={t('project.serviceNamePlaceholder')}
+                    spellCheck={false}
+                    className="aspro-input w-full px-2 py-1.5 font-mono text-xs text-fg placeholder-faint focus:border-azure focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeServiceName(index)}
+                    className="shrink-0 rounded px-1.5 py-1 text-faint hover:bg-line hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setServiceNames((prev) => [...prev, ''])}
+                className="text-xs text-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+              >
+                {t('project.serviceNameAdd')}
               </button>
             </div>
           </div>

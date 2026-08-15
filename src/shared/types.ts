@@ -160,6 +160,17 @@ export interface ProjectProfile {
   createdAt: number;
 }
 
+/** Satu unit systemd sebagaimana dilaporkan `systemctl list-units`. */
+export interface ServiceInfo {
+  name: string;
+  loadState: string;
+  activeState: string;
+  subState: string;
+  description: string;
+}
+
+export type ServiceAction = 'start' | 'stop' | 'restart';
+
 export interface DeployStep {
   id: string;
   /** Label yang ditampilkan di UI, mis. "Install dependencies". */
