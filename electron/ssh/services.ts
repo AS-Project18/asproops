@@ -8,14 +8,14 @@ import type { ServiceAction, ServiceInfo } from '../../src/shared/types';
  * (active/inactive/failed) — bukan cuma status enable/disable di boot.
  */
 const LIST_COMMAND =
-  'systemctl list-units --type=service --all --no-legend --no-pager --plain 2>/dev/null';
+  'systemctl --full --plain --no-legend --no-pager list-units --type=service --all';
 
 const ALLOWED_ACTIONS: readonly ServiceAction[] = ['start', 'stop', 'restart'];
 
 function parseServiceList(stdout: string): ServiceInfo[] {
   return stdout
     .split('\n')
-    .map((line) => line.trim())
+    .map((line) => line.replace(/^[●•]\s*/, '').trim())
     .filter(Boolean)
     .flatMap((line) => {
       // UNIT LOAD ACTIVE SUB DESCRIPTION — deskripsi boleh mengandung spasi.
@@ -30,8 +30,20 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+/**
+ * stderr sengaja TIDAK dibuang (beda dari command lain yang cuma butuh
+ * stdout) — kalau server tidak pakai systemd (mis. container Alpine/OpenRC),
+ * `systemctl` gagal dan exit code-nya bukan 0. Tanpa cek ini, panel akan
+ * diam-diam menampilkan "tidak ada layanan" alih-alih menjelaskan sebabnya.
+ */
 export async function listServices(connection: SessionChannels): Promise<ServiceInfo[]> {
-  const { stdout } = await connection.exec(LIST_COMMAND);
+  const { stdout, stderr, code } = await connection.exec(LIST_COMMAND);
+  if (code !== 0) {
+    throw new Error(
+      stderr.trim() ||
+        'systemctl gagal dijalankan. Service Manager hanya mendukung server berbasis systemd.',
+    );
+  }
   return parseServiceList(stdout);
 }
 
