@@ -1,13 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useI18n, type AppLanguage } from '../i18n';
 import { useTerminalPrefs, type CursorStyle } from '../terminalPrefs';
-import type { SshPreferences } from '../../electron/store/preferences';
+import type { SshPreferences, SftpPreferences, ConflictPolicy } from '../../electron/store/preferences';
 
 interface SettingsDialogProps {
   onClose: () => void;
 }
-
-const roadmap = [['settings.sftp', 'settings.sftpDesc', '□']] as const;
 
 export function SettingsDialog({ onClose }: SettingsDialogProps) {
   const { language, setLanguage, t } = useI18n();
@@ -95,25 +93,14 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
           </section>
 
           <section className="aspro-settings-section">
-            <div className="aspro-settings-roadmap-title">
+            <div className="aspro-settings-section-heading">
+              <span>□</span>
               <div>
-                <strong>{t('settings.roadmapTitle')}</strong>
-                <small>{t('settings.roadmapDesc')}</small>
+                <strong>{t('settings.sftp')}</strong>
+                <small>{t('settings.sftpDesc')}</small>
               </div>
             </div>
-
-            <div className="aspro-settings-roadmap">
-              {roadmap.map(([title, description, icon]) => (
-                <article key={title} className="aspro-settings-roadmap-item">
-                  <span className="aspro-settings-roadmap-icon">{icon}</span>
-                  <div>
-                    <strong>{t(title)}</strong>
-                    <small>{t(description)}</small>
-                  </div>
-                  <span className="aspro-planned-badge">{t('settings.planned')}</span>
-                </article>
-              ))}
-            </div>
+            <SftpSettings />
           </section>
         </div>
 
@@ -582,6 +569,152 @@ function CursorStyleButton({
   current: CursorStyle;
   label: string;
   onSelect: (value: CursorStyle) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={current === value}
+      className={current === value ? 'active' : ''}
+      onClick={() => onSelect(value)}
+    >
+      {label}
+    </button>
+  );
+}
+
+const CONFLICT_POLICIES: ConflictPolicy[] = ['ask', 'overwrite', 'skip', 'rename'];
+
+function conflictLabelKey(policy: ConflictPolicy) {
+  switch (policy) {
+    case 'ask':
+      return 'settings.sftpConflictAsk' as const;
+    case 'overwrite':
+      return 'settings.sftpConflictOverwrite' as const;
+    case 'skip':
+      return 'settings.sftpConflictSkip' as const;
+    case 'rename':
+      return 'settings.sftpConflictRename' as const;
+  }
+}
+
+function SftpSettings() {
+  const { t } = useI18n();
+  const [prefs, setPrefs] = useState<SftpPreferences | null>(null);
+
+  useEffect(() => {
+    void window.ssh.settings.sftpGet().then(setPrefs);
+  }, []);
+
+  if (!prefs) return null;
+
+  const update = (patch: Partial<SftpPreferences>) => {
+    void window.ssh.settings.sftpUpdate(patch).then(setPrefs);
+  };
+
+  const pickFolder = async () => {
+    const folder = await window.ssh.dialog.pickFolder();
+    if (folder) update({ downloadFolder: folder });
+  };
+
+  return (
+    <>
+      <div className="aspro-setting-row">
+        <div>
+          <strong>{t('settings.sftpDownloadFolder')}</strong>
+          <small>{t('settings.sftpDownloadFolderDesc')}</small>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <input
+            type="text"
+            readOnly
+            value={prefs.downloadFolder}
+            placeholder={t('settings.sftpDownloadFolderPlaceholder')}
+            title={prefs.downloadFolder || undefined}
+            className="aspro-input w-44 truncate px-3 py-1.5 text-sm text-fg"
+          />
+          {prefs.downloadFolder && (
+            <button
+              type="button"
+              onClick={() => update({ downloadFolder: '' })}
+              title={t('settings.sftpDownloadFolderPlaceholder')}
+              className="rounded px-1.5 py-1 text-faint hover:bg-line hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+            >
+              ✕
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void pickFolder()}
+            className="aspro-button aspro-button-secondary compact"
+          >
+            {t('settings.sftpChooseFolder')}
+          </button>
+        </div>
+      </div>
+
+      <div className="aspro-setting-row">
+        <div>
+          <strong>{t('settings.sftpUploadConflict')}</strong>
+        </div>
+        <div className="aspro-language-switch shrink-0" role="radiogroup">
+          {CONFLICT_POLICIES.map((policy) => (
+            <ConflictPolicyButton
+              key={policy}
+              value={policy}
+              current={prefs.uploadConflict}
+              label={t(conflictLabelKey(policy))}
+              onSelect={(uploadConflict) => update({ uploadConflict })}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="aspro-setting-row">
+        <div>
+          <strong>{t('settings.sftpDownloadConflict')}</strong>
+          <small>{t('settings.sftpDownloadConflictDesc')}</small>
+        </div>
+        <div className="aspro-language-switch shrink-0" role="radiogroup">
+          {CONFLICT_POLICIES.map((policy) => (
+            <ConflictPolicyButton
+              key={policy}
+              value={policy}
+              current={prefs.downloadConflict}
+              label={t(conflictLabelKey(policy))}
+              onSelect={(downloadConflict) => update({ downloadConflict })}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="aspro-setting-row">
+        <div>
+          <strong>{t('settings.sftpResetTitle')}</strong>
+          <small>{t('settings.sftpResetDesc')}</small>
+        </div>
+        <button
+          type="button"
+          onClick={() => void window.ssh.settings.sftpReset().then(setPrefs)}
+          className="aspro-button aspro-button-secondary compact shrink-0"
+        >
+          {t('settings.sshReset')}
+        </button>
+      </div>
+    </>
+  );
+}
+
+function ConflictPolicyButton({
+  value,
+  current,
+  label,
+  onSelect,
+}: {
+  value: ConflictPolicy;
+  current: ConflictPolicy;
+  label: string;
+  onSelect: (value: ConflictPolicy) => void;
 }) {
   return (
     <button

@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { EditStatus } from './ssh/remote-edit';
 import type { LockStatus, VerifyResult } from './app-lock';
-import type { SshPreferences } from './store/preferences';
+import type { SshPreferences, SftpPreferences } from './store/preferences';
 import type {
   ConnectionStatus,
   LocalTerminalProfile,
@@ -42,6 +42,10 @@ const api = {
     sshUpdate: (patch: Partial<SshPreferences>): Promise<SshPreferences> =>
       ipcRenderer.invoke('settings:sshUpdate', patch),
     sshReset: (): Promise<SshPreferences> => ipcRenderer.invoke('settings:sshReset'),
+    sftpGet: (): Promise<SftpPreferences> => ipcRenderer.invoke('settings:sftpGet'),
+    sftpUpdate: (patch: Partial<SftpPreferences>): Promise<SftpPreferences> =>
+      ipcRenderer.invoke('settings:sftpUpdate', patch),
+    sftpReset: (): Promise<SftpPreferences> => ipcRenderer.invoke('settings:sftpReset'),
   },
 
   sessions: {
@@ -131,6 +135,7 @@ const api = {
     pickUpload: (): Promise<string[]> => ipcRenderer.invoke('dialog:pickUpload'),
     pickDownload: (suggestedName: string): Promise<string | null> =>
       ipcRenderer.invoke('dialog:pickDownload', suggestedName),
+    pickFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickFolder'),
   },
 
   edit: {

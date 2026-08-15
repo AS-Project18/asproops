@@ -92,3 +92,86 @@ export class PreferencesStore {
  * berlaku seketika tanpa perlu restart aplikasi.
  */
 export const preferences = new PreferencesStore();
+
+/**
+ * Preferensi SFTP: folder unduhan default dan kebijakan konflik nama.
+ *
+ * 'ask' untuk unduhan berarti tetap memakai dialog "Simpan Sebagai" native
+ * (yang sudah punya konfirmasi timpa bawaan OS) — folder default cuma
+ * dipakai sebagai lokasi awal dialog itu. Kebijakan lain (overwrite/skip/
+ * rename) melewati dialog sama sekali untuk unduhan berulang yang cepat.
+ * Untuk unggahan, 'ask' berarti FileBrowser menampilkan dialog konfirmasi
+ * sendiri di renderer karena tidak ada dialog native untuk berkas remote.
+ */
+
+export type ConflictPolicy = 'ask' | 'overwrite' | 'skip' | 'rename';
+
+export interface SftpPreferences {
+  /** Kosong berarti selalu tanya lewat dialog "Simpan Sebagai" (perilaku lama). */
+  downloadFolder: string;
+  uploadConflict: ConflictPolicy;
+  downloadConflict: ConflictPolicy;
+}
+
+export const DEFAULT_SFTP_PREFERENCES: SftpPreferences = {
+  downloadFolder: '',
+  uploadConflict: 'ask',
+  downloadConflict: 'ask',
+};
+
+const CONFLICT_POLICIES: ConflictPolicy[] = ['ask', 'overwrite', 'skip', 'rename'];
+
+function isConflictPolicy(value: unknown): value is ConflictPolicy {
+  return typeof value === 'string' && CONFLICT_POLICIES.includes(value as ConflictPolicy);
+}
+
+export class SftpPreferencesStore {
+  private readonly path: string;
+  private data: SftpPreferences;
+
+  constructor(path = join(app.getPath('userData'), 'sftp-preferences.json')) {
+    this.path = path;
+    this.data = this.read();
+  }
+
+  private read(): SftpPreferences {
+    try {
+      const parsed = JSON.parse(readFileSync(this.path, 'utf8')) as Partial<SftpPreferences>;
+      return { ...DEFAULT_SFTP_PREFERENCES, ...parsed };
+    } catch {
+      return { ...DEFAULT_SFTP_PREFERENCES };
+    }
+  }
+
+  private flush(): void {
+    mkdirSync(dirname(this.path), { recursive: true });
+    writeFileSync(this.path, JSON.stringify(this.data, null, 2), { mode: 0o600 });
+  }
+
+  get(): SftpPreferences {
+    return { ...this.data };
+  }
+
+  update(patch: Partial<SftpPreferences>): SftpPreferences {
+    this.data = {
+      downloadFolder:
+        typeof patch.downloadFolder === 'string' ? patch.downloadFolder : this.data.downloadFolder,
+      uploadConflict: isConflictPolicy(patch.uploadConflict)
+        ? patch.uploadConflict
+        : this.data.uploadConflict,
+      downloadConflict: isConflictPolicy(patch.downloadConflict)
+        ? patch.downloadConflict
+        : this.data.downloadConflict,
+    };
+    this.flush();
+    return this.get();
+  }
+
+  reset(): SftpPreferences {
+    this.data = { ...DEFAULT_SFTP_PREFERENCES };
+    this.flush();
+    return this.get();
+  }
+}
+
+export const sftpPreferences = new SftpPreferencesStore();

@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { join, parse as parsePath } from 'node:path';
 import { dialog, ipcMain, type BrowserWindow } from 'electron';
 import type { ClientChannel } from 'ssh2';
 
@@ -10,8 +12,20 @@ import { RemoteEditManager } from './ssh/remote-edit';
 import { SessionStore } from './store/sessions';
 import { LocalTerminalManager } from './local-terminal';
 import { AppLock } from './app-lock';
-import { preferences } from './store/preferences';
+import { preferences, sftpPreferences } from './store/preferences';
 import type { RemoteFile, SessionConfig, Secret } from '../src/shared/types';
+
+/** "foto.jpg" -> "foto (1).jpg" -> "foto (2).jpg" ... sampai ketemu yang belum dipakai. */
+function uniqueLocalPath(target: string): string {
+  const { dir, name, ext } = parsePath(target);
+  let candidate = target;
+  let attempt = 1;
+  while (existsSync(candidate)) {
+    candidate = join(dir, `${name} (${attempt})${ext}`);
+    attempt += 1;
+  }
+  return candidate;
+}
 
 /**
  * Semua akses SSH terjadi di proses main. Renderer tidak pernah memegang
@@ -73,6 +87,18 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle('settings:sshGet', () => preferences.get());
   ipcMain.handle('settings:sshUpdate', (_e, patch) => preferences.update(patch));
   ipcMain.handle('settings:sshReset', () => preferences.reset());
+
+  // --- Preferensi SFTP ------------------------------------------------------
+  ipcMain.handle('settings:sftpGet', () => sftpPreferences.get());
+  ipcMain.handle('settings:sftpUpdate', (_e, patch) => sftpPreferences.update(patch));
+  ipcMain.handle('settings:sftpReset', () => sftpPreferences.reset());
+  ipcMain.handle('dialog:pickFolder', async () => {
+    const result = await dialog.showOpenDialog(window, {
+      title: 'Pilih folder unduhan default',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
 
   // --- Session CRUD -------------------------------------------------------
   // sessions:list dan ssh:connect digerbangi eksplisit: keduanya yang
@@ -368,11 +394,33 @@ export function registerIpc(window: BrowserWindow): void {
   });
 
   ipcMain.handle('dialog:pickDownload', async (_e, suggestedName: string) => {
-    const result = await dialog.showSaveDialog(window, {
-      title: 'Simpan berkas',
-      defaultPath: suggestedName,
-    });
-    return result.canceled ? null : result.filePath;
+    const prefs = sftpPreferences.get();
+
+    // Belum ada folder default, atau kebijakannya memang "tanya" — pakai
+    // dialog native seperti sebelumnya (sudah punya konfirmasi timpa bawaan
+    // OS). Folder default cuma dipakai sebagai lokasi awal dialog.
+    if (!prefs.downloadFolder || prefs.downloadConflict === 'ask') {
+      const result = await dialog.showSaveDialog(window, {
+        title: 'Simpan berkas',
+        defaultPath: prefs.downloadFolder
+          ? join(prefs.downloadFolder, suggestedName)
+          : suggestedName,
+      });
+      return result.canceled ? null : result.filePath;
+    }
+
+    const target = join(prefs.downloadFolder, suggestedName);
+    if (!existsSync(target)) return target;
+
+    switch (prefs.downloadConflict) {
+      case 'skip':
+        return null;
+      case 'rename':
+        return uniqueLocalPath(target);
+      case 'overwrite':
+      default:
+        return target;
+    }
   });
 
   // --- Edit berkas remote --------------------------------------------------

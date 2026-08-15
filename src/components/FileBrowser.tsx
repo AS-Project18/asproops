@@ -118,6 +118,22 @@ function joinPath(dir: string, name: string): string {
   return dir === '/' ? `/${name}` : `${dir}/${name}`;
 }
 
+type ConflictDecision = { action: 'overwrite' | 'skip' | 'rename'; applyToAll: boolean } | null;
+
+/** "foto.jpg" -> "foto (1).jpg" -> "foto (2).jpg" ... sampai ketemu nama yang belum dipakai. */
+function uniqueRemoteName(name: string, existing: Set<string>): string {
+  const dot = name.lastIndexOf('.');
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : '';
+  let candidate = name;
+  let attempt = 1;
+  while (existing.has(candidate)) {
+    candidate = `${base} (${attempt})${ext}`;
+    attempt += 1;
+  }
+  return candidate;
+}
+
 function breadcrumbs(path: string): Array<{ label: string; path: string }> {
   const crumbs = [{ label: '/', path: '/' }];
   let current = '';
@@ -165,6 +181,12 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
     y: number;
     files: RemoteFile[];
   } | null>(null);
+
+  const [uploadConflict, setUploadConflict] = useState<{
+    name: string;
+    resolve: (decision: ConflictDecision) => void;
+  } | null>(null);
+  const [applyConflictToAll, setApplyConflictToAll] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(columns));
@@ -447,14 +469,54 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
     }
   };
 
+  const askUploadConflict = (name: string): Promise<ConflictDecision> => {
+    setApplyConflictToAll(false);
+    return new Promise((resolve) => {
+      setUploadConflict({
+        name,
+        resolve: (decision) => {
+          setUploadConflict(null);
+          resolve(decision);
+        },
+      });
+    });
+  };
+
   const handleUpload = async () => {
     const localPaths = await window.ssh.dialog.pickUpload();
+    if (localPaths.length === 0) return;
+
     try {
+      const sftpPrefs = await window.ssh.settings.sftpGet();
+      const existingNames = new Set(entries.map((e) => e.name));
+      // Kalau user pilih "terapkan untuk sisanya" di dialog konflik, ini
+      // menimpa kebijakan pengaturan untuk sisa berkas di batch ini saja.
+      let batchPolicy: 'overwrite' | 'skip' | 'rename' | null = null;
+      let uploaded = 0;
+
       for (const localPath of localPaths) {
         const name = localPath.split(/[\\/]/).pop() ?? 'berkas';
-        await window.ssh.sftp.upload(sessionId, localPath, joinPath(path, name));
+        let targetName = name;
+
+        if (existingNames.has(name)) {
+          let action: 'overwrite' | 'skip' | 'rename' | null =
+            batchPolicy ?? (sftpPrefs.uploadConflict !== 'ask' ? sftpPrefs.uploadConflict : null);
+          if (!action) {
+            const decision = await askUploadConflict(name);
+            if (!decision) break; // dialog ditutup tanpa pilihan — hentikan sisa batch
+            action = decision.action;
+            if (decision.applyToAll) batchPolicy = action;
+          }
+          if (action === 'skip') continue;
+          if (action === 'rename') targetName = uniqueRemoteName(name, existingNames);
+        }
+
+        await window.ssh.sftp.upload(sessionId, localPath, joinPath(path, targetName));
+        existingNames.add(targetName);
+        uploaded += 1;
       }
-      if (localPaths.length > 0) await load(path);
+
+      if (uploaded > 0) await load(path);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -924,6 +986,58 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
                 className="rounded bg-coral px-4 py-2 text-sm font-medium text-abyss hover:bg-coral-bright focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
               >
                 {t('sftp.actionDelete')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {uploadConflict && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
+          <div className="w-full max-w-sm rounded-lg border border-line bg-raised p-6">
+            <h2 className="break-all text-sm font-semibold text-fg">
+              {t('sftp.conflictTitle', { name: uploadConflict.name })}
+            </h2>
+            <p className="mt-2 text-xs text-muted">{t('sftp.conflictDesc')}</p>
+            <label className="mt-4 flex items-center gap-2 text-xs text-dim">
+              <input
+                type="checkbox"
+                checked={applyConflictToAll}
+                onChange={(e) => setApplyConflictToAll(e.target.checked)}
+                className="accent-azure"
+              />
+              {t('sftp.conflictApplyAll')}
+            </label>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                onClick={() => uploadConflict.resolve(null)}
+                className="rounded px-3 py-1.5 text-sm text-dim hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+              >
+                {t('sftp.cancel')}
+              </button>
+              <button
+                onClick={() =>
+                  uploadConflict.resolve({ action: 'skip', applyToAll: applyConflictToAll })
+                }
+                className="rounded px-3 py-1.5 text-sm text-dim hover:bg-line hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+              >
+                {t('settings.sftpConflictSkip')}
+              </button>
+              <button
+                onClick={() =>
+                  uploadConflict.resolve({ action: 'rename', applyToAll: applyConflictToAll })
+                }
+                className="rounded px-3 py-1.5 text-sm text-dim hover:bg-line hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+              >
+                {t('settings.sftpConflictRename')}
+              </button>
+              <button
+                onClick={() =>
+                  uploadConflict.resolve({ action: 'overwrite', applyToAll: applyConflictToAll })
+                }
+                className="rounded bg-coral px-3 py-1.5 text-sm font-medium text-abyss hover:bg-coral-bright focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+              >
+                {t('settings.sftpConflictOverwrite')}
               </button>
             </div>
           </div>
