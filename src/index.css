@@ -1061,9 +1061,21 @@ button:disabled {
   font-weight: 400;
 }
 .aspro-local-title button {
-  border: 0;
-  background: transparent;
-  color: #8b7e94;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border: 1px solid rgba(200, 115, 36, .35);
+  border-radius: 6px;
+  background: rgba(200, 115, 36, .12);
+  color: #ffb56b;
+  font-size: 15px;
+  transition: background .15s ease, border-color .15s ease;
+}
+.aspro-local-title button:hover {
+  border-color: rgba(200, 115, 36, .6);
+  background: rgba(200, 115, 36, .22);
 }
 
 .aspro-local-list {
