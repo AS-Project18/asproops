@@ -105,9 +105,22 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle('applock:status', () => appLock.status());
   ipcMain.handle('applock:setup', (_e, pin: string) => {
     appLock.setPin(pin);
-    return appLock.status();
+    const status = appLock.status();
+    // Disiarkan supaya bagian lain yang cuma tahu status lewat onChanged
+    // (mis. tombol kunci manual di header) langsung tahu App Lock baru
+    // saja diaktifkan, tanpa perlu reload window.
+    send('applock:changed', status);
+    return status;
   });
-  ipcMain.handle('applock:verify', (_e, pin: string) => appLock.verify(pin));
+  ipcMain.handle('applock:verify', (_e, pin: string) => {
+    const result = appLock.verify(pin);
+    // Cuma unlock beneran yang perlu disiarkan — hooks lain (mis.
+    // useSessions) menunggu event ini buat tahu kapan boleh memuat ulang
+    // data yang tadinya ditolak main process karena aplikasi masih
+    // terkunci (lihat gerbang di sessions:list/ssh:connect).
+    if (result.ok) send('applock:changed', appLock.status());
+    return result;
+  });
   ipcMain.handle('applock:changePin', (_e, currentPin: string, newPin: string) => {
     const result = appLock.verify(currentPin);
     if (!result.ok) return result;
@@ -118,6 +131,7 @@ export function registerIpc(window: BrowserWindow): void {
     const result = appLock.verify(currentPin);
     if (!result.ok) return result;
     appLock.disable();
+    send('applock:changed', appLock.status());
     return { ok: true };
   });
   ipcMain.handle('applock:relock', () => {

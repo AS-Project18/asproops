@@ -23,28 +23,40 @@ export function useSessions() {
   useEffect(() => {
     let cancelled = false;
 
-    // Koneksi di main process bisa saja masih hidup dari sebelum renderer
-    // ini dimuat (reload window, dsb). Tanya statusnya lewat query yang
-    // aman-null, bukan lewat connect() yang punya efek samping.
-    void refresh()
-      .then(async (list) => {
-        const statuses = await Promise.all(
-          list.map((session) => window.ssh.ssh.status(session.id)),
-        );
-        if (cancelled) return;
-        // ...prev di akhir: kalau event 'status' sudah lebih dulu datang
-        // sebelum query ini selesai, hasil query yang lebih lawas tidak
-        // boleh menimpanya.
-        setStatuses((prev) => ({
-          ...Object.fromEntries(list.map((session, i) => [session.id, statuses[i]])),
-          ...prev,
-        }));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    // App mulai terkunci (App Lock) sudah dirender begitu app dibuka — lihat
+    // catatan di AppLockGate.tsx — tapi main process sengaja MENOLAK
+    // sessions:list selama masih terkunci (biar kredensial tidak bisa
+    // dibaca sebelum PIN benar). Panggilan pertama di bawah bisa saja
+    // mendarat SEBELUM pengguna sempat unlock dan gagal — itu bukan error
+    // sungguhan, cuma "belum boleh", jadi ditelan diam-diam di sini. Listener
+    // onChanged di bawah yang memuat ulang begitu transisi terkunci→terbuka
+    // sungguh terjadi.
+    const load = () => {
+      void refresh()
+        .then(async (list) => {
+          const statuses = await Promise.all(
+            list.map((session) => window.ssh.ssh.status(session.id)),
+          );
+          if (cancelled) return;
+          // ...prev di akhir: kalau event 'status' sudah lebih dulu datang
+          // sebelum query ini selesai, hasil query yang lebih lawas tidak
+          // boleh menimpanya.
+          setStatuses((prev) => ({
+            ...Object.fromEntries(list.map((session, i) => [session.id, statuses[i]])),
+            ...prev,
+          }));
+        })
+        .catch(() => {
+          /* App Lock masih aktif — lihat komentar di atas. */
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    };
 
-    const unsubscribe = window.ssh.ssh.onStatus(({ sessionId, status, detail }) => {
+    load();
+
+    const unsubscribeStatus = window.ssh.ssh.onStatus(({ sessionId, status, detail }) => {
       setStatuses((prev) => ({ ...prev, [sessionId]: status as ConnectionStatus }));
       setErrors((prev) => {
         if (status === 'error' && detail) return { ...prev, [sessionId]: detail };
@@ -53,9 +65,21 @@ export function useSessions() {
       });
     });
 
+    // Tidak melacak status terkunci sebelumnya di sini — app bisa saja
+    // sudah terkunci SEBELUM effect ini sempat tahu (lihat komentar
+    // load() di atas), jadi tidak ada "state lama" yang bisa diandalkan
+    // buat mendeteksi transisi. Muat ulang tiap kali disiarkan TIDAK
+    // terkunci cukup aman: satu-satunya sumber siaran ini (verify/setup/
+    // disable/relock berhasil) masing-masing mewakili aksi pengguna yang
+    // nyata, jadi tidak ada risiko spam query berulang selagi diam.
+    const unsubscribeLock = window.ssh.appLock.onChanged((status) => {
+      if (!status.locked) load();
+    });
+
     return () => {
       cancelled = true;
-      unsubscribe();
+      unsubscribeStatus();
+      unsubscribeLock();
     };
   }, [refresh]);
 
