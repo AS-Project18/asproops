@@ -277,21 +277,46 @@ export function LocalTerminalView({
     );
   }
 
+  // Klik-kanan biasa (tanpa Shift) langsung copy (kalau ada seleksi) atau
+  // paste (kalau tidak ada) — meniru perilaku terminal Windows pada umumnya
+  // (PuTTY, Windows Terminal). Shift+klik-kanan tetap membuka menu Copy/Paste.
   const handleContextMenu = (event: ReactMouseEvent) => {
     event.preventDefault();
+    if (!event.shiftKey) {
+      const term = termRef.current;
+      if (term?.hasSelection()) {
+        const selection = term.getSelection();
+        if (selection) window.ssh.clipboard.writeText(selection);
+        term.clearSelection();
+      } else {
+        const text = window.ssh.clipboard.readText();
+        if (text && terminalIdRef.current) window.ssh.local.write(terminalIdRef.current, text);
+      }
+      term?.focus();
+      return;
+    }
     setContextMenu({ x: event.clientX, y: event.clientY });
   };
 
+  // Fokus dikembalikan ke terminal setelah aksi clipboard supaya pengguna
+  // bisa langsung mengetik tanpa perlu klik ulang ke area terminal.
   const copySelection = () => {
     const selection = termRef.current?.getSelection();
     if (selection) window.ssh.clipboard.writeText(selection);
     setContextMenu(null);
+    termRef.current?.focus();
   };
 
   const pasteClipboard = () => {
     const text = window.ssh.clipboard.readText();
     if (text && terminalIdRef.current) window.ssh.local.write(terminalIdRef.current, text);
     setContextMenu(null);
+    termRef.current?.focus();
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu(null);
+    termRef.current?.focus();
   };
 
   return (
@@ -302,7 +327,7 @@ export function LocalTerminalView({
         onContextMenu={handleContextMenu}
       />
       {contextMenu && (
-        <ContextMenu position={contextMenu} onClose={() => setContextMenu(null)}>
+        <ContextMenu position={contextMenu} onClose={closeContextMenu}>
           <ContextMenuItem onClick={copySelection} disabled={!termRef.current?.hasSelection()}>
             {t('menu.copy')}
           </ContextMenuItem>
