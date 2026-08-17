@@ -12,7 +12,7 @@
 
 ASProOps is an Electron-based desktop application designed as a single workspace for server administration and developer operations. One app handles SSH sessions, local Windows terminals, WSL distros, an SFTP file browser, remote editing, server resource monitoring, and a full DevOps flow — project profiles, a live log viewer, service manager, Git status, and deploy template execution — without switching between tools.
 
-> **Project status:** actively developed. Current source version `1.0.0`. A Windows installer (`.exe`) can already be built via `npm run dist:win`, but it isn't code-signed yet and has no auto-update — see [Installer / Release Binary](#installer--release-binary).
+> **Project status:** actively developed. Current source version `1.1.0`. A Windows installer (`.exe`) can already be built via `npm run dist:win`, but it isn't code-signed yet and has no auto-update — see [Installer / Release Binary](#installer--release-binary).
 
 ---
 
@@ -48,7 +48,8 @@ ASProOps is an Electron-based desktop application designed as a single workspace
 
 **Security & preferences**
 
-- Optional application lock (PIN), with automatic re-lock after a configurable period of inactivity (can be turned off).
+- **Server SSH login log** — see the real login history recorded by sshd itself (`journalctl`/`auth.log`), covering every client (not just ASProOps). Live mode or browse other dates (today/yesterday/7 days/pick a date), with automatic access escalation (direct → `sudo -n` → sudo password prompt if needed).
+- Optional application lock (PIN), with automatic re-lock after a configurable period of inactivity (can be turned off), plus a manual lock button in the header.
 - Session persistence and encrypted credentials via Electron `safeStorage`.
 - SSH preferences (timeout, keepalive, auto-reconnect), Terminal (font, scrollback, cursor), and SFTP (download folder, conflict policy) are all configurable in Settings.
 - The left sidebar can be collapsed/shown to reclaim workspace width.
@@ -374,6 +375,21 @@ Monitoring reads information from `/proc`, so it isn't available for remote Wind
 
 ---
 
+## Server SSH Login Log
+
+The **Login Log** tab (⚿ icon) shows the server's own sshd authentication log — unlike ASProOps's own connection history, this is a record of logins from **any client** (PuTTY, WinSCP, ASProOps on another PC, etc.), sourced from `journalctl -u ssh -u sshd` (systemd distros) or `/var/log/auth.log` / `/var/log/secure` as a fallback.
+
+Access is attempted in order: direct, then `sudo -n` (if NOPASSWD is configured), then a sudo password prompt as a last resort — the password only ever flows over the encrypted SSH stdin channel, never in a command argument and never written to disk, and is cached in memory only for as long as that SSH connection stays alive.
+
+Two views:
+
+- **Summary** — one card per login event, successful logins merged from several raw lines (correlated by PID), failed attempts grouped by source IP (so bot scans don't flood the list).
+- **Raw** — the regular log viewer (search/filter/copy) for the original lines.
+
+You can also browse other dates (Today/Yesterday/7 days/pick a date) via a one-shot query, independent of the live stream.
+
+---
+
 ## DevOps: Project, Log Viewer, Service Manager, Git, and Deploy
 
 These five panels were built in sequence as one in-app DevOps workflow:
@@ -411,7 +427,9 @@ Running a deploy (the "Deploy" chip in the Projects panel, which asks for confir
 
 An optional feature under **Settings → Application Lock**. Once enabled, the app asks for a PIN every time it opens, before the server list and saved credentials become accessible.
 
-**Auto-lock**: the app can also be configured to ask for the PIN again after a configurable number of minutes without mouse/keyboard activity (default 10 minutes; change it or set it to 0 to disable).
+**Auto-lock**: the app can also be configured to ask for the PIN again after a configurable number of minutes without mouse/keyboard activity (default 10 minutes; change it or set it to 0 to disable). There's also a manual lock button (🔒) in the header, to lock immediately without waiting for the idle timeout.
+
+Locking the app (automatic or manual) **does not close any running session** — every SSH terminal, local terminal, and connection stays alive behind the lock screen; only interaction is blocked until the PIN is entered again.
 
 The PIN is hashed with `scrypt` and stored locally — this isn't a replacement for the `safeStorage` encryption protecting session files on disk, but an additional barrier at the UI layer.
 

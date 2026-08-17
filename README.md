@@ -12,7 +12,7 @@
 
 ASProOps adalah aplikasi desktop berbasis Electron yang dirancang sebagai satu workspace untuk pekerjaan administrasi server dan operasi developer. Satu aplikasi menangani sesi SSH, terminal lokal Windows, distro WSL, browser file SFTP, remote editing, monitoring resource server, sampai alur DevOps — project profile, live log viewer, service manager, status Git, dan eksekusi deploy template — tanpa harus berpindah-pindah tool.
 
-> **Status project:** aktif dikembangkan. Versi source saat ini `1.0.0`. Installer Windows (`.exe`) sudah bisa dibuat lewat `npm run dist:win`, tapi belum ditandatangani (code signing) dan belum punya auto-update — lihat [Installer / Release Binary](#installer--release-binary).
+> **Status project:** aktif dikembangkan. Versi source saat ini `1.1.0`. Installer Windows (`.exe`) sudah bisa dibuat lewat `npm run dist:win`, tapi belum ditandatangani (code signing) dan belum punya auto-update — lihat [Installer / Release Binary](#installer--release-binary).
 
 ---
 
@@ -48,7 +48,8 @@ ASProOps adalah aplikasi desktop berbasis Electron yang dirancang sebagai satu w
 
 **Keamanan & preferensi**
 
-- Kunci aplikasi (PIN) opsional, dengan kunci otomatis setelah sekian menit tanpa aktivitas (bisa dimatikan).
+- **Log Login SSH server** — lihat riwayat login sungguhan yang dicatat sshd (`journalctl`/`auth.log`), mencakup semua klien (bukan cuma dari ASProOps). Mode live atau lihat tanggal lain (hari ini/kemarin/7 hari/tanggal manual), dengan eskalasi akses otomatis (langsung → `sudo -n` → prompt password sudo kalau perlu).
+- Kunci aplikasi (PIN) opsional, dengan kunci otomatis setelah sekian menit tanpa aktivitas (bisa dimatikan), plus tombol kunci manual di header.
 - Session persistence dan kredensial terenkripsi menggunakan Electron `safeStorage`.
 - Preferensi SSH (timeout, keepalive, auto-reconnect), Terminal (font, scrollback, cursor), dan SFTP (folder unduhan, kebijakan konflik) bisa diatur di Settings.
 - Sidebar kiri bisa disembunyikan/ditampilkan untuk memperluas area kerja.
@@ -374,6 +375,21 @@ Monitoring menggunakan informasi dari `/proc`, sehingga tidak tersedia untuk rem
 
 ---
 
+## Log Login SSH Server
+
+Tab **Log Login** (ikon ⚿) menampilkan log otentikasi sshd milik server itu sendiri — beda dari riwayat koneksi ASProOps, ini catatan login dari **klien mana pun** (PuTTY, WinSCP, ASProOps di PC lain, dst), sumbernya `journalctl -u ssh -u sshd` (distro systemd) atau `/var/log/auth.log` / `/var/log/secure` sebagai fallback.
+
+Akses dicoba berurutan: langsung, lalu `sudo -n` (kalau NOPASSWD sudah dikonfigurasi), baru minta password sudo lewat form kalau memang perlu — password itu hanya mengalir lewat stdin channel SSH terenkripsi, tidak pernah lewat argumen command maupun disimpan ke disk, cuma dicache di memori selama koneksi SSH itu hidup.
+
+Dua tampilan:
+
+- **Ringkas** — kartu per event, login berhasil digabung dari beberapa baris raw (dikorelasikan lewat PID), percobaan gagal dikelompokkan per IP sumber (supaya scan bot tidak membanjiri daftar).
+- **Mentah** — log viewer biasa (search/filter/copy) untuk lihat baris asli.
+
+Bisa juga lihat histori tanggal lain (Hari ini/Kemarin/7 hari/pilih tanggal), lewat query sekali-jalan yang terpisah dari stream live.
+
+---
+
 ## DevOps: Project, Log Viewer, Service Manager, Git, dan Deploy
 
 Kelima panel ini dibangun berurutan sebagai satu alur kerja DevOps di dalam aplikasi:
@@ -411,7 +427,9 @@ Menjalankan deploy (chip "Deploy" di panel Projects, perlu konfirmasi) mengeksek
 
 Fitur opsional di **Settings → Kunci Aplikasi**. Setelah diaktifkan, aplikasi meminta PIN setiap kali dibuka sebelum daftar server dan kredensial tersimpan bisa diakses.
 
-**Kunci otomatis**: aplikasi juga bisa dikonfigurasi untuk meminta PIN lagi setelah sekian menit tanpa aktivitas mouse/keyboard (default 10 menit, bisa diubah atau dimatikan dengan mengisi 0).
+**Kunci otomatis**: aplikasi juga bisa dikonfigurasi untuk meminta PIN lagi setelah sekian menit tanpa aktivitas mouse/keyboard (default 10 menit, bisa diubah atau dimatikan dengan mengisi 0). Ada juga tombol kunci manual (🔒) di header, untuk mengunci langsung tanpa menunggu idle timeout.
+
+Mengunci aplikasi (otomatis maupun manual) **tidak menutup sesi yang sedang berjalan** — semua terminal SSH, terminal lokal, dan koneksi tetap hidup di belakang layar kunci; hanya interaksinya yang diblokir sampai PIN dimasukkan lagi.
 
 PIN di-hash dengan `scrypt` dan disimpan lokal — ini bukan pengganti enkripsi `safeStorage` yang melindungi isi berkas session di disk, melainkan penghalang tambahan di lapisan UI.
 
