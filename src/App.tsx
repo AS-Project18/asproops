@@ -99,6 +99,13 @@ export default function App() {
   const [mountedSessions, setMountedSessions] = useState<string[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [quickConnectOpen, setQuickConnectOpen] = useState(false);
+  /** Cuma dipakai buat tahu apakah tombol "Kunci sekarang" di header perlu ditampilkan. */
+  const [appLockEnabled, setAppLockEnabled] = useState(false);
+
+  useEffect(() => {
+    void window.ssh.appLock.status().then((status) => setAppLockEnabled(status.enabled));
+    return window.ssh.appLock.onChanged((status) => setAppLockEnabled(status.enabled));
+  }, []);
 
   useEffect(() => {
     setMountedSessions((prev) => {
@@ -494,6 +501,15 @@ export default function App() {
             <div className="text-[12px] uppercase tracking-[0.18em] text-faint">{t('app.activeServers')}</div>
             <div className="text-xs text-dim">{connectedCount} {t('app.of')} {sessions.length}</div>
           </div>
+          {appLockEnabled && (
+            <button
+              onClick={() => void window.ssh.appLock.relock()}
+              className="aspro-icon-btn"
+              title={t('app.lockNow')}
+            >
+              🔒
+            </button>
+          )}
           <button
             onClick={() => setImporting(true)}
             className="aspro-button aspro-button-secondary"

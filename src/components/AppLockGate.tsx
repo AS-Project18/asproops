@@ -56,9 +56,22 @@ export function AppLockGate({ children }: { children: ReactNode }) {
     };
   }, [status?.enabled, status?.locked, status?.idleMinutes]);
 
+  const locked = Boolean(status?.enabled && status.locked);
+
+  // AppLockGate ini sendiri TIDAK PERNAH unmount (dia gerbang tetap di akar
+  // App, cuma tampilan overlay-nya yang berubah) — jadi state `pin` tidak
+  // pernah "reset gratis" lewat siklus mount/unmount seperti komponen form
+  // pada umumnya. Tanpa effect ini, PIN yang barusan berhasil dipakai tetap
+  // nyangkut di input begitu layar kunci muncul lagi berikutnya.
+  useEffect(() => {
+    if (locked) {
+      setPin('');
+      setError(null);
+    }
+  }, [locked]);
+
   // Belum tahu status → jangan kedipkan konten sebelum keputusan final ada.
   if (!status) return null;
-  if (!status.enabled || !status.locked) return <>{children}</>;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -69,6 +82,7 @@ export function AppLockGate({ children }: { children: ReactNode }) {
     setBusy(false);
 
     if (result.ok) {
+      setPin('');
       setStatus((prev) => (prev ? { ...prev, enabled: true, locked: false } : prev));
       return;
     }
@@ -82,41 +96,58 @@ export function AppLockGate({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-abyss p-6">
-      <form
-        onSubmit={(e) => void submit(e)}
-        className="w-full max-w-xs rounded-lg border border-line bg-raised p-6"
-      >
-        <div className="mb-1 text-[10px] uppercase tracking-[0.2em] text-orange">ASProOps</div>
-        <h2 className="text-sm font-semibold text-fg">{t('applock.lockTitle')}</h2>
-        <p className="mt-2 text-xs text-muted">{t('applock.lockSubtitle')}</p>
+    <>
+      {/*
+        `children` (App, dan semua terminal/koneksi SSH di dalamnya) TETAP
+        di-render terus-menerus, terlepas dari status lock. Sebelumnya versi
+        ini cuma me-render layar PIN saat locked dan MELEPAS children dari
+        tree — itu memicu efek cleanup unmount di setiap TerminalView/
+        LocalTerminalView, yang menutup channel shell/PTY-nya. Efeknya:
+        lock otomatis karena idle timeout diam-diam menutup SEMUA sesi yang
+        sedang berjalan (terminal lokal termasuk), bukan cuma mengunci
+        layarnya. Overlay PIN di bawah ini cukup buat menyembunyikan &
+        memblokir interaksi (opaque, menutupi seluruh viewport) tanpa perlu
+        melepas apa pun dari tree.
+      */}
+      {children}
+      {locked && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-abyss p-6">
+          <form
+            onSubmit={(e) => void submit(e)}
+            className="w-full max-w-xs rounded-lg border border-line bg-raised p-6"
+          >
+            <div className="mb-1 text-[10px] uppercase tracking-[0.2em] text-orange">ASProOps</div>
+            <h2 className="text-sm font-semibold text-fg">{t('applock.lockTitle')}</h2>
+            <p className="mt-2 text-xs text-muted">{t('applock.lockSubtitle')}</p>
 
-        <input
-          type="password"
-          autoFocus
-          value={pin}
-          onChange={(e) => setPin(e.target.value)}
-          disabled={busy || retrySeconds > 0}
-          placeholder={t('applock.placeholder')}
-          className="aspro-input mt-4 w-full px-3 py-2 text-sm text-fg focus:border-azure focus:outline-none"
-        />
+            <input
+              type="password"
+              autoFocus
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              disabled={busy || retrySeconds > 0}
+              placeholder={t('applock.placeholder')}
+              className="aspro-input mt-4 w-full px-3 py-2 text-sm text-fg focus:border-azure focus:outline-none"
+            />
 
-        {(error || retrySeconds > 0) && (
-          <p className="mt-2 text-xs text-coral">
-            {retrySeconds > 0
-              ? t('applock.tooManyAttempts', { seconds: retrySeconds })
-              : error}
-          </p>
-        )}
+            {(error || retrySeconds > 0) && (
+              <p className="mt-2 text-xs text-coral">
+                {retrySeconds > 0
+                  ? t('applock.tooManyAttempts', { seconds: retrySeconds })
+                  : error}
+              </p>
+            )}
 
-        <button
-          type="submit"
-          disabled={busy || retrySeconds > 0 || !pin}
-          className="aspro-button aspro-button-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {t('applock.unlock')}
-        </button>
-      </form>
-    </div>
+            <button
+              type="submit"
+              disabled={busy || retrySeconds > 0 || !pin}
+              className="aspro-button aspro-button-primary mt-4 w-full disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {t('applock.unlock')}
+            </button>
+          </form>
+        </div>
+      )}
+    </>
   );
 }
