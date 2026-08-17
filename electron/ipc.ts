@@ -7,6 +7,13 @@ import type { ClientChannel } from 'ssh2';
 import { ConnectionManager, type SshConnection } from './ssh/connection-manager';
 import { RemoteMonitor } from './ssh/monitor';
 import { listServices, runServiceAction } from './ssh/services';
+import {
+  resolveAuthLog,
+  resolveAuthLogRange,
+  verifySudoPassword,
+  openAuthLogStream,
+  runAuthLogRangeQuery,
+} from './ssh/auth-log';
 import { getGitStatus, runGitAction } from './ssh/git';
 import { runDeploy, type DeployRunHandle } from './ssh/deploy';
 import { trustHostKey } from './ssh/known-hosts';
@@ -58,6 +65,18 @@ const logTails = new Map<string, ClientChannel>();
 const deployRuns = new Map<string, DeployRunHandle>();
 /** Callback host key yang sedang menunggu jawaban pengguna. */
 const pendingHostKeys = new Map<string, (trust: boolean) => void>();
+/**
+ * sessionId -> perintah log auth yang terdeteksi butuh sudo, menunggu
+ * password dari renderer lewat authlog:openWithPassword.
+ */
+const pendingAuthLog = new Map<string, { command: string; label: string }>();
+/**
+ * Password sudo yang sudah terverifikasi, disimpan di memori SAJA (tidak
+ * pernah ditulis ke disk) supaya membuka ulang tab Log Login tidak minta
+ * password berkali-kali selama koneksi SSH-nya masih hidup. Dibuang saat
+ * session disconnect.
+ */
+const authLogPasswords = new Map<string, string>();
 
 /** Bungkus path dengan tanda kutip tunggal supaya aman dipakai di shell remote. */
 function shellQuote(value: string): string {
@@ -211,6 +230,8 @@ export function registerIpc(window: BrowserWindow): void {
     monitor.stop(sessionId);
     await edits.closeSession(sessionId);
     connections.close(sessionId);
+    pendingAuthLog.delete(sessionId);
+    authLogPasswords.delete(sessionId);
   });
 
   /**
@@ -290,6 +311,121 @@ export function registerIpc(window: BrowserWindow): void {
     logTails.get(tailId)?.close();
     logTails.delete(tailId);
   });
+
+  // --- Log login SSH server (journalctl/auth.log — bukan log koneksi ASProOps) --
+  const attachAuthLogTail = (stream: ClientChannel): string => {
+    const tailId = randomUUID();
+    logTails.set(tailId, stream);
+    stream.on('data', (chunk: Buffer) => send('log:data', { tailId, data: chunk.toString('utf8') }));
+    stream.stderr.on('data', (chunk: Buffer) =>
+      send('log:data', { tailId, data: chunk.toString('utf8') }),
+    );
+    stream.on('close', () => {
+      logTails.delete(tailId);
+      send('log:close', { tailId });
+    });
+    return tailId;
+  };
+
+  ipcMain.handle('authlog:open', async (_e, sessionId: string) => {
+    try {
+      const connection = connections.require(sessionId);
+      const result = await resolveAuthLog(connection);
+      if (!result.ok) {
+        if (!result.needsPassword) return { ok: false, needsPassword: false, message: result.message };
+
+        // Password sudah pernah diverifikasi sebelumnya di session ini —
+        // pakai lagi tanpa minta ulang.
+        const cached = authLogPasswords.get(sessionId);
+        if (cached) {
+          const stream = await openAuthLogStream(connection, result.command, cached);
+          return { ok: true, tailId: attachAuthLogTail(stream), label: result.label };
+        }
+
+        pendingAuthLog.set(sessionId, { command: result.command, label: result.label });
+        return { ok: false, needsPassword: true, label: result.label };
+      }
+
+      const stream = await openAuthLogStream(connection, result.command);
+      return { ok: true, tailId: attachAuthLogTail(stream), label: result.label };
+    } catch (err) {
+      return { ok: false, needsPassword: false, message: (err as Error).message };
+    }
+  });
+
+  ipcMain.handle('authlog:openWithPassword', async (_e, sessionId: string, password: string) => {
+    try {
+      const connection = connections.require(sessionId);
+      const pending = pendingAuthLog.get(sessionId);
+      if (!pending) {
+        return {
+          ok: false,
+          needsPassword: false,
+          message: 'Tidak ada permintaan sudo yang menunggu untuk session ini.',
+        };
+      }
+
+      const verified = await verifySudoPassword(connection, password);
+      if (!verified.ok) return { ok: false, needsPassword: false, message: verified.message };
+
+      authLogPasswords.set(sessionId, password);
+      pendingAuthLog.delete(sessionId);
+      const stream = await openAuthLogStream(connection, pending.command, password);
+      return { ok: true, tailId: attachAuthLogTail(stream), label: pending.label };
+    } catch (err) {
+      return { ok: false, needsPassword: false, message: (err as Error).message };
+    }
+  });
+
+  /**
+   * Query histori sekali-jalan untuk rentang tanggal tertentu — beda dari
+   * authlog:open yang membuka stream live. Butuh akses privilese yang sama
+   * dengan mode Live; kalau perlu sudo, pakai password yang sudah
+   * terverifikasi & dicache dari sana. Kalau belum pernah membuka mode Live
+   * sama sekali (belum ada password tercache) dan ternyata butuh password,
+   * pengguna diminta buka mode Live dulu — form password sengaja tidak
+   * diduplikasi di sini.
+   */
+  ipcMain.handle(
+    'authlog:query',
+    async (_e, sessionId: string, sinceMs: number, untilMs: number) => {
+      try {
+        const connection = connections.require(sessionId);
+        const result = await resolveAuthLogRange(connection, sinceMs, untilMs);
+
+        if (!result.ok) {
+          if (!result.needsPassword) return { ok: false, message: result.message };
+          const cached = authLogPasswords.get(sessionId);
+          if (!cached) {
+            return {
+              ok: false,
+              message:
+                'Perlu password sudo untuk membaca log ini — buka dulu tab Log Login mode Live ' +
+                'dan masukkan password sudo di sana, baru coba lagi.',
+            };
+          }
+          const query = await runAuthLogRangeQuery(connection, result.command, cached);
+          // Exit code 1 sengaja TIDAK dianggap error — itu kode normal grep
+          // (dipakai fallback berkas non-systemd) kalau tidak ada baris yang
+          // cocok, mis. tanggal itu memang tidak ada aktivitas login sama
+          // sekali. Cuma code lain (>=2, atau proses gagal total) yang berarti
+          // sungguhan gagal.
+          if (query.code !== 0 && query.code !== 1) {
+            return { ok: false, message: query.stderr.trim() || 'Gagal mengambil log untuk rentang tanggal ini.' };
+          }
+          return { ok: true, text: query.stdout };
+        }
+
+        const query = await runAuthLogRangeQuery(connection, result.command);
+        if (query.code !== 0 && query.code !== 1) {
+          return { ok: false, message: query.stderr.trim() || 'Gagal mengambil log untuk rentang tanggal ini.' };
+        }
+        return { ok: true, text: query.stdout };
+      } catch (err) {
+        return { ok: false, message: (err as Error).message };
+      }
+    },
+  );
 
   // --- Terminal lokal Windows / WSL --------------------------------------
   ipcMain.handle('local:list', () => localTerminals.listProfiles());
@@ -579,6 +715,8 @@ export function shutdown(): void {
   shells.clear();
   for (const handle of deployRuns.values()) handle.cancel();
   deployRuns.clear();
+  pendingAuthLog.clear();
+  authLogPasswords.clear();
   connections.closeAll();
   store.close();
 }

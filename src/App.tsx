@@ -15,6 +15,7 @@ import { DeployView } from './components/DeployView';
 import { ProjectsPanel } from './components/ProjectsPanel';
 import { ServicesPanel } from './components/ServicesPanel';
 import { GitPanel } from './components/GitPanel';
+import { AuthLogPanel } from './components/AuthLogPanel';
 import { SettingsDialog } from './components/SettingsDialog';
 import { QuickConnectPalette } from './components/QuickConnectPalette';
 import { Dashboard } from './components/Dashboard';
@@ -36,7 +37,15 @@ function basename(path: string): string {
 }
 
 type FormState = { open: false } | { open: true; editing: SessionConfig | null };
-type LeftMode = 'servers' | 'local' | 'files' | 'monitor' | 'projects' | 'services' | 'git';
+type LeftMode =
+  | 'servers'
+  | 'local'
+  | 'files'
+  | 'monitor'
+  | 'projects'
+  | 'services'
+  | 'git'
+  | 'authlog';
 
 export default function App() {
   const { t } = useI18n();
@@ -551,6 +560,12 @@ export default function App() {
             label={t('nav.services')}
             onClick={() => selectLeftMode('services')}
           />
+          <RailButton
+            active={leftMode === 'authlog'}
+            icon="⚿"
+            label={t('nav.authlog')}
+            onClick={() => selectLeftMode('authlog')}
+          />
           <div className="flex-1" />
           <RailButton
             icon={leftCollapsed ? '⇥' : '⇤'}
@@ -658,13 +673,24 @@ export default function App() {
                 >
                   <GitPanel sessionId={activeSession.id} focusProjectId={gitFocusProjectId} />
                 </div>
+
+                <div
+                  className={
+                    leftMode === 'authlog'
+                      ? 'absolute inset-0'
+                      : 'pointer-events-none invisible absolute inset-0'
+                  }
+                >
+                  <AuthLogPanel sessionId={activeSession.id} active={leftMode === 'authlog'} />
+                </div>
               </>
             ) : (
               (leftMode === 'files' ||
                 leftMode === 'monitor' ||
                 leftMode === 'projects' ||
                 leftMode === 'services' ||
-                leftMode === 'git') && (
+                leftMode === 'git' ||
+                leftMode === 'authlog') && (
                 <div className="aspro-side-placeholder absolute inset-0">
                   <div className="aspro-side-placeholder-icon">
                     {leftMode === 'files'
@@ -675,7 +701,9 @@ export default function App() {
                           ? '⏻'
                           : leftMode === 'git'
                             ? '⎇'
-                            : '▣'}
+                            : leftMode === 'authlog'
+                              ? '⚿'
+                              : '▣'}
                   </div>
                   <strong>
                     {leftMode === 'files'
@@ -686,7 +714,9 @@ export default function App() {
                           ? t('placeholder.services')
                           : leftMode === 'git'
                             ? t('placeholder.git')
-                            : t('placeholder.projects')}
+                            : leftMode === 'authlog'
+                              ? t('placeholder.authlog')
+                              : t('placeholder.projects')}
                   </strong>
                   <span>{t('placeholder.connectRequired')}</span>
                 </div>

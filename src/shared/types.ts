@@ -46,6 +46,19 @@ export interface HostKeyPrompt {
   changed: boolean;
 }
 
+/**
+ * Hasil membuka log login SSH server (journalctl/auth.log) — beda dari log
+ * koneksi ASProOps sendiri, ini catatan otentikasi sshd yang mencakup SEMUA
+ * klien yang pernah login, bukan cuma dari app ini.
+ */
+export type AuthLogOpenResult =
+  | { ok: true; tailId: string; label: string }
+  | { ok: false; needsPassword: true; label: string }
+  | { ok: false; needsPassword: false; message: string };
+
+/** Query sekali-jalan (bukan stream) untuk rentang tanggal tertentu di log login server. */
+export type AuthLogQueryResult = { ok: true; text: string } | { ok: false; message: string };
+
 export interface CpuSample {
   usagePercent: number;
   cores: number;

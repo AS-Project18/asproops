@@ -36,6 +36,34 @@ export function formatDate(timestamp: number, locale = 'id-ID'): string {
   });
 }
 
+/**
+ * Tanggal+jam ringkas TANPA tahun, mis. "17 Agu, 23:54" — dipakai di daftar
+ * yang sempit (sidebar) dan butuh tanggal (bukan cuma jam) supaya entri
+ * lintas hari tidak ambigu, tapi tidak ada ruang untuk format selengkap
+ * formatDate().
+ */
+export function formatLogTimestamp(timestamp: number, locale = 'id-ID'): string {
+  return new Date(timestamp).toLocaleString(locale, {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/** Durasi ringkas "1h 20m" / "11m" / "45s" — dipakai untuk lama sesi login di Log Login. */
+export function formatDurationShort(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m`;
+  return `${seconds}s`;
+}
+
 /** Warna ambang: hijau di bawah 70%, kuning 70–89%, merah 90% ke atas. */
 export function thresholdColor(percent: number): string {
   if (percent >= 90) return '#f07178';

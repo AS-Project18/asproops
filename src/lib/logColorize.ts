@@ -13,6 +13,9 @@ const STYLE = {
   levelDebug: '\x1b[2;90m',
   timestamp: '\x1b[2m',
   ipv4: '\x1b[35m',
+  authOk: '\x1b[1;32m',
+  authFail: '\x1b[1;91m',
+  authClosed: '\x1b[2;90m',
 };
 
 const TOKEN_RE = new RegExp(
@@ -21,6 +24,11 @@ const TOKEN_RE = new RegExp(
     String.raw`(?<levelWarn>\b(?:WARN|WARNING)\b)`,
     String.raw`(?<levelInfo>\b(?:INFO|NOTICE)\b)`,
     String.raw`(?<levelDebug>\b(?:DEBUG|TRACE)\b)`,
+    // Baris sshd: login berhasil/gagal/ditutup — dicek sebelum level umum di
+    // atas supaya "Accepted"/"Failed" tidak ikut ketiban warna INFO/ERROR.
+    String.raw`(?<authOk>\bAccepted\b)`,
+    String.raw`(?<authFail>\b(?:Failed|Invalid|invalid user)\b)`,
+    String.raw`(?<authClosed>\b(?:Disconnected|Connection closed|session closed)\b)`,
     // ISO 8601, mis. "2026-08-15T17:26:56.123Z" atau "2026-08-15 17:26:56".
     String.raw`(?<timestampIso>\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?\b)`,
     // Gaya syslog, mis. "Aug 15 17:26:56".
@@ -38,6 +46,9 @@ export function colorizeLine(line: string): string {
       (groups.levelWarn && STYLE.levelWarn) ||
       (groups.levelInfo && STYLE.levelInfo) ||
       (groups.levelDebug && STYLE.levelDebug) ||
+      (groups.authOk && STYLE.authOk) ||
+      (groups.authFail && STYLE.authFail) ||
+      (groups.authClosed && STYLE.authClosed) ||
       (groups.timestampIso && STYLE.timestamp) ||
       (groups.timestampSyslog && STYLE.timestamp) ||
       (groups.ipv4 && STYLE.ipv4);

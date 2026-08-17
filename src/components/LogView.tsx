@@ -63,21 +63,25 @@ const THEME = {
   brightWhite: '#ffffff',
 };
 
-interface LogViewProps {
-  sessionId: string;
-  path: string;
+interface LogStreamViewProps {
+  /** Stream sudah terbuka di main process — komponen ini murni menampilkannya. */
+  tailId: string;
   active: boolean;
   onExit?: () => void;
 }
 
-export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
+/**
+ * Bagian tampilan (xterm + search/filter/colorize/copy) yang dipakai bersama
+ * oleh LogView (tail berkas project) dan AuthLogPanel (log login server) —
+ * keduanya cuma beda cara MEMBUKA tail-nya, tapi sama-sama berujung ke satu
+ * tailId yang mengalir lewat event log:data/log:close yang sama.
+ */
+export function LogStreamView({ tailId, active, onExit }: LogStreamViewProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
-  const tailIdRef = useRef<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   // Baris lengkap (sudah diakhiri \n) yang sudah diterima, dipakai untuk
   // menyusun ulang tampilan saat filter berubah. `partial` menyimpan sisa
@@ -212,30 +216,17 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
         }
       });
 
-      void (async () => {
-        try {
-          const tailId = await window.ssh.log.open(sessionId, path);
-          if (disposed) {
-            window.ssh.log.close(tailId);
-            return;
-          }
-          tailIdRef.current = tailId;
-
-          unsubscribers.push(
-            window.ssh.log.onData(({ tailId: source, data }) => {
-              if (source !== tailId) return;
-              ingest(data);
-            }),
-            window.ssh.log.onClose(({ tailId: source }) => {
-              if (source !== tailId) return;
-              term.write('\r\n\x1b[33mLog stream ditutup.\x1b[0m\r\n');
-              exitRef.current?.();
-            }),
-          );
-        } catch (err) {
-          setError((err as Error).message);
-        }
-      })();
+      unsubscribers.push(
+        window.ssh.log.onData(({ tailId: source, data }) => {
+          if (source !== tailId) return;
+          ingest(data);
+        }),
+        window.ssh.log.onClose(({ tailId: source }) => {
+          if (source !== tailId) return;
+          term.write('\r\n\x1b[33mLog stream ditutup.\x1b[0m\r\n');
+          exitRef.current?.();
+        }),
+      );
 
       observer = new ResizeObserver(() => {
         if (container.clientWidth === 0) return;
@@ -252,19 +243,30 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
       observer?.disconnect();
       searchResultsListener.dispose();
       for (const unsubscribe of unsubscribers) unsubscribe();
-      if (tailIdRef.current) window.ssh.log.close(tailIdRef.current);
       if (opened) term.dispose();
       termRef.current = null;
       fitRef.current = null;
       searchAddonRef.current = null;
-      tailIdRef.current = null;
       linesRef.current = [];
       partialRef.current = '';
       blockLevelRef.current = null;
     };
-  // sessionId+path saja sebagai dependency: buka tutup stream ulang cuma
-  // kalau target log-nya sungguh berganti, bukan tiap render ulang parent.
-  }, [sessionId, path]);
+  // tailId saja sebagai dependency: buka tutup viewer ulang cuma kalau
+  // stream-nya sungguh berganti, bukan tiap render ulang parent.
+  //
+  // SENGAJA tidak memanggil window.ssh.log.close(tailId) di sini. Komponen
+  // ini cuma MENAMPILKAN tailId yang sudah dibuka orang lain (LogView atau
+  // AuthLogPanel) — tailId itu prop, bukan sesuatu yang dibuka di efek ini,
+  // jadi menutupnya di cleanup efek ini melanggar simetri buka/tutup. Di
+  // React StrictMode (dev), tiap mount disimulasikan mount->cleanup->mount
+  // lagi untuk komponen yang SAMA — kalau cleanup ini menutup stream
+  // sungguhan, simulasi itu benar-benar mematikan `journalctl -f`/`tail -F`
+  // yang masih dipakai, lalu listener yang baru dipasang ulang menangkap
+  // event close itu dan memicu reprobe — meletup-letup tanpa henti setiap
+  // panel ini pertama kali muncul. Yang membuka tailId (lewat sessionId+path
+  // di LogView, atau lewat authLog.open di AuthLogPanel) itu juga yang
+  // wajib menutupnya, simetris di efek yang sama.
+  }, [tailId]);
 
   useEffect(() => {
     const term = termRef.current;
@@ -375,17 +377,6 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
     setContextMenu({ x: event.clientX, y: event.clientY });
   };
 
-  if (error) {
-    return (
-      <div className="flex h-full items-center justify-center bg-abyss p-8 text-center">
-        <div>
-          <p className="text-sm text-coral">Log tidak bisa dibuka.</p>
-          <p className="mt-2 text-xs text-muted">{error}</p>
-        </div>
-      </div>
-    );
-  }
-
   const matchLabel = matchInfo ? (matchInfo.count > 0 ? `${matchInfo.index + 1}/${matchInfo.count}` : '0/0') : '';
 
   return (
@@ -466,4 +457,62 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
       )}
     </div>
   );
+}
+
+interface LogViewProps {
+  sessionId: string;
+  path: string;
+  active: boolean;
+  onExit?: () => void;
+}
+
+/** Tail berkas log project — thin wrapper: buka tail lewat log:open, lalu serahkan tampilannya ke LogStreamView. */
+export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
+  const [tailId, setTailId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const exitRef = useRef(onExit);
+  exitRef.current = onExit;
+
+  useEffect(() => {
+    let disposed = false;
+    let openedTailId: string | null = null;
+
+    void (async () => {
+      try {
+        const id = await window.ssh.log.open(sessionId, path);
+        if (disposed) {
+          window.ssh.log.close(id);
+          return;
+        }
+        openedTailId = id;
+        setTailId(id);
+      } catch (err) {
+        if (!disposed) setError((err as Error).message);
+      }
+    })();
+
+    return () => {
+      disposed = true;
+      setTailId(null);
+      // LogStreamView TIDAK menutup tailId-nya sendiri (lihat catatan di
+      // sana) — komponen inilah yang membuka lewat log:open, jadi komponen
+      // ini juga yang wajib menutupnya, simetris di efek yang sama.
+      if (openedTailId) window.ssh.log.close(openedTailId);
+    };
+  }, [sessionId, path]);
+
+  if (error) {
+    return (
+      <div className="flex h-full items-center justify-center bg-abyss p-8 text-center">
+        <div>
+          <p className="text-sm text-coral">Log tidak bisa dibuka.</p>
+          <p className="mt-2 text-xs text-muted">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!tailId) return null;
+
+  return <LogStreamView tailId={tailId} active={active} onExit={onExit} />;
 }

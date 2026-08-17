@@ -3,6 +3,8 @@ import type { EditStatus } from './ssh/remote-edit';
 import type { LockStatus, VerifyResult } from './app-lock';
 import type { SshPreferences, SftpPreferences } from './store/preferences';
 import type {
+  AuthLogOpenResult,
+  AuthLogQueryResult,
   ConnectionStatus,
   DeployRunEvent,
   DeployTemplate,
@@ -135,6 +137,22 @@ const api = {
     onData: (handler: (p: { tailId: string; data: string }) => void) =>
       subscribe('log:data', handler),
     onClose: (handler: (p: { tailId: string }) => void) => subscribe('log:close', handler),
+  },
+
+  /**
+   * Log login SSH milik server (journalctl/auth.log) — beda dari `log.*` di
+   * atas yang untuk tail berkas log project. Stream yang berhasil dibuka
+   * tetap lewat event log:data/log:close/log.close yang sama, jadi
+   * penampilnya bisa dipakai ulang.
+   */
+  authLog: {
+    open: (sessionId: string): Promise<AuthLogOpenResult> =>
+      ipcRenderer.invoke('authlog:open', sessionId),
+    openWithPassword: (sessionId: string, password: string): Promise<AuthLogOpenResult> =>
+      ipcRenderer.invoke('authlog:openWithPassword', sessionId, password),
+    /** Query histori sekali-jalan (bukan stream) untuk rentang tanggal [sinceMs, untilMs]. */
+    query: (sessionId: string, sinceMs: number, untilMs: number): Promise<AuthLogQueryResult> =>
+      ipcRenderer.invoke('authlog:query', sessionId, sinceMs, untilMs),
   },
 
   local: {
