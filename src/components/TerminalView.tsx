@@ -409,7 +409,15 @@ export function TerminalView({
 
   return (
     <>
-      <div ref={containerRef} className="aspro-xterm h-full w-full bg-abyss p-2" />
+      {/* Padding hidup di div LUAR ini, bukan di div yang di-term.open()-kan —
+          FitAddon xterm.js membaca padding dari elemen .xterm internalnya
+          sendiri (yang selalu 0), bukan dari container yang diukurnya. Kalau
+          padding ditaruh langsung di situ, FitAddon overestimate jumlah
+          baris yang muat (tidak ikut mengurangi padding tsb), dan baris
+          terakhir kepotong permanen di viewport. */}
+      <div className="aspro-xterm h-full w-full bg-abyss p-2">
+        <div ref={containerRef} className="h-full w-full" />
+      </div>
       {contextMenu && (
         <ContextMenu position={contextMenu} onClose={closeContextMenu}>
           <ContextMenuItem onClick={copySelection} disabled={!termRef.current?.hasSelection()}>

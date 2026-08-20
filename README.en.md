@@ -12,7 +12,7 @@
 
 ASProOps is an Electron-based desktop application designed as a single workspace for server administration and developer operations. One app handles SSH sessions, local Windows terminals, WSL distros, an SFTP file browser, remote editing, server resource monitoring, and a full DevOps flow — project profiles, a live log viewer, service manager, Git status, and deploy template execution — without switching between tools.
 
-> **Project status:** actively developed. Current source version `1.1.1`. A Windows installer (`.exe`) can already be built via `npm run dist:win`, but it isn't code-signed yet and has no auto-update — see [Installer / Release Binary](#installer--release-binary).
+> **Project status:** actively developed. Current source version `1.1.2`. A Windows installer (`.exe`) can already be built via `npm run dist:win`, but it isn't code-signed yet and has no auto-update — see [Installer / Release Binary](#installer--release-binary).
 
 ---
 
@@ -55,11 +55,11 @@ ASProOps is an Electron-based desktop application designed as a single workspace
 - The left sidebar can be collapsed/shown to reclaim workspace width.
 - Indonesian and English (default: English).
 
----
+<!-- ---
 
 ## Screenshots
 
-The UI is still evolving. Latest screenshots should live under `docs/screenshots/` once the project reaches release-candidate stage.
+The UI is still evolving. Latest screenshots should live under `docs/screenshots/` once the project reaches release-candidate stage. -->
 
 ---
 

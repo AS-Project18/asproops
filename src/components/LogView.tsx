@@ -442,11 +442,13 @@ export function LogStreamView({ tailId, active, onExit }: LogStreamViewProps) {
         </button>
       </div>
 
-      <div
-        ref={containerRef}
-        className="aspro-xterm min-h-0 w-full flex-1 bg-abyss p-2"
-        onContextMenu={handleContextMenu}
-      />
+      {/* Padding hidup di div LUAR ini, bukan di div yang di-term.open()-kan —
+          FitAddon xterm.js membaca padding dari elemen .xterm internalnya
+          sendiri (selalu 0), bukan dari container yang diukurnya, sehingga
+          overestimate jumlah baris yang muat kalau padding ditaruh di situ. */}
+      <div className="aspro-xterm min-h-0 w-full flex-1 bg-abyss p-2">
+        <div ref={containerRef} className="h-full w-full" onContextMenu={handleContextMenu} />
+      </div>
 
       {contextMenu && (
         <ContextMenu position={contextMenu} onClose={() => setContextMenu(null)}>

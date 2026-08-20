@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type DragEvent as ReactDragEvent } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -362,9 +362,47 @@ export function LocalTerminalView({
     termRef.current?.focus();
   };
 
+  // Drag file (mis. gambar) dari Explorer ke terminal menempelkan PATH-nya
+  // sebagai teks — sama seperti perilaku Windows Terminal/PuTTY. Bukan
+  // upload isi filenya; CLI di dalam (mis. Claude Code) yang lalu membaca
+  // path itu sendiri. File.path sudah dihapus Electron sejak v32, jadi path
+  // asli diambil lewat window.ssh.file.getPathForFile (webUtils di preload).
+  const handleDragOver = (event: ReactDragEvent) => {
+    if (event.dataTransfer.types.includes('Files')) event.preventDefault();
+  };
+
+  const handleDrop = (event: ReactDragEvent) => {
+    if (!event.dataTransfer.types.includes('Files')) return;
+    event.preventDefault();
+    const term = termRef.current;
+    if (!term || !terminalIdRef.current) return;
+
+    const paths = Array.from(event.dataTransfer.files)
+      .map((file) => window.ssh.file.getPathForFile(file))
+      .filter(Boolean)
+      .map((path) => (path.includes(' ') ? `"${path}"` : path));
+    if (paths.length === 0) return;
+
+    term.paste(paths.join(' ') + ' ');
+    term.focus();
+  };
+
   return (
     <>
-      <div ref={containerRef} className="aspro-xterm h-full w-full bg-abyss p-2" />
+      {/* Padding hidup di div LUAR ini, bukan di div yang di-term.open()-kan —
+          FitAddon xterm.js membaca padding dari elemen .xterm internalnya
+          sendiri (yang selalu 0), bukan dari container yang diukurnya. Kalau
+          padding ditaruh langsung di situ, FitAddon overestimate jumlah
+          baris yang muat (tidak ikut mengurangi padding tsb), dan baris
+          terakhir kepotong permanen di viewport. */}
+      <div className="aspro-xterm h-full w-full bg-abyss p-2">
+        <div
+          ref={containerRef}
+          className="h-full w-full"
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        />
+      </div>
       {contextMenu && (
         <ContextMenu position={contextMenu} onClose={closeContextMenu}>
           <ContextMenuItem onClick={copySelection} disabled={!termRef.current?.hasSelection()}>

@@ -12,7 +12,7 @@
 
 ASProOps adalah aplikasi desktop berbasis Electron yang dirancang sebagai satu workspace untuk pekerjaan administrasi server dan operasi developer. Satu aplikasi menangani sesi SSH, terminal lokal Windows, distro WSL, browser file SFTP, remote editing, monitoring resource server, sampai alur DevOps — project profile, live log viewer, service manager, status Git, dan eksekusi deploy template — tanpa harus berpindah-pindah tool.
 
-> **Status project:** aktif dikembangkan. Versi source saat ini `1.1.1`. Installer Windows (`.exe`) sudah bisa dibuat lewat `npm run dist:win`, tapi belum ditandatangani (code signing) dan belum punya auto-update — lihat [Installer / Release Binary](#installer--release-binary).
+> **Status project:** aktif dikembangkan. Versi source saat ini `1.1.2`. Installer Windows (`.exe`) sudah bisa dibuat lewat `npm run dist:win`, tapi belum ditandatangani (code signing) dan belum punya auto-update — lihat [Installer / Release Binary](#installer--release-binary).
 
 ---
 
@@ -55,11 +55,11 @@ ASProOps adalah aplikasi desktop berbasis Electron yang dirancang sebagai satu w
 - Sidebar kiri bisa disembunyikan/ditampilkan untuk memperluas area kerja.
 - Bahasa Indonesia dan English (default: English).
 
----
+<!-- ---
 
 ## Screenshot
 
-Tampilan aplikasi terus berkembang. Screenshot terbaru sebaiknya ditempatkan di `docs/screenshots/` saat project memasuki tahap release candidate.
+Tampilan aplikasi terus berkembang. Screenshot terbaru sebaiknya ditempatkan di `docs/screenshots/` saat project memasuki tahap release candidate. -->
 
 ---
 

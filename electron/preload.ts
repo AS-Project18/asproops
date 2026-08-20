@@ -1,4 +1,4 @@
-import { clipboard, contextBridge, ipcRenderer } from 'electron';
+import { clipboard, contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { EditStatus } from './ssh/remote-edit';
 import type { LockStatus, VerifyResult } from './app-lock';
 import type { SshPreferences, SftpPreferences } from './store/preferences';
@@ -43,6 +43,13 @@ const api = {
   clipboard: {
     readText: (): string => clipboard.readText(),
     writeText: (text: string): void => clipboard.writeText(text),
+  },
+
+  // File.path dihapus Electron sejak v32 demi keamanan — path asli file yang
+  // di-drag hanya bisa diambil lewat webUtils di sisi preload/main, jadi
+  // renderer perlu jembatan ini untuk drag-and-drop file ke terminal.
+  file: {
+    getPathForFile: (file: File): string => webUtils.getPathForFile(file),
   },
 
   appLock: {
