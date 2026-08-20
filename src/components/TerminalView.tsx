@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -136,6 +136,10 @@ export function TerminalView({
     // dikirim ke shell sebagai karakter kontrol.
     term.attachCustomKeyEventHandler((event) => {
       if (event.type !== 'keydown' || !event.ctrlKey || !event.shiftKey) return true;
+      // event.repeat: browser mengirim keydown berulang selama tombol
+      // ditahan. Tanpa penjagaan ini, menahan Ctrl+Shift+V sedikit lebih
+      // lama menempel isi clipboard berkali-kali ke pty.
+      if (event.repeat) return false;
       const key = event.key.toLowerCase();
       if (key === 't') {
         newTabRef.current?.();
@@ -147,13 +151,23 @@ export function TerminalView({
       }
       // Ctrl+Shift+C (bukan Ctrl+C polos, yang dipakai shell untuk SIGINT).
       if (key === 'c') {
+        event.preventDefault();
         const selection = term.getSelection();
         if (selection) window.ssh.clipboard.writeText(selection);
         return false;
       }
       if (key === 'v') {
+        // Mengembalikan false di sini cuma memberi tahu xterm sendiri untuk
+        // tidak memprosesnya — TIDAK memanggil preventDefault() pada event
+        // native. Tanpa ini, Chromium tetap menjalankan aksi bawaannya
+        // untuk Ctrl+Shift+V ("paste as plain text"), memicu event 'paste'
+        // asli pada textarea xterm yang DITANGKAP LAGI oleh listener paste
+        // internal xterm sendiri — clipboard ter-tempel dua kali: sekali
+        // dari kita, sekali dari xterm merespons paste browser itu. Ini
+        // sudah ada sejak shortcut ini dibuat, bukan regresi baru.
+        event.preventDefault();
         const text = window.ssh.clipboard.readText();
-        if (text && terminalIdRef.current) window.ssh.shell.write(terminalIdRef.current, text);
+        if (text && terminalIdRef.current) term.paste(text);
         return false;
       }
       return true;
@@ -186,56 +200,62 @@ export function TerminalView({
       term.open(container);
 
       // Tunggu satu frame lagi setelah open agar renderer xterm selesai
-      // mengukur font/canvas sebelum FitAddon dipanggil.
+      // mengukur font/canvas sebelum FitAddon dipanggil. Shell baru dibuka
+      // SETELAH fit ini selesai (bukan paralel) — kalau tidak, term.cols/rows
+      // masih nilai default xterm (80x24) saat window.ssh.shell.open()
+      // membacanya, jadi pty-req awal ke server terkirim dengan ukuran
+      // salah dan proses di dalamnya (mis. Claude Code CLI, `ls -la` di
+      // server) merender seolah terminalnya 80x24 sampai ada resize nyata.
       requestAnimationFrame(() => {
-        if (!disposed && container.clientWidth > 0 && container.clientHeight > 0) {
+        if (disposed) return;
+        if (container.clientWidth > 0 && container.clientHeight > 0) {
           try {
             fit.fit();
           } catch {
             // ResizeObserver akan mencoba lagi ketika layout stabil.
           }
         }
-      });
 
-      void (async () => {
-        try {
-          const id = await window.ssh.shell.open(sessionId, term.cols, term.rows);
-          console.debug('[ASProOps] shell opened', { sessionId, terminalId: id });
-          if (disposed) {
-            window.ssh.shell.close(id);
-            return;
+        void (async () => {
+          try {
+            const id = await window.ssh.shell.open(sessionId, term.cols, term.rows);
+            console.debug('[ASProOps] shell opened', { sessionId, terminalId: id });
+            if (disposed) {
+              window.ssh.shell.close(id);
+              return;
+            }
+            terminalIdRef.current = id;
+
+            unsubscribers.push(
+              window.ssh.shell.onData(({ terminalId: source, data }) => {
+                if (source !== id) return;
+
+                term.write(data);
+
+                outputTailRef.current = (outputTailRef.current + data).slice(-4096);
+                const cwd = detectPromptCwd(outputTailRef.current);
+                if (cwd && cwd !== lastCwdRef.current) {
+                  lastCwdRef.current = cwd;
+                  window.dispatchEvent(
+                    new CustomEvent('asproops:terminal-cwd', {
+                      detail: { sessionId, cwd },
+                    }),
+                  );
+                }
+              }),
+              window.ssh.shell.onClose(({ terminalId: source }) => {
+                if (source !== id) return;
+                term.write('\r\n\x1b[33mKoneksi shell ditutup.\x1b[0m\r\n');
+                exitRef.current?.();
+              }),
+            );
+
+            term.onData((data) => window.ssh.shell.write(id, data));
+          } catch (err) {
+            setError((err as Error).message);
           }
-          terminalIdRef.current = id;
-
-          unsubscribers.push(
-            window.ssh.shell.onData(({ terminalId: source, data }) => {
-              if (source !== id) return;
-
-              term.write(data);
-
-              outputTailRef.current = (outputTailRef.current + data).slice(-4096);
-              const cwd = detectPromptCwd(outputTailRef.current);
-              if (cwd && cwd !== lastCwdRef.current) {
-                lastCwdRef.current = cwd;
-                window.dispatchEvent(
-                  new CustomEvent('asproops:terminal-cwd', {
-                    detail: { sessionId, cwd },
-                  }),
-                );
-              }
-            }),
-            window.ssh.shell.onClose(({ terminalId: source }) => {
-              if (source !== id) return;
-              term.write('\r\n\x1b[33mKoneksi shell ditutup.\x1b[0m\r\n');
-              exitRef.current?.();
-            }),
-          );
-
-          term.onData((data) => window.ssh.shell.write(id, data));
-        } catch (err) {
-          setError((err as Error).message);
-        }
-      })();
+        })();
+      });
 
       observer = new ResizeObserver(() => {
         // Lebar nol berarti terminal sedang disembunyikan. Mengukur ulang
@@ -312,6 +332,49 @@ export function TerminalView({
     return () => cancelAnimationFrame(frame);
   }, [active]);
 
+  // Klik-kanan biasa (tanpa Shift) langsung copy (kalau ada seleksi) atau
+  // paste (kalau tidak ada) — meniru perilaku terminal Windows pada umumnya
+  // (PuTTY, Windows Terminal). Shift+klik-kanan tetap membuka menu Copy/Paste.
+  //
+  // Dilewati sepenuhnya kalau program di dalam terminal sudah mengaktifkan
+  // mouse tracking (mis. Claude Code CLI, mode "any"): xterm.js SUDAH
+  // mengirim laporan klik itu ke program lewat PTY secara independen dari
+  // event contextmenu ini (lewat mousedown/mouseup internalnya sendiri).
+  // Kalau kita TETAP menambahkan paste kita sendiri di atasnya, dan program
+  // itu juga punya aksi klik-kanan sendiri (banyak TUI berbasis mouse
+  // tracking mengimplementasikan paste-lewat-klik-kanan), hasilnya teks yang
+  // di-paste masuk dua kali — satu dari kita, satu dari program itu sendiri.
+  // Begitu mouse tracking aktif, biarkan program yang menentukan sepenuhnya
+  // apa arti klik itu, sama seperti perilaku terminal emulator pada umumnya.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleContextMenu = (event: MouseEvent) => {
+      const term = termRef.current;
+      if (term && term.modes.mouseTrackingMode !== 'none') return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.shiftKey) {
+        if (term?.hasSelection()) {
+          const selection = term.getSelection();
+          if (selection) window.ssh.clipboard.writeText(selection);
+          term.clearSelection();
+        } else {
+          const text = window.ssh.clipboard.readText();
+          if (text && terminalIdRef.current) term?.paste(text);
+        }
+        term?.focus();
+        return;
+      }
+      setContextMenu({ x: event.clientX, y: event.clientY });
+    };
+
+    container.addEventListener('contextmenu', handleContextMenu, true);
+    return () => container.removeEventListener('contextmenu', handleContextMenu, true);
+  }, []);
+
   if (error) {
     return (
       <div className="flex h-full items-center justify-center bg-abyss p-8 text-center">
@@ -322,27 +385,6 @@ export function TerminalView({
       </div>
     );
   }
-
-  // Klik-kanan biasa (tanpa Shift) langsung copy (kalau ada seleksi) atau
-  // paste (kalau tidak ada) — meniru perilaku terminal Windows pada umumnya
-  // (PuTTY, Windows Terminal). Shift+klik-kanan tetap membuka menu Copy/Paste.
-  const handleContextMenu = (event: ReactMouseEvent) => {
-    event.preventDefault();
-    if (!event.shiftKey) {
-      const term = termRef.current;
-      if (term?.hasSelection()) {
-        const selection = term.getSelection();
-        if (selection) window.ssh.clipboard.writeText(selection);
-        term.clearSelection();
-      } else {
-        const text = window.ssh.clipboard.readText();
-        if (text && terminalIdRef.current) window.ssh.shell.write(terminalIdRef.current, text);
-      }
-      term?.focus();
-      return;
-    }
-    setContextMenu({ x: event.clientX, y: event.clientY });
-  };
 
   // Fokus dikembalikan ke terminal setelah aksi clipboard supaya pengguna
   // bisa langsung mengetik tanpa perlu klik ulang ke area terminal.
@@ -355,7 +397,7 @@ export function TerminalView({
 
   const pasteClipboard = () => {
     const text = window.ssh.clipboard.readText();
-    if (text && terminalIdRef.current) window.ssh.shell.write(terminalIdRef.current, text);
+    if (text && terminalIdRef.current) termRef.current?.paste(text);
     setContextMenu(null);
     termRef.current?.focus();
   };
@@ -367,11 +409,7 @@ export function TerminalView({
 
   return (
     <>
-      <div
-        ref={containerRef}
-        className="aspro-xterm h-full w-full bg-abyss p-2"
-        onContextMenu={handleContextMenu}
-      />
+      <div ref={containerRef} className="aspro-xterm h-full w-full bg-abyss p-2" />
       {contextMenu && (
         <ContextMenu position={contextMenu} onClose={closeContextMenu}>
           <ContextMenuItem onClick={copySelection} disabled={!termRef.current?.hasSelection()}>
