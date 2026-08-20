@@ -184,6 +184,38 @@ export interface ServiceInfo {
 
 export type ServiceAction = 'start' | 'stop' | 'restart';
 
+/**
+ * local: port di komputer pengguna diteruskan ke host/port yang dilihat DARI
+ * server (mis. akses database yang cuma listen di 127.0.0.1 milik server).
+ * remote: kebalikannya — server membuka port yang meneruskan balik ke
+ * host/port di komputer pengguna.
+ */
+export type ForwardDirection = 'local' | 'remote';
+
+/** Aturan port forwarding tersimpan — belum tentu sedang berjalan. */
+export interface PortForwardRule {
+  id: string;
+  sessionId: string;
+  name: string;
+  direction: ForwardDirection;
+  localHost: string;
+  localPort: number;
+  remoteHost: string;
+  remotePort: number;
+  createdAt: number;
+}
+
+export type PortForwardState = 'active' | 'error' | 'closed';
+
+/** Status tunnel yang SEDANG berjalan (state in-memory, tidak disimpan). */
+export interface PortForwardStatus {
+  tunnelId: string;
+  ruleId: string;
+  sessionId: string;
+  state: PortForwardState;
+  message?: string;
+}
+
 export interface GitFileStatus {
   /** Kode 2 karakter dari `git status --porcelain`, mis. " M", "??", "A ". */
   code: string;

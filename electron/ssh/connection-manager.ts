@@ -1,7 +1,14 @@
 import { EventEmitter } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { Client } from 'ssh2';
-import type { ClientChannel, ConnectConfig, SFTPWrapper } from 'ssh2';
+import type {
+  AcceptConnection,
+  ClientChannel,
+  ConnectConfig,
+  RejectConnection,
+  SFTPWrapper,
+  TcpConnectionDetails,
+} from 'ssh2';
 
 import { verifyHostKey } from './known-hosts';
 import { preferences } from '../store/preferences';
@@ -27,6 +34,17 @@ export interface ConnectionEvents {
     changed: boolean;
     accept: (trust: boolean) => void;
   }) => void;
+  /**
+   * Server meneruskan koneksi TCP masuk ke arah kita — hasil dari
+   * forwardIn() (dasar remote port forwarding). Event global per-Client,
+   * jadi kalau ada beberapa forwardIn aktif sekaligus, pendengarnya sendiri
+   * yang harus menyaring berdasarkan destPort.
+   */
+  tcpConnection: (
+    details: TcpConnectionDetails,
+    accept: AcceptConnection<ClientChannel>,
+    reject: RejectConnection,
+  ) => void;
 }
 
 const RECONNECT_DELAYS_MS = [1_000, 2_000, 5_000, 10_000, 30_000];
@@ -187,6 +205,10 @@ export class SshConnection extends EventEmitter {
       client.once('ready', onReady);
       client.once('error', onError);
 
+      client.on('tcp connection', (details, accept, reject) =>
+        this.emit('tcpConnection', details, accept, reject),
+      );
+
       // Server yang memakai keyboard-interactive mengirim daftar pertanyaan;
       // untuk login password biasa hanya ada satu, yaitu prompt password.
       client.on('keyboard-interactive', (_name, _instructions, _lang, prompts, finish) => {
@@ -330,13 +352,33 @@ export class SshConnection extends EventEmitter {
     return this.sftpPromise;
   }
 
-  /** Buka channel TCP ke host lain — dasar dari dukungan ProxyJump. */
+  /**
+   * Buka channel TCP ke host lain — dasar dari dukungan ProxyJump dan local
+   * port forwarding (setiap koneksi TCP yang diterima listener lokal buka
+   * satu channel baru lewat ini).
+   */
   async forwardOut(destHost: string, destPort: number): Promise<ClientChannel> {
     const client = this.requireClient();
     return new Promise((resolve, reject) => {
       client.forwardOut('127.0.0.1', 0, destHost, destPort, (err, channel) =>
         err ? reject(err) : resolve(channel),
       );
+    });
+  }
+
+  /** Minta server membuka port yang meneruskan koneksi masuk balik ke kita — dasar remote port forwarding. */
+  async forwardIn(bindAddr: string, bindPort: number): Promise<void> {
+    const client = this.requireClient();
+    return new Promise((resolve, reject) => {
+      client.forwardIn(bindAddr, bindPort, (err) => (err ? reject(err) : resolve()));
+    });
+  }
+
+  /** Batalkan forwardIn yang sedang aktif. */
+  async unforwardIn(bindAddr: string, bindPort: number): Promise<void> {
+    const client = this.requireClient();
+    return new Promise((resolve, reject) => {
+      client.unforwardIn(bindAddr, bindPort, (err) => (err ? reject(err) : resolve()));
     });
   }
 
@@ -387,6 +429,7 @@ export interface SessionChannels {
   exec(command: string): Promise<{ stdout: string; stderr: string; code: number }>;
   execStream(command: string): Promise<ClientChannel>;
   getSftp(): Promise<SFTPWrapper>;
+  forwardOut(destHost: string, destPort: number): Promise<ClientChannel>;
 }
 
 export class SessionPool implements SessionChannels {
@@ -450,6 +493,10 @@ export class SessionPool implements SessionChannels {
 
   getSftp(): Promise<SFTPWrapper> {
     return this.withCapacity((connection) => connection.getSftp());
+  }
+
+  forwardOut(destHost: string, destPort: number): Promise<ClientChannel> {
+    return this.withCapacity((connection) => connection.forwardOut(destHost, destPort));
   }
 
   disconnect(): void {

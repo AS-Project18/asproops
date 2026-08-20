@@ -14,6 +14,7 @@ import { LogView } from './components/LogView';
 import { DeployView } from './components/DeployView';
 import { ProjectsPanel } from './components/ProjectsPanel';
 import { ServicesPanel } from './components/ServicesPanel';
+import { PortForwardPanel } from './components/PortForwardPanel';
 import { GitPanel } from './components/GitPanel';
 import { AuthLogPanel } from './components/AuthLogPanel';
 import { SettingsDialog } from './components/SettingsDialog';
@@ -44,6 +45,7 @@ type LeftMode =
   | 'monitor'
   | 'projects'
   | 'services'
+  | 'portforward'
   | 'git'
   | 'authlog';
 
@@ -577,6 +579,12 @@ export default function App() {
             onClick={() => selectLeftMode('services')}
           />
           <RailButton
+            active={leftMode === 'portforward'}
+            icon="⇌"
+            label={t('nav.portforward')}
+            onClick={() => selectLeftMode('portforward')}
+          />
+          <RailButton
             active={leftMode === 'authlog'}
             icon="⚿"
             label={t('nav.authlog')}
@@ -682,6 +690,16 @@ export default function App() {
 
                 <div
                   className={
+                    leftMode === 'portforward'
+                      ? 'absolute inset-0'
+                      : 'pointer-events-none invisible absolute inset-0'
+                  }
+                >
+                  <PortForwardPanel sessionId={activeSession.id} />
+                </div>
+
+                <div
+                  className={
                     leftMode === 'git'
                       ? 'absolute inset-0'
                       : 'pointer-events-none invisible absolute inset-0'
@@ -705,6 +723,7 @@ export default function App() {
                 leftMode === 'monitor' ||
                 leftMode === 'projects' ||
                 leftMode === 'services' ||
+                leftMode === 'portforward' ||
                 leftMode === 'git' ||
                 leftMode === 'authlog') && (
                 <div className="aspro-side-placeholder absolute inset-0">
@@ -715,11 +734,13 @@ export default function App() {
                         ? '⌁'
                         : leftMode === 'services'
                           ? '⏻'
-                          : leftMode === 'git'
-                            ? '⎇'
-                            : leftMode === 'authlog'
-                              ? '⚿'
-                              : '▣'}
+                          : leftMode === 'portforward'
+                            ? '⇌'
+                            : leftMode === 'git'
+                              ? '⎇'
+                              : leftMode === 'authlog'
+                                ? '⚿'
+                                : '▣'}
                   </div>
                   <strong>
                     {leftMode === 'files'
@@ -728,11 +749,13 @@ export default function App() {
                         ? t('placeholder.monitor')
                         : leftMode === 'services'
                           ? t('placeholder.services')
-                          : leftMode === 'git'
-                            ? t('placeholder.git')
-                            : leftMode === 'authlog'
-                              ? t('placeholder.authlog')
-                              : t('placeholder.projects')}
+                          : leftMode === 'portforward'
+                            ? t('placeholder.portforward')
+                            : leftMode === 'git'
+                              ? t('placeholder.git')
+                              : leftMode === 'authlog'
+                                ? t('placeholder.authlog')
+                                : t('placeholder.projects')}
                   </strong>
                   <span>{t('placeholder.connectRequired')}</span>
                 </div>

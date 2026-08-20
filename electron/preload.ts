@@ -12,6 +12,8 @@ import type {
   GitStatus,
   LocalTerminalProfile,
   MonitorSnapshot,
+  PortForwardRule,
+  PortForwardStatus,
   ProjectProfile,
   RemoteFile,
   ServiceAction,
@@ -239,6 +241,27 @@ const api = {
       ipcRenderer.invoke('service:list', sessionId),
     action: (sessionId: string, unit: string, action: ServiceAction): Promise<void> =>
       ipcRenderer.invoke('service:action', sessionId, unit, action),
+  },
+
+  portForward: {
+    listRules: (sessionId: string): Promise<PortForwardRule[]> =>
+      ipcRenderer.invoke('portforward:listRules', sessionId),
+    createRule: (
+      sessionId: string,
+      input: Pick<
+        PortForwardRule,
+        'name' | 'direction' | 'localHost' | 'localPort' | 'remoteHost' | 'remotePort'
+      >,
+    ): Promise<PortForwardRule> => ipcRenderer.invoke('portforward:createRule', sessionId, input),
+    updateRule: (id: string, patch: Partial<PortForwardRule>): Promise<PortForwardRule | undefined> =>
+      ipcRenderer.invoke('portforward:updateRule', id, patch),
+    removeRule: (id: string): Promise<void> => ipcRenderer.invoke('portforward:removeRule', id),
+    start: (ruleId: string): Promise<string> => ipcRenderer.invoke('portforward:start', ruleId),
+    stop: (tunnelId: string): Promise<void> => ipcRenderer.invoke('portforward:stop', tunnelId),
+    listActive: (sessionId: string): Promise<PortForwardStatus[]> =>
+      ipcRenderer.invoke('portforward:listActive', sessionId),
+    onStatus: (handler: (status: PortForwardStatus) => void) =>
+      subscribe('portforward:status', handler),
   },
 
   git: {

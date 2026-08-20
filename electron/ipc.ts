@@ -19,11 +19,13 @@ import { runDeploy, type DeployRunHandle } from './ssh/deploy';
 import { trustHostKey } from './ssh/known-hosts';
 import { parseSshConfig } from './ssh/ssh-config';
 import { RemoteEditManager } from './ssh/remote-edit';
+import { PortForwardManager } from './ssh/port-forward';
 import { SessionStore } from './store/sessions';
 import { LocalTerminalManager } from './local-terminal';
 import { AppLock } from './app-lock';
 import { preferences, sftpPreferences } from './store/preferences';
 import { projects } from './store/projects';
+import { portForwardRules } from './store/port-forwards';
 import type {
   GitAction,
   RemoteFile,
@@ -56,6 +58,7 @@ const monitor = new RemoteMonitor();
 const appLock = new AppLock();
 let edits: RemoteEditManager;
 let localTerminals: LocalTerminalManager;
+let portForwards: PortForwardManager;
 
 /** terminalId -> channel shell yang sedang terbuka. */
 const shells = new Map<string, ClientChannel>();
@@ -95,6 +98,7 @@ export function registerIpc(window: BrowserWindow): void {
   };
 
   edits = new RemoteEditManager((status) => send('edit:status', status));
+  portForwards = new PortForwardManager((status) => send('portforward:status', status));
 
   localTerminals = new LocalTerminalManager(
     (terminalId, data) => send('local:data', { terminalId, data }),
@@ -174,6 +178,7 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle('sessions:remove', (_e, id) => {
     store.remove(id);
     projects.removeProjectsForSession(id);
+    portForwardRules.removeForSession(id);
   });
 
   // --- Project & deploy template --------------------------------------------
@@ -243,6 +248,7 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle('ssh:disconnect', async (_e, sessionId: string) => {
     monitor.stop(sessionId);
     await edits.closeSession(sessionId);
+    portForwards.stopForSession(sessionId);
     connections.close(sessionId);
     pendingAuthLog.delete(sessionId);
     authLogPasswords.delete(sessionId);
@@ -679,6 +685,31 @@ export function registerIpc(window: BrowserWindow): void {
       runServiceAction(connections.require(sessionId), unit, action),
   );
 
+  // --- Port forwarding ---------------------------------------------------------
+  ipcMain.handle('portforward:listRules', (_e, sessionId: string) =>
+    portForwardRules.list(sessionId),
+  );
+  ipcMain.handle('portforward:createRule', (_e, sessionId: string, input) =>
+    portForwardRules.create(sessionId, input),
+  );
+  ipcMain.handle('portforward:updateRule', (_e, id: string, patch) =>
+    portForwardRules.update(id, patch),
+  );
+  ipcMain.handle('portforward:removeRule', (_e, id: string) => {
+    portForwardRules.remove(id);
+  });
+  ipcMain.handle('portforward:start', async (_e, ruleId: string) => {
+    const rule = portForwardRules.get(ruleId);
+    if (!rule) throw new Error('Aturan port forwarding tidak ditemukan.');
+    return portForwards.start(connections.require(rule.sessionId), rule);
+  });
+  ipcMain.handle('portforward:stop', (_e, tunnelId: string) => {
+    portForwards.stop(tunnelId);
+  });
+  ipcMain.handle('portforward:listActive', (_e, sessionId: string) =>
+    portForwards.list(sessionId),
+  );
+
   // --- Git remote ------------------------------------------------------------
   ipcMain.handle('git:status', (_e, sessionId: string, path: string) =>
     getGitStatus(connections.require(sessionId), path),
@@ -725,6 +756,7 @@ export function registerIpc(window: BrowserWindow): void {
 
 export function shutdown(): void {
   edits?.closeAll();
+  portForwards?.stopAll();
   for (const stream of shells.values()) stream.end();
   shells.clear();
   for (const handle of deployRuns.values()) handle.cancel();
