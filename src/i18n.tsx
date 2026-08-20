@@ -296,7 +296,8 @@ const messages = {
     'settings.sshResetDesc': 'Timeout 20 detik, keepalive 15 detik, sambung ulang otomatis aktif.',
     'settings.sshReset': 'Reset',
     'settings.terminalFont': 'Font terminal',
-    'settings.terminalFontDesc': 'Kosongkan untuk memakai font bawaan tema.',
+    'settings.terminalFontDesc':
+      'Kosongkan untuk memakai font bawaan tema (otomatis coba beberapa Nerd Font populer). Kalau ikon prompt shell custom (oh-my-posh/starship/powerlevel10k) masih tampil kotak-kotak, isi nama Nerd Font yang terpasang di sistem, mis. "CaskaydiaCove Nerd Font" atau "MesloLGS NF".',
     'settings.terminalFontPlaceholder': 'Otomatis',
     'settings.terminalFontSize': 'Ukuran font',
     'settings.terminalFontSizeDesc': 'Ukuran teks di semua jendela terminal — SSH maupun lokal.',
@@ -645,7 +646,8 @@ const messages = {
     'settings.sshResetDesc': '20s timeout, 15s keepalive, auto-reconnect on.',
     'settings.sshReset': 'Reset',
     'settings.terminalFont': 'Terminal font',
-    'settings.terminalFontDesc': 'Leave empty to use the theme default.',
+    'settings.terminalFontDesc':
+      'Leave empty to use the theme default (auto-tries a few popular Nerd Fonts). If your custom shell prompt icons (oh-my-posh/starship/powerlevel10k) still show as boxes, enter the exact Nerd Font installed on your system, e.g. "CaskaydiaCove Nerd Font" or "MesloLGS NF".',
     'settings.terminalFontPlaceholder': 'Automatic',
     'settings.terminalFontSize': 'Font size',
     'settings.terminalFontSizeDesc': 'Text size in every terminal window — SSH and local.',
