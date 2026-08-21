@@ -1286,6 +1286,10 @@ button:disabled {
   background: #58e879;
   box-shadow: 0 0 6px rgba(88, 232, 121, .40);
 }
+.aspro-workspace-tab-dot.docker {
+  background: #2496ed;
+  box-shadow: 0 0 6px rgba(36, 150, 237, .45);
+}
 .aspro-workspace-tab-dot.dashboard {
   background: #b44cff;
   box-shadow: 0 0 6px rgba(180, 76, 255, .40);

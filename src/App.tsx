@@ -10,10 +10,12 @@ import { FileBrowser } from './components/FileBrowser';
 import { MonitorPanel } from './components/MonitorPanel';
 import { LocalTerminalPanel } from './components/LocalTerminalPanel';
 import { LocalTerminalView } from './components/LocalTerminalView';
-import { LogView } from './components/LogView';
+import { LogView, ContainerLogView } from './components/LogView';
 import { DeployView } from './components/DeployView';
 import { ProjectsPanel } from './components/ProjectsPanel';
 import { ServicesPanel } from './components/ServicesPanel';
+import { DockerPanel } from './components/DockerPanel';
+import { CronPanel } from './components/CronPanel';
 import { PortForwardPanel } from './components/PortForwardPanel';
 import { GitPanel } from './components/GitPanel';
 import { AuthLogPanel } from './components/AuthLogPanel';
@@ -25,6 +27,7 @@ import { useSessions } from './hooks/useSessions';
 import { formatBytes, formatRate } from './lib/format';
 import type {
   DeployWorkspace,
+  DockerLogWorkspace,
   LocalTerminalProfile,
   LocalTerminalWorkspace,
   LogWorkspace,
@@ -45,6 +48,8 @@ type LeftMode =
   | 'monitor'
   | 'projects'
   | 'services'
+  | 'docker'
+  | 'cron'
   | 'portforward'
   | 'git'
   | 'authlog';
@@ -59,6 +64,7 @@ export default function App() {
   const [activeLocalId, setActiveLocalId] = useState<string | null>(null);
   const [activeLogId, setActiveLogId] = useState<string | null>(null);
   const [activeDeployId, setActiveDeployId] = useState<string | null>(null);
+  const [activeDockerLogId, setActiveDockerLogId] = useState<string | null>(null);
   /**
    * Dashboard itu tab ke-5 yang selalu ada dan tidak bisa ditutup — beda
    * dari 4 kind lain yang array-based (bisa nol atau banyak), ini cukup
@@ -72,6 +78,7 @@ export default function App() {
   const [localWorkspaces, setLocalWorkspaces] = useState<LocalTerminalWorkspace[]>([]);
   const [logWorkspaces, setLogWorkspaces] = useState<LogWorkspace[]>([]);
   const [deployWorkspaces, setDeployWorkspaces] = useState<DeployWorkspace[]>([]);
+  const [dockerLogWorkspaces, setDockerLogWorkspaces] = useState<DockerLogWorkspace[]>([]);
   const [serviceFocus, setServiceFocus] = useState<string | null>(null);
   const [gitFocusProjectId, setGitFocusProjectId] = useState<string | null>(null);
   const [leftMode, setLeftMode] = useState<LeftMode>('servers');
@@ -155,11 +162,15 @@ export default function App() {
     localWorkspaces.find((workspace) => workspace.id === activeLocalId) ?? null;
   const activeLog = logWorkspaces.find((workspace) => workspace.id === activeLogId) ?? null;
   const activeDeploy = deployWorkspaces.find((workspace) => workspace.id === activeDeployId) ?? null;
+  const activeDockerLog =
+    dockerLogWorkspaces.find((workspace) => workspace.id === activeDockerLogId) ?? null;
   // dashboardActive OR fallback kalau ternyata tidak ada satu pun tab lain
   // yang aktif (mis. gara-gara ada state transition yang lupa menyalakan
   // dashboardActive secara eksplisit) — jangan sampai layar workspace
   // kosong sama sekali tanpa tab manapun yang kelihatan aktif.
-  const showDashboard = dashboardActive || (!activeSession && !activeLocal && !activeLog && !activeDeploy);
+  const showDashboard =
+    dashboardActive ||
+    (!activeSession && !activeLocal && !activeLog && !activeDeploy && !activeDockerLog);
   const connectedCount = useMemo(
     () => Object.values(statuses).filter((status) => status === 'connected').length,
     [statuses],
@@ -207,6 +218,7 @@ export default function App() {
     setActiveId(null);
     setActiveLogId(null);
     setActiveDeployId(null);
+    setActiveDockerLogId(null);
     setDashboardActive(true);
   };
 
@@ -214,6 +226,7 @@ export default function App() {
     setActiveLocalId(null);
     setActiveLogId(null);
     setActiveDeployId(null);
+    setActiveDockerLogId(null);
     setDashboardActive(false);
     setActiveId(id);
   };
@@ -222,6 +235,7 @@ export default function App() {
     setActiveLocalId(null);
     setActiveLogId(null);
     setActiveDeployId(null);
+    setActiveDockerLogId(null);
     setDashboardActive(false);
     setActiveId(id);
   };
@@ -229,6 +243,7 @@ export default function App() {
   const activateLocalWorkspace = (workspaceId: string) => {
     setActiveLogId(null);
     setActiveDeployId(null);
+    setActiveDockerLogId(null);
     setDashboardActive(false);
     setActiveLocalId(workspaceId);
   };
@@ -237,6 +252,7 @@ export default function App() {
     setActiveLocalId(null);
     setActiveId(null);
     setActiveDeployId(null);
+    setActiveDockerLogId(null);
     setDashboardActive(false);
     setActiveLogId(workspaceId);
   };
@@ -245,8 +261,18 @@ export default function App() {
     setActiveLocalId(null);
     setActiveId(null);
     setActiveLogId(null);
+    setActiveDockerLogId(null);
     setDashboardActive(false);
     setActiveDeployId(workspaceId);
+  };
+
+  const activateDockerLogWorkspace = (workspaceId: string) => {
+    setActiveLocalId(null);
+    setActiveId(null);
+    setActiveLogId(null);
+    setActiveDeployId(null);
+    setDashboardActive(false);
+    setActiveDockerLogId(workspaceId);
   };
 
   const handleConnect = (id: string) => {
@@ -254,6 +280,7 @@ export default function App() {
     setActiveLocalId(null);
     setActiveLogId(null);
     setActiveDeployId(null);
+    setActiveDockerLogId(null);
     setDashboardActive(false);
     setActiveId(id);
     void connect(id);
@@ -274,6 +301,7 @@ export default function App() {
     setLocalWorkspaces((current) => [...current, workspace]);
     setActiveLogId(null);
     setActiveDeployId(null);
+    setActiveDockerLogId(null);
     setDashboardActive(false);
     setActiveLocalId(workspace.id);
     setLeftMode('local');
@@ -296,8 +324,39 @@ export default function App() {
     setActiveLocalId(null);
     setActiveId(null);
     setActiveDeployId(null);
+    setActiveDockerLogId(null);
     setDashboardActive(false);
     setActiveLogId(workspace.id);
+  };
+
+  /**
+   * Dipanggil dari DockerPanel saat tombol log container diklik. Dedup sama
+   * seperti openLogView: container yang sama di session yang sama cukup
+   * difokuskan lagi, bukan numpuk tab baru.
+   */
+  const openDockerLogView = (sessionId: string, containerId: string, containerName: string) => {
+    const existing = dockerLogWorkspaces.find(
+      (w) => w.sessionId === sessionId && w.containerId === containerId,
+    );
+    if (existing) {
+      activateDockerLogWorkspace(existing.id);
+      return;
+    }
+
+    const workspace: DockerLogWorkspace = {
+      id: crypto.randomUUID(),
+      sessionId,
+      containerId,
+      containerName,
+      createdAt: Date.now(),
+    };
+    setDockerLogWorkspaces((current) => [...current, workspace]);
+    setActiveLocalId(null);
+    setActiveId(null);
+    setActiveLogId(null);
+    setActiveDeployId(null);
+    setDashboardActive(false);
+    setActiveDockerLogId(workspace.id);
   };
 
   /**
@@ -336,6 +395,7 @@ export default function App() {
     setActiveLocalId(null);
     setActiveId(null);
     setActiveLogId(null);
+    setActiveDockerLogId(null);
     setDashboardActive(false);
     setActiveDeployId(workspace.id);
   };
@@ -355,6 +415,7 @@ export default function App() {
     setActiveLocalId(null);
     setActiveId(null);
     setActiveLogId(null);
+    setActiveDockerLogId(null);
     setDashboardActive(false);
     setActiveDeployId(workspace.id);
   };
@@ -377,7 +438,11 @@ export default function App() {
           else {
             const lastDeploy = deployWorkspaces.at(-1);
             if (lastDeploy) setActiveDeployId(lastDeploy.id);
-            else setDashboardActive(true);
+            else {
+              const lastDockerLog = dockerLogWorkspaces.at(-1);
+              if (lastDockerLog) setActiveDockerLogId(lastDockerLog.id);
+              else setDashboardActive(true);
+            }
           }
         }
       }
@@ -407,7 +472,11 @@ export default function App() {
           else {
             const lastDeploy = deployWorkspaces.at(-1);
             if (lastDeploy) setActiveDeployId(lastDeploy.id);
-            else setDashboardActive(true);
+            else {
+              const lastDockerLog = dockerLogWorkspaces.at(-1);
+              if (lastDockerLog) setActiveDockerLogId(lastDockerLog.id);
+              else setDashboardActive(true);
+            }
           }
         }
       }
@@ -432,7 +501,11 @@ export default function App() {
           else {
             const lastDeploy = deployWorkspaces.at(-1);
             if (lastDeploy) setActiveDeployId(lastDeploy.id);
-            else setDashboardActive(true);
+            else {
+              const lastDockerLog = dockerLogWorkspaces.at(-1);
+              if (lastDockerLog) setActiveDockerLogId(lastDockerLog.id);
+              else setDashboardActive(true);
+            }
           }
         }
       }
@@ -457,7 +530,40 @@ export default function App() {
           else {
             const lastLog = logWorkspaces.at(-1);
             if (lastLog) setActiveLogId(lastLog.id);
-            else setDashboardActive(true);
+            else {
+              const lastDockerLog = dockerLogWorkspaces.at(-1);
+              if (lastDockerLog) setActiveDockerLogId(lastDockerLog.id);
+              else setDashboardActive(true);
+            }
+          }
+        }
+      }
+    }
+  };
+
+  const closeDockerLogView = (workspaceId: string) => {
+    const remaining = dockerLogWorkspaces.filter((item) => item.id !== workspaceId);
+    setDockerLogWorkspaces(remaining);
+
+    if (activeDockerLogId === workspaceId) {
+      const nextDockerLog = remaining.at(-1);
+      if (nextDockerLog) {
+        setActiveDockerLogId(nextDockerLog.id);
+      } else {
+        setActiveDockerLogId(null);
+        const lastLocal = localWorkspaces.at(-1);
+        if (lastLocal) setActiveLocalId(lastLocal.id);
+        else {
+          const lastRemote = openSessions.at(-1);
+          if (lastRemote) setActiveId(lastRemote);
+          else {
+            const lastLog = logWorkspaces.at(-1);
+            if (lastLog) setActiveLogId(lastLog.id);
+            else {
+              const lastDeploy = deployWorkspaces.at(-1);
+              if (lastDeploy) setActiveDeployId(lastDeploy.id);
+              else setDashboardActive(true);
+            }
           }
         }
       }
@@ -598,6 +704,18 @@ export default function App() {
             onClick={() => selectLeftMode('services')}
           />
           <RailButton
+            active={leftMode === 'docker'}
+            icon="⬢"
+            label={t('nav.docker')}
+            onClick={() => selectLeftMode('docker')}
+          />
+          <RailButton
+            active={leftMode === 'cron'}
+            icon="◷"
+            label={t('nav.cron')}
+            onClick={() => selectLeftMode('cron')}
+          />
+          <RailButton
             active={leftMode === 'portforward'}
             icon="⇌"
             label={t('nav.portforward')}
@@ -710,6 +828,26 @@ export default function App() {
 
                 <div
                   className={
+                    leftMode === 'docker'
+                      ? 'absolute inset-0'
+                      : 'pointer-events-none invisible absolute inset-0'
+                  }
+                >
+                  <DockerPanel sessionId={activeSession.id} onOpenLogs={openDockerLogView} />
+                </div>
+
+                <div
+                  className={
+                    leftMode === 'cron'
+                      ? 'absolute inset-0'
+                      : 'pointer-events-none invisible absolute inset-0'
+                  }
+                >
+                  <CronPanel sessionId={activeSession.id} />
+                </div>
+
+                <div
+                  className={
                     leftMode === 'portforward'
                       ? 'absolute inset-0'
                       : 'pointer-events-none invisible absolute inset-0'
@@ -743,6 +881,8 @@ export default function App() {
                 leftMode === 'monitor' ||
                 leftMode === 'projects' ||
                 leftMode === 'services' ||
+                leftMode === 'docker' ||
+                leftMode === 'cron' ||
                 leftMode === 'portforward' ||
                 leftMode === 'git' ||
                 leftMode === 'authlog') && (
@@ -754,13 +894,17 @@ export default function App() {
                         ? '⌁'
                         : leftMode === 'services'
                           ? '⏻'
-                          : leftMode === 'portforward'
-                            ? '⇌'
-                            : leftMode === 'git'
-                              ? '⎇'
-                              : leftMode === 'authlog'
-                                ? '⚿'
-                                : '▣'}
+                          : leftMode === 'docker'
+                            ? '⬢'
+                            : leftMode === 'cron'
+                              ? '◷'
+                              : leftMode === 'portforward'
+                                ? '⇌'
+                                : leftMode === 'git'
+                                  ? '⎇'
+                                  : leftMode === 'authlog'
+                                    ? '⚿'
+                                    : '▣'}
                   </div>
                   <strong>
                     {leftMode === 'files'
@@ -769,13 +913,17 @@ export default function App() {
                         ? t('placeholder.monitor')
                         : leftMode === 'services'
                           ? t('placeholder.services')
-                          : leftMode === 'portforward'
-                            ? t('placeholder.portforward')
-                            : leftMode === 'git'
-                              ? t('placeholder.git')
-                              : leftMode === 'authlog'
-                                ? t('placeholder.authlog')
-                                : t('placeholder.projects')}
+                          : leftMode === 'docker'
+                            ? t('placeholder.docker')
+                            : leftMode === 'cron'
+                              ? t('placeholder.cron')
+                              : leftMode === 'portforward'
+                                ? t('placeholder.portforward')
+                                : leftMode === 'git'
+                                  ? t('placeholder.git')
+                                  : leftMode === 'authlog'
+                                    ? t('placeholder.authlog')
+                                    : t('placeholder.projects')}
                   </strong>
                   <span>{t('placeholder.connectRequired')}</span>
                 </div>
@@ -967,6 +1115,42 @@ export default function App() {
               );
             })}
 
+            {dockerLogWorkspaces.map((workspace) => {
+              const isActive = activeDockerLogId === workspace.id;
+
+              return (
+                <button
+                  key={`dockerlog:${workspace.id}`}
+                  className={`aspro-workspace-tab ${isActive ? 'active' : ''}`}
+                  onClick={() => activateDockerLogWorkspace(workspace.id)}
+                  title={workspace.containerName}
+                >
+                  <span className="aspro-workspace-tab-dot docker" />
+                  <span className="truncate">{workspace.containerName}</span>
+                  <span className="aspro-workspace-tab-kind">DOCKER</span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="aspro-workspace-tab-close"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      closeDockerLogView(workspace.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        closeDockerLogView(workspace.id);
+                      }
+                    }}
+                    title="Tutup log container"
+                  >
+                    ×
+                  </span>
+                </button>
+              );
+            })}
+
           </div>
 
           <div className="aspro-session-header">
@@ -994,6 +1178,29 @@ export default function App() {
                 <div className="ml-auto">
                   <button
                     onClick={() => closeDeployView(activeDeploy.id)}
+                    className="aspro-button aspro-button-danger"
+                  >
+                    {t('workspace.close')}
+                  </button>
+                </div>
+              </>
+            ) : activeDockerLog ? (
+              <>
+                <div className="aspro-live-dot online" />
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-fg">
+                    {activeDockerLog.containerName}
+                  </div>
+                  <div className="truncate font-mono text-[12px] text-faint">
+                    {t('docker.logs')}
+                  </div>
+                </div>
+                <span className="aspro-local-chip">DOCKER</span>
+                <span className="aspro-status-chip connected">{t('workspace.active')}</span>
+
+                <div className="ml-auto">
+                  <button
+                    onClick={() => closeDockerLogView(activeDockerLog.id)}
                     className="aspro-button aspro-button-danger"
                   >
                     {t('workspace.close')}
@@ -1182,6 +1389,24 @@ export default function App() {
               </div>
             ))}
 
+            {dockerLogWorkspaces.map((workspace) => (
+              <div
+                key={workspace.id}
+                className={
+                  workspace.id === activeDockerLogId
+                    ? 'absolute inset-0'
+                    : 'pointer-events-none invisible absolute inset-0'
+                }
+              >
+                <ContainerLogView
+                  sessionId={workspace.sessionId}
+                  containerId={workspace.containerId}
+                  active={workspace.id === activeDockerLogId}
+                  onExit={() => closeDockerLogView(workspace.id)}
+                />
+              </div>
+            ))}
+
             <div
               className={
                 showDashboard ? 'absolute inset-0' : 'pointer-events-none invisible absolute inset-0'
@@ -1190,7 +1415,7 @@ export default function App() {
               <Dashboard sessions={sessions} statuses={statuses} onOpen={handleSelectRemote} />
             </div>
 
-            {showDashboard || activeLog || activeLocal || activeDeploy ? null : loading ? (
+            {showDashboard || activeLog || activeLocal || activeDeploy || activeDockerLog ? null : loading ? (
               <WorkspacePlaceholder
                 icon="⌁"
                 title={t('workspace.loadingServers')}
@@ -1243,6 +1468,12 @@ export default function App() {
             <span>DEPLOY</span>
             <span className="aspro-divider" />
             <span className="font-mono">{activeDeploy.templateName}</span>
+          </>
+        ) : activeDockerLog ? (
+          <>
+            <span className="text-mint">● {activeDockerLog.containerName}</span>
+            <span className="aspro-divider" />
+            <span>DOCKER</span>
           </>
         ) : activeLog ? (
           <>

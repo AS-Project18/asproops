@@ -518,3 +518,56 @@ export function LogView({ sessionId, path, active, onExit }: LogViewProps) {
 
   return <LogStreamView tailId={tailId} active={active} onExit={onExit} />;
 }
+
+interface ContainerLogViewProps {
+  sessionId: string;
+  containerId: string;
+  active: boolean;
+  onExit?: () => void;
+}
+
+/** Tail log container Docker — thin wrapper sama seperti LogView, cuma beda cara membuka tail-nya. */
+export function ContainerLogView({ sessionId, containerId, active, onExit }: ContainerLogViewProps) {
+  const [tailId, setTailId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let disposed = false;
+    let openedTailId: string | null = null;
+
+    void (async () => {
+      try {
+        const id = await window.ssh.docker.openLogs(sessionId, containerId);
+        if (disposed) {
+          window.ssh.log.close(id);
+          return;
+        }
+        openedTailId = id;
+        setTailId(id);
+      } catch (err) {
+        if (!disposed) setError((err as Error).message);
+      }
+    })();
+
+    return () => {
+      disposed = true;
+      setTailId(null);
+      if (openedTailId) window.ssh.log.close(openedTailId);
+    };
+  }, [sessionId, containerId]);
+
+  if (error) {
+    return (
+      <div className="flex h-full items-center justify-center bg-abyss p-8 text-center">
+        <div>
+          <p className="text-sm text-coral">Log tidak bisa dibuka.</p>
+          <p className="mt-2 text-xs text-muted">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!tailId) return null;
+
+  return <LogStreamView tailId={tailId} active={active} onExit={onExit} />;
+}

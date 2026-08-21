@@ -151,6 +151,15 @@ export interface LogWorkspace {
   createdAt: number;
 }
 
+/** Satu tab live log container Docker yang sedang terbuka di workspace. */
+export interface DockerLogWorkspace {
+  id: string;
+  sessionId: string;
+  containerId: string;
+  containerName: string;
+  createdAt: number;
+}
+
 /**
  * Satu working directory di satu server — fondasi untuk fitur DevOps
  * (deploy, log viewer, service manager) yang menyusul. Sengaja per-session
@@ -183,6 +192,31 @@ export interface ServiceInfo {
 }
 
 export type ServiceAction = 'start' | 'stop' | 'restart';
+
+/** Satu container sebagaimana dilaporkan `docker ps -a --format '{{json .}}'`. */
+export interface DockerContainerInfo {
+  id: string;
+  name: string;
+  image: string;
+  command: string;
+  status: string;
+  state: string;
+  ports: string;
+}
+
+export type ContainerAction = 'start' | 'stop' | 'restart';
+
+/**
+ * Satu baris job di crontab milik pengguna SSH yang sedang login. `index`
+ * adalah posisinya di larik baris mentah crontab hasil list() TERAKHIR —
+ * dipakai untuk menargetkan update/remove, lihat catatan di electron/ssh/cron.ts.
+ */
+export interface CronJob {
+  index: number;
+  schedule: string;
+  command: string;
+  enabled: boolean;
+}
 
 /**
  * local: port di komputer pengguna diteruskan ke host/port yang dilihat DARI

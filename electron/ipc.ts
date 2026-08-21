@@ -7,6 +7,8 @@ import type { ClientChannel } from 'ssh2';
 import { ConnectionManager, type SshConnection } from './ssh/connection-manager';
 import { RemoteMonitor } from './ssh/monitor';
 import { listServices, runServiceAction } from './ssh/services';
+import { listContainers, runContainerAction, buildContainerLogsCommand } from './ssh/docker';
+import { listCronJobs, createCronJob, updateCronJob, removeCronJob } from './ssh/cron';
 import {
   resolveAuthLog,
   resolveAuthLogRange,
@@ -28,6 +30,7 @@ import { projects } from './store/projects';
 import { portForwardRules } from './store/port-forwards';
 import { deployHistory } from './store/deploy-history';
 import type {
+  ContainerAction,
   DeployStep,
   DeployTemplate,
   GitAction,
@@ -691,6 +694,41 @@ export function registerIpc(window: BrowserWindow): void {
     'service:action',
     (_e, sessionId: string, unit: string, action: ServiceAction) =>
       runServiceAction(connections.require(sessionId), unit, action),
+  );
+
+  // --- Docker container manager ---------------------------------------------
+  ipcMain.handle('docker:list', (_e, sessionId: string) =>
+    listContainers(connections.require(sessionId)),
+  );
+  ipcMain.handle(
+    'docker:action',
+    (_e, sessionId: string, id: string, action: ContainerAction) =>
+      runContainerAction(connections.require(sessionId), id, action),
+  );
+  ipcMain.handle('docker:openLogs', async (_e, sessionId: string, id: string) => {
+    const connection = connections.require(sessionId);
+    const stream = await connection.execStream(buildContainerLogsCommand(id));
+    return attachAuthLogTail(stream);
+  });
+
+  // --- Cron job manager --------------------------------------------------
+  ipcMain.handle('cron:list', (_e, sessionId: string) => listCronJobs(connections.require(sessionId)));
+  ipcMain.handle(
+    'cron:create',
+    (_e, sessionId: string, input: { schedule: string; command: string }) =>
+      createCronJob(connections.require(sessionId), input),
+  );
+  ipcMain.handle(
+    'cron:update',
+    (
+      _e,
+      sessionId: string,
+      index: number,
+      input: { schedule: string; command: string; enabled: boolean },
+    ) => updateCronJob(connections.require(sessionId), index, input),
+  );
+  ipcMain.handle('cron:remove', (_e, sessionId: string, index: number) =>
+    removeCronJob(connections.require(sessionId), index),
   );
 
   // --- Port forwarding ---------------------------------------------------------

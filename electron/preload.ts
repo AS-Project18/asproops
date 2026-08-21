@@ -6,9 +6,12 @@ import type {
   AuthLogOpenResult,
   AuthLogQueryResult,
   ConnectionStatus,
+  ContainerAction,
+  CronJob,
   DeployHistoryEntry,
   DeployRunEvent,
   DeployTemplate,
+  DockerContainerInfo,
   GitAction,
   GitStatus,
   LocalTerminalProfile,
@@ -242,6 +245,29 @@ const api = {
       ipcRenderer.invoke('service:list', sessionId),
     action: (sessionId: string, unit: string, action: ServiceAction): Promise<void> =>
       ipcRenderer.invoke('service:action', sessionId, unit, action),
+  },
+
+  docker: {
+    list: (sessionId: string): Promise<DockerContainerInfo[]> =>
+      ipcRenderer.invoke('docker:list', sessionId),
+    action: (sessionId: string, id: string, action: ContainerAction): Promise<void> =>
+      ipcRenderer.invoke('docker:action', sessionId, id, action),
+    /** Stream log container lewat channel log:data/log:close yang sama dengan LogView/AuthLogPanel. */
+    openLogs: (sessionId: string, id: string): Promise<string> =>
+      ipcRenderer.invoke('docker:openLogs', sessionId, id),
+  },
+
+  cron: {
+    list: (sessionId: string): Promise<CronJob[]> => ipcRenderer.invoke('cron:list', sessionId),
+    create: (sessionId: string, input: { schedule: string; command: string }): Promise<void> =>
+      ipcRenderer.invoke('cron:create', sessionId, input),
+    update: (
+      sessionId: string,
+      index: number,
+      input: { schedule: string; command: string; enabled: boolean },
+    ): Promise<void> => ipcRenderer.invoke('cron:update', sessionId, index, input),
+    remove: (sessionId: string, index: number): Promise<void> =>
+      ipcRenderer.invoke('cron:remove', sessionId, index),
   },
 
   portForward: {
