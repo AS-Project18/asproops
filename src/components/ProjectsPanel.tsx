@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { ProjectProfile, DeployTemplate } from '../shared/types';
 import { useI18n } from '../i18n';
 import { DeployHistoryModal } from './DeployHistoryModal';
+import { EnvFileEditor } from './EnvFileEditor';
 
 /**
  * Panel Project — fondasi DevOps: menandai satu working directory di server
@@ -40,6 +41,7 @@ export function ProjectsPanel({
   const [pendingDelete, setPendingDelete] = useState<ProjectProfile | null>(null);
   const [pendingDeploy, setPendingDeploy] = useState<ProjectProfile | null>(null);
   const [historyProject, setHistoryProject] = useState<ProjectProfile | null>(null);
+  const [envProject, setEnvProject] = useState<ProjectProfile | null>(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -119,6 +121,13 @@ export function ProjectsPanel({
                   className="rounded border border-line px-2 py-1 font-mono text-[10px] text-dim hover:border-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
                 >
                   ⎇ {t('project.gitStatus')}
+                </button>
+                <button
+                  onClick={() => setEnvProject(project)}
+                  title={t('envfile.button')}
+                  className="rounded border border-line px-2 py-1 font-mono text-[10px] text-dim hover:border-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+                >
+                  🔑 {t('envfile.button')}
                 </button>
                 {project.deployTemplateId && templateName(project.deployTemplateId) && (
                   <button
@@ -251,6 +260,14 @@ export function ProjectsPanel({
           onClose={() => setHistoryProject(null)}
         />
       )}
+
+      {envProject && (
+        <EnvFileEditor
+          sessionId={envProject.sessionId}
+          project={envProject}
+          onClose={() => setEnvProject(null)}
+        />
+      )}
     </section>
   );
 }
@@ -279,6 +296,29 @@ function ProjectFormDialog({
   const [serviceNames, setServiceNames] = useState<string[]>(existing?.serviceNames ?? []);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  const [detectError, setDetectError] = useState<string | null>(null);
+
+  const detectLogs = async () => {
+    if (!path.trim()) {
+      setDetectError(t('project.path'));
+      return;
+    }
+    setDetecting(true);
+    setDetectError(null);
+    try {
+      const found = await window.ssh.projects.detectLogs(sessionId, path.trim());
+      if (found.length === 0) {
+        setDetectError(t('project.detectLogsEmpty'));
+        return;
+      }
+      setLogPaths((prev) => [...prev, ...found.filter((p) => !prev.includes(p))]);
+    } catch (err) {
+      setDetectError((err as Error).message);
+    } finally {
+      setDetecting(false);
+    }
+  };
 
   const updateEnvRow = (index: number, patch: Partial<{ key: string; value: string }>) => {
     setEnv((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -337,13 +377,13 @@ function ProjectFormDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6">
       <form
         onSubmit={(e) => void submit(e)}
-        className="w-full max-w-md rounded-lg border border-line bg-raised p-6"
+        className="flex max-h-[85vh] w-full max-w-md flex-col rounded-lg border border-line bg-raised p-6"
       >
-        <h2 className="text-sm font-semibold text-fg">
+        <h2 className="shrink-0 text-sm font-semibold text-fg">
           {existing ? t('project.edit') : t('project.add')}
         </h2>
 
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
           <div>
             <span className="mb-1.5 block text-xs text-muted">{t('project.name')}</span>
             <input
@@ -421,7 +461,18 @@ function ProjectFormDialog({
           </div>
 
           <div>
-            <span className="mb-1.5 block text-xs text-muted">{t('project.logPaths')}</span>
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="block text-xs text-muted">{t('project.logPaths')}</span>
+              <button
+                type="button"
+                onClick={() => void detectLogs()}
+                disabled={detecting}
+                className="text-[11px] text-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {detecting ? t('project.detecting') : `⌕ ${t('project.detectLogs')}`}
+              </button>
+            </div>
+            {detectError && <p className="mb-1.5 text-[11px] text-coral">{detectError}</p>}
             <div className="space-y-2">
               {logPaths.map((logPath, index) => (
                 <div key={index} className="flex items-center gap-2">
@@ -483,9 +534,9 @@ function ProjectFormDialog({
           </div>
         </div>
 
-        {error && <p className="mt-3 text-xs text-coral">{error}</p>}
+        {error && <p className="mt-3 shrink-0 text-xs text-coral">{error}</p>}
 
-        <div className="mt-5 flex justify-end gap-3">
+        <div className="mt-5 flex shrink-0 justify-end gap-3">
           <button
             type="button"
             onClick={onCancel}

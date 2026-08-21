@@ -1290,6 +1290,10 @@ button:disabled {
   background: #2496ed;
   box-shadow: 0 0 6px rgba(36, 150, 237, .45);
 }
+.aspro-workspace-tab-dot.provision {
+  background: #ff9700;
+  box-shadow: 0 0 6px rgba(255, 151, 0, .40);
+}
 .aspro-workspace-tab-dot.dashboard {
   background: #b44cff;
   box-shadow: 0 0 6px rgba(180, 76, 255, .40);

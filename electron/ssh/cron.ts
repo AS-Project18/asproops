@@ -20,8 +20,23 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-/** `@reboot`/`@daily`/... ATAU 5 field whitespace-separated, diikuti perintah. */
-const SCHEDULE_RE = /^(@\w+|(?:\S+\s+){4}\S+)\s+(.+)$/;
+/**
+ * `@reboot`/`@daily`/... ATAU 5 field jadwal cron (angka, wildcard, step,
+ * rentang, atau daftar — mis. tiap 5 menit, "1-5", "0,15,30" — BUKAN kata
+ * prosa biasa), diikuti perintah.
+ *
+ * Sengaja divalidasi per-karakter (bukan cuma "5 kata dipisah spasi") —
+ * template default /etc/crontab Debian/Ubuntu berisi paragraf penjelasan
+ * dalam komentar (mis. "Edit this file to introduce tasks to be run by
+ * cron."), dan pola 5-kata-generik lama salah mengira TIAP baris komentar
+ * itu sebagai job yang dinonaktifkan. Baris field cron sungguhan (angka/
+ * simbol) tidak akan pernah tertukar dengan kalimat bahasa Inggris biasa.
+ */
+const CRON_FIELD = '[0-9*/,-]+';
+const CRON_KEYWORD = '@(?:reboot|yearly|annually|monthly|weekly|daily|midnight|hourly)';
+const SCHEDULE_RE = new RegExp(
+  `^(${CRON_KEYWORD}|${CRON_FIELD}\\s+${CRON_FIELD}\\s+${CRON_FIELD}\\s+${CRON_FIELD}\\s+${CRON_FIELD})\\s+(.+)$`,
+);
 
 function isEnvAssignment(line: string): boolean {
   return /^[A-Za-z_][A-Za-z0-9_]*=/.test(line);

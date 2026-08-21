@@ -17,7 +17,9 @@ import {
   runAuthLogRangeQuery,
 } from './ssh/auth-log';
 import { getGitStatus, runGitAction } from './ssh/git';
-import { runDeploy, getHeadCommit, buildRollbackSteps, type DeployRunHandle } from './ssh/deploy';
+import { detectFrameworkLogs } from './ssh/framework-detect';
+import { readEnvFile, writeEnvFile } from './ssh/env-file';
+import { runDeploy, runProvision, getHeadCommit, buildRollbackSteps, type DeployRunHandle } from './ssh/deploy';
 import { trustHostKey } from './ssh/known-hosts';
 import { parseSshConfig } from './ssh/ssh-config';
 import { RemoteEditManager } from './ssh/remote-edit';
@@ -29,6 +31,7 @@ import { preferences, sftpPreferences } from './store/preferences';
 import { projects } from './store/projects';
 import { portForwardRules } from './store/port-forwards';
 import { deployHistory } from './store/deploy-history';
+import { provisionTemplates } from './store/provision-templates';
 import type {
   ContainerAction,
   DeployStep,
@@ -73,6 +76,8 @@ const shells = new Map<string, ClientChannel>();
 const logTails = new Map<string, ClientChannel>();
 /** runId -> handle proses deploy yang sedang berjalan. */
 const deployRuns = new Map<string, DeployRunHandle>();
+/** runId -> handle proses provisioning yang sedang berjalan. */
+const provisionRuns = new Map<string, DeployRunHandle>();
 /** Callback host key yang sedang menunggu jawaban pengguna. */
 const pendingHostKeys = new Map<string, (trust: boolean) => void>();
 /**
@@ -199,6 +204,17 @@ export function registerIpc(window: BrowserWindow): void {
     projects.removeProject(id);
     deployHistory.removeForProject(id);
   });
+  ipcMain.handle('projects:detectLogs', (_e, sessionId: string, path: string) =>
+    detectFrameworkLogs(connections.require(sessionId), path),
+  );
+
+  // --- Berkas .env project (bukan ProjectProfile.env untuk deploy) -----------
+  ipcMain.handle('env:read', (_e, sessionId: string, path: string) =>
+    readEnvFile(connections.require(sessionId), path),
+  );
+  ipcMain.handle('env:write', (_e, sessionId: string, path: string, content: string) =>
+    writeEnvFile(connections.require(sessionId), path, content),
+  );
 
   ipcMain.handle('templates:list', () => projects.listTemplates());
   ipcMain.handle('templates:create', (_e, input) => projects.createTemplate(input));
@@ -857,6 +873,43 @@ export function registerIpc(window: BrowserWindow): void {
   });
 
   ipcMain.handle('deploy:listHistory', (_e, projectId: string) => deployHistory.list(projectId));
+
+  // --- Provisioning server -----------------------------------------------
+  ipcMain.handle('provision:listTemplates', () => provisionTemplates.list());
+  ipcMain.handle('provision:createTemplate', (_e, input) => provisionTemplates.create(input));
+  ipcMain.handle('provision:updateTemplate', (_e, id: string, patch) =>
+    provisionTemplates.update(id, patch),
+  );
+  ipcMain.handle('provision:removeTemplate', (_e, id: string) => provisionTemplates.remove(id));
+
+  ipcMain.handle('provision:run', async (_e, sessionId: string, templateId: string) => {
+    const template = provisionTemplates.get(templateId);
+    if (!template) throw new Error('Provision template tidak ditemukan.');
+    if (template.steps.length === 0) throw new Error('Provision template ini belum punya langkah.');
+
+    const connection = connections.require(sessionId);
+    const runId = randomUUID();
+
+    const handle = runProvision(connection, template.steps, {
+      onStepStart: (stepIndex, stepLabel) =>
+        send('provision:event', { runId, type: 'stepStart', stepIndex, stepLabel }),
+      onOutput: (data) => send('provision:event', { runId, type: 'output', data }),
+      onStepEnd: (stepIndex, exitCode) =>
+        send('provision:event', { runId, type: 'stepEnd', stepIndex, exitCode }),
+      onDone: (success, message) => {
+        provisionRuns.delete(runId);
+        send('provision:event', { runId, type: 'done', success, message });
+      },
+    });
+    provisionRuns.set(runId, handle);
+
+    return runId;
+  });
+
+  ipcMain.on('provision:cancel', (_e, runId: string) => {
+    provisionRuns.get(runId)?.cancel();
+    provisionRuns.delete(runId);
+  });
 }
 
 export function shutdown(): void {
@@ -866,6 +919,8 @@ export function shutdown(): void {
   shells.clear();
   for (const handle of deployRuns.values()) handle.cancel();
   deployRuns.clear();
+  for (const handle of provisionRuns.values()) handle.cancel();
+  provisionRuns.clear();
   pendingAuthLog.clear();
   authLogPasswords.clear();
   connections.closeAll();

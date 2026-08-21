@@ -57,9 +57,15 @@ export interface DeployCallbacks {
   onDone(success: boolean, message?: string): void;
 }
 
-export function runDeploy(
+/**
+ * Inti eksekusi bersama runDeploy (di path milik Project) dan runProvision
+ * (tanpa `cd` — jalan di direktori login default, karena provisioning
+ * bukan tugas satu project tertentu). `cdPath` null berarti tidak ada
+ * prefix `cd` sama sekali.
+ */
+function runSteps(
   connection: SessionChannels,
-  path: string,
+  cdPath: string | null,
   env: Record<string, string>,
   steps: DeployStep[],
   callbacks: DeployCallbacks,
@@ -76,7 +82,10 @@ export function runDeploy(
 
       // Dibungkus subshell "(...)" supaya operator (&&, ||, ;) di dalam
       // command milik step tidak bertabrakan dengan "cd ... && " di depannya.
-      const command = `cd -- ${shellQuote(path)} && ${prefix}(${step.command}) 2>&1`;
+      const command =
+        cdPath !== null
+          ? `cd -- ${shellQuote(cdPath)} && ${prefix}(${step.command}) 2>&1`
+          : `${prefix}(${step.command}) 2>&1`;
 
       let exitCode: number;
       try {
@@ -116,4 +125,23 @@ export function runDeploy(
       currentStream?.close();
     },
   };
+}
+
+export function runDeploy(
+  connection: SessionChannels,
+  path: string,
+  env: Record<string, string>,
+  steps: DeployStep[],
+  callbacks: DeployCallbacks,
+): DeployRunHandle {
+  return runSteps(connection, path, env, steps, callbacks);
+}
+
+/** Jalankan langkah provisioning server — sama seperti runDeploy, tanpa `cd` ke path project. */
+export function runProvision(
+  connection: SessionChannels,
+  steps: DeployStep[],
+  callbacks: DeployCallbacks,
+): DeployRunHandle {
+  return runSteps(connection, null, {}, steps, callbacks);
 }

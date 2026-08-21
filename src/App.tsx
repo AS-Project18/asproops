@@ -12,10 +12,12 @@ import { LocalTerminalPanel } from './components/LocalTerminalPanel';
 import { LocalTerminalView } from './components/LocalTerminalView';
 import { LogView, ContainerLogView } from './components/LogView';
 import { DeployView } from './components/DeployView';
+import { ProvisionView } from './components/ProvisionView';
 import { ProjectsPanel } from './components/ProjectsPanel';
 import { ServicesPanel } from './components/ServicesPanel';
 import { DockerPanel } from './components/DockerPanel';
 import { CronPanel } from './components/CronPanel';
+import { ProvisionPanel } from './components/ProvisionPanel';
 import { PortForwardPanel } from './components/PortForwardPanel';
 import { GitPanel } from './components/GitPanel';
 import { AuthLogPanel } from './components/AuthLogPanel';
@@ -33,6 +35,7 @@ import type {
   LogWorkspace,
   MonitorSnapshot,
   ProjectProfile,
+  ProvisionWorkspace,
   SessionConfig,
 } from './shared/types';
 
@@ -50,6 +53,7 @@ type LeftMode =
   | 'services'
   | 'docker'
   | 'cron'
+  | 'provision'
   | 'portforward'
   | 'git'
   | 'authlog';
@@ -65,6 +69,7 @@ export default function App() {
   const [activeLogId, setActiveLogId] = useState<string | null>(null);
   const [activeDeployId, setActiveDeployId] = useState<string | null>(null);
   const [activeDockerLogId, setActiveDockerLogId] = useState<string | null>(null);
+  const [activeProvisionId, setActiveProvisionId] = useState<string | null>(null);
   /**
    * Dashboard itu tab ke-5 yang selalu ada dan tidak bisa ditutup — beda
    * dari 4 kind lain yang array-based (bisa nol atau banyak), ini cukup
@@ -79,6 +84,7 @@ export default function App() {
   const [logWorkspaces, setLogWorkspaces] = useState<LogWorkspace[]>([]);
   const [deployWorkspaces, setDeployWorkspaces] = useState<DeployWorkspace[]>([]);
   const [dockerLogWorkspaces, setDockerLogWorkspaces] = useState<DockerLogWorkspace[]>([]);
+  const [provisionWorkspaces, setProvisionWorkspaces] = useState<ProvisionWorkspace[]>([]);
   const [serviceFocus, setServiceFocus] = useState<string | null>(null);
   const [gitFocusProjectId, setGitFocusProjectId] = useState<string | null>(null);
   const [leftMode, setLeftMode] = useState<LeftMode>('servers');
@@ -164,13 +170,20 @@ export default function App() {
   const activeDeploy = deployWorkspaces.find((workspace) => workspace.id === activeDeployId) ?? null;
   const activeDockerLog =
     dockerLogWorkspaces.find((workspace) => workspace.id === activeDockerLogId) ?? null;
+  const activeProvision =
+    provisionWorkspaces.find((workspace) => workspace.id === activeProvisionId) ?? null;
   // dashboardActive OR fallback kalau ternyata tidak ada satu pun tab lain
   // yang aktif (mis. gara-gara ada state transition yang lupa menyalakan
   // dashboardActive secara eksplisit) — jangan sampai layar workspace
   // kosong sama sekali tanpa tab manapun yang kelihatan aktif.
   const showDashboard =
     dashboardActive ||
-    (!activeSession && !activeLocal && !activeLog && !activeDeploy && !activeDockerLog);
+    (!activeSession &&
+      !activeLocal &&
+      !activeLog &&
+      !activeDeploy &&
+      !activeDockerLog &&
+      !activeProvision);
   const connectedCount = useMemo(
     () => Object.values(statuses).filter((status) => status === 'connected').length,
     [statuses],
@@ -219,6 +232,7 @@ export default function App() {
     setActiveLogId(null);
     setActiveDeployId(null);
     setActiveDockerLogId(null);
+    setActiveProvisionId(null);
     setDashboardActive(true);
   };
 
@@ -227,6 +241,7 @@ export default function App() {
     setActiveLogId(null);
     setActiveDeployId(null);
     setActiveDockerLogId(null);
+    setActiveProvisionId(null);
     setDashboardActive(false);
     setActiveId(id);
   };
@@ -236,6 +251,7 @@ export default function App() {
     setActiveLogId(null);
     setActiveDeployId(null);
     setActiveDockerLogId(null);
+    setActiveProvisionId(null);
     setDashboardActive(false);
     setActiveId(id);
   };
@@ -244,6 +260,7 @@ export default function App() {
     setActiveLogId(null);
     setActiveDeployId(null);
     setActiveDockerLogId(null);
+    setActiveProvisionId(null);
     setDashboardActive(false);
     setActiveLocalId(workspaceId);
   };
@@ -253,6 +270,7 @@ export default function App() {
     setActiveId(null);
     setActiveDeployId(null);
     setActiveDockerLogId(null);
+    setActiveProvisionId(null);
     setDashboardActive(false);
     setActiveLogId(workspaceId);
   };
@@ -262,6 +280,7 @@ export default function App() {
     setActiveId(null);
     setActiveLogId(null);
     setActiveDockerLogId(null);
+    setActiveProvisionId(null);
     setDashboardActive(false);
     setActiveDeployId(workspaceId);
   };
@@ -271,8 +290,19 @@ export default function App() {
     setActiveId(null);
     setActiveLogId(null);
     setActiveDeployId(null);
+    setActiveProvisionId(null);
     setDashboardActive(false);
     setActiveDockerLogId(workspaceId);
+  };
+
+  const activateProvisionWorkspace = (workspaceId: string) => {
+    setActiveLocalId(null);
+    setActiveId(null);
+    setActiveLogId(null);
+    setActiveDeployId(null);
+    setActiveDockerLogId(null);
+    setDashboardActive(false);
+    setActiveProvisionId(workspaceId);
   };
 
   const handleConnect = (id: string) => {
@@ -281,6 +311,7 @@ export default function App() {
     setActiveLogId(null);
     setActiveDeployId(null);
     setActiveDockerLogId(null);
+    setActiveProvisionId(null);
     setDashboardActive(false);
     setActiveId(id);
     void connect(id);
@@ -302,6 +333,7 @@ export default function App() {
     setActiveLogId(null);
     setActiveDeployId(null);
     setActiveDockerLogId(null);
+    setActiveProvisionId(null);
     setDashboardActive(false);
     setActiveLocalId(workspace.id);
     setLeftMode('local');
@@ -325,6 +357,7 @@ export default function App() {
     setActiveId(null);
     setActiveDeployId(null);
     setActiveDockerLogId(null);
+    setActiveProvisionId(null);
     setDashboardActive(false);
     setActiveLogId(workspace.id);
   };
@@ -355,8 +388,33 @@ export default function App() {
     setActiveId(null);
     setActiveLogId(null);
     setActiveDeployId(null);
+    setActiveProvisionId(null);
     setDashboardActive(false);
     setActiveDockerLogId(workspace.id);
+  };
+
+  /**
+   * Dipanggil dari ProvisionPanel setelah pengguna konfirmasi menjalankan
+   * provision template. Sama seperti openDeployView: selalu bikin tab baru
+   * (tidak dedup) — tiap run provisioning itu proses sekali-jalan yang
+   * independen.
+   */
+  const openProvisionView = (sessionId: string, templateId: string, templateName: string) => {
+    const workspace: ProvisionWorkspace = {
+      id: crypto.randomUUID(),
+      sessionId,
+      templateId,
+      templateName,
+      createdAt: Date.now(),
+    };
+    setProvisionWorkspaces((current) => [...current, workspace]);
+    setActiveLocalId(null);
+    setActiveId(null);
+    setActiveLogId(null);
+    setActiveDeployId(null);
+    setActiveDockerLogId(null);
+    setDashboardActive(false);
+    setActiveProvisionId(workspace.id);
   };
 
   /**
@@ -396,6 +454,7 @@ export default function App() {
     setActiveId(null);
     setActiveLogId(null);
     setActiveDockerLogId(null);
+    setActiveProvisionId(null);
     setDashboardActive(false);
     setActiveDeployId(workspace.id);
   };
@@ -416,6 +475,7 @@ export default function App() {
     setActiveId(null);
     setActiveLogId(null);
     setActiveDockerLogId(null);
+    setActiveProvisionId(null);
     setDashboardActive(false);
     setActiveDeployId(workspace.id);
   };
@@ -441,7 +501,11 @@ export default function App() {
             else {
               const lastDockerLog = dockerLogWorkspaces.at(-1);
               if (lastDockerLog) setActiveDockerLogId(lastDockerLog.id);
-              else setDashboardActive(true);
+              else {
+                const lastProvision = provisionWorkspaces.at(-1);
+                if (lastProvision) setActiveProvisionId(lastProvision.id);
+                else setDashboardActive(true);
+              }
             }
           }
         }
@@ -475,7 +539,11 @@ export default function App() {
             else {
               const lastDockerLog = dockerLogWorkspaces.at(-1);
               if (lastDockerLog) setActiveDockerLogId(lastDockerLog.id);
-              else setDashboardActive(true);
+              else {
+                const lastProvision = provisionWorkspaces.at(-1);
+                if (lastProvision) setActiveProvisionId(lastProvision.id);
+                else setDashboardActive(true);
+              }
             }
           }
         }
@@ -504,7 +572,11 @@ export default function App() {
             else {
               const lastDockerLog = dockerLogWorkspaces.at(-1);
               if (lastDockerLog) setActiveDockerLogId(lastDockerLog.id);
-              else setDashboardActive(true);
+              else {
+                const lastProvision = provisionWorkspaces.at(-1);
+                if (lastProvision) setActiveProvisionId(lastProvision.id);
+                else setDashboardActive(true);
+              }
             }
           }
         }
@@ -533,7 +605,11 @@ export default function App() {
             else {
               const lastDockerLog = dockerLogWorkspaces.at(-1);
               if (lastDockerLog) setActiveDockerLogId(lastDockerLog.id);
-              else setDashboardActive(true);
+              else {
+                const lastProvision = provisionWorkspaces.at(-1);
+                if (lastProvision) setActiveProvisionId(lastProvision.id);
+                else setDashboardActive(true);
+              }
             }
           }
         }
@@ -562,7 +638,44 @@ export default function App() {
             else {
               const lastDeploy = deployWorkspaces.at(-1);
               if (lastDeploy) setActiveDeployId(lastDeploy.id);
-              else setDashboardActive(true);
+              else {
+                const lastProvision = provisionWorkspaces.at(-1);
+                if (lastProvision) setActiveProvisionId(lastProvision.id);
+                else setDashboardActive(true);
+              }
+            }
+          }
+        }
+      }
+    }
+  };
+
+  const closeProvisionView = (workspaceId: string) => {
+    const remaining = provisionWorkspaces.filter((item) => item.id !== workspaceId);
+    setProvisionWorkspaces(remaining);
+
+    if (activeProvisionId === workspaceId) {
+      const nextProvision = remaining.at(-1);
+      if (nextProvision) {
+        setActiveProvisionId(nextProvision.id);
+      } else {
+        setActiveProvisionId(null);
+        const lastLocal = localWorkspaces.at(-1);
+        if (lastLocal) setActiveLocalId(lastLocal.id);
+        else {
+          const lastRemote = openSessions.at(-1);
+          if (lastRemote) setActiveId(lastRemote);
+          else {
+            const lastLog = logWorkspaces.at(-1);
+            if (lastLog) setActiveLogId(lastLog.id);
+            else {
+              const lastDeploy = deployWorkspaces.at(-1);
+              if (lastDeploy) setActiveDeployId(lastDeploy.id);
+              else {
+                const lastDockerLog = dockerLogWorkspaces.at(-1);
+                if (lastDockerLog) setActiveDockerLogId(lastDockerLog.id);
+                else setDashboardActive(true);
+              }
             }
           }
         }
@@ -716,6 +829,12 @@ export default function App() {
             onClick={() => selectLeftMode('cron')}
           />
           <RailButton
+            active={leftMode === 'provision'}
+            icon="⚒"
+            label={t('nav.provision')}
+            onClick={() => selectLeftMode('provision')}
+          />
+          <RailButton
             active={leftMode === 'portforward'}
             icon="⇌"
             label={t('nav.portforward')}
@@ -848,6 +967,16 @@ export default function App() {
 
                 <div
                   className={
+                    leftMode === 'provision'
+                      ? 'absolute inset-0'
+                      : 'pointer-events-none invisible absolute inset-0'
+                  }
+                >
+                  <ProvisionPanel sessionId={activeSession.id} onOpenRun={openProvisionView} />
+                </div>
+
+                <div
+                  className={
                     leftMode === 'portforward'
                       ? 'absolute inset-0'
                       : 'pointer-events-none invisible absolute inset-0'
@@ -883,6 +1012,7 @@ export default function App() {
                 leftMode === 'services' ||
                 leftMode === 'docker' ||
                 leftMode === 'cron' ||
+                leftMode === 'provision' ||
                 leftMode === 'portforward' ||
                 leftMode === 'git' ||
                 leftMode === 'authlog') && (
@@ -898,13 +1028,15 @@ export default function App() {
                             ? '⬢'
                             : leftMode === 'cron'
                               ? '◷'
-                              : leftMode === 'portforward'
-                                ? '⇌'
-                                : leftMode === 'git'
-                                  ? '⎇'
-                                  : leftMode === 'authlog'
-                                    ? '⚿'
-                                    : '▣'}
+                              : leftMode === 'provision'
+                                ? '⚒'
+                                : leftMode === 'portforward'
+                                  ? '⇌'
+                                  : leftMode === 'git'
+                                    ? '⎇'
+                                    : leftMode === 'authlog'
+                                      ? '⚿'
+                                      : '▣'}
                   </div>
                   <strong>
                     {leftMode === 'files'
@@ -917,10 +1049,12 @@ export default function App() {
                             ? t('placeholder.docker')
                             : leftMode === 'cron'
                               ? t('placeholder.cron')
-                              : leftMode === 'portforward'
-                                ? t('placeholder.portforward')
-                                : leftMode === 'git'
-                                  ? t('placeholder.git')
+                              : leftMode === 'provision'
+                                ? t('placeholder.provision')
+                                : leftMode === 'portforward'
+                                  ? t('placeholder.portforward')
+                                  : leftMode === 'git'
+                                    ? t('placeholder.git')
                                   : leftMode === 'authlog'
                                     ? t('placeholder.authlog')
                                     : t('placeholder.projects')}
@@ -1151,6 +1285,42 @@ export default function App() {
               );
             })}
 
+            {provisionWorkspaces.map((workspace) => {
+              const isActive = activeProvisionId === workspace.id;
+
+              return (
+                <button
+                  key={`provision:${workspace.id}`}
+                  className={`aspro-workspace-tab ${isActive ? 'active' : ''}`}
+                  onClick={() => activateProvisionWorkspace(workspace.id)}
+                  title={workspace.templateName}
+                >
+                  <span className="aspro-workspace-tab-dot provision" />
+                  <span className="truncate">{workspace.templateName}</span>
+                  <span className="aspro-workspace-tab-kind">SETUP</span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="aspro-workspace-tab-close"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      closeProvisionView(workspace.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        closeProvisionView(workspace.id);
+                      }
+                    }}
+                    title="Tutup provisioning"
+                  >
+                    ×
+                  </span>
+                </button>
+              );
+            })}
+
           </div>
 
           <div className="aspro-session-header">
@@ -1201,6 +1371,29 @@ export default function App() {
                 <div className="ml-auto">
                   <button
                     onClick={() => closeDockerLogView(activeDockerLog.id)}
+                    className="aspro-button aspro-button-danger"
+                  >
+                    {t('workspace.close')}
+                  </button>
+                </div>
+              </>
+            ) : activeProvision ? (
+              <>
+                <div className="aspro-live-dot online" />
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-fg">
+                    {activeProvision.templateName}
+                  </div>
+                  <div className="truncate font-mono text-[12px] text-faint">
+                    {t('nav.provision')}
+                  </div>
+                </div>
+                <span className="aspro-local-chip">SETUP</span>
+                <span className="aspro-status-chip connected">{t('workspace.active')}</span>
+
+                <div className="ml-auto">
+                  <button
+                    onClick={() => closeProvisionView(activeProvision.id)}
                     className="aspro-button aspro-button-danger"
                   >
                     {t('workspace.close')}
@@ -1407,6 +1600,24 @@ export default function App() {
               </div>
             ))}
 
+            {provisionWorkspaces.map((workspace) => (
+              <div
+                key={workspace.id}
+                className={
+                  workspace.id === activeProvisionId
+                    ? 'absolute inset-0'
+                    : 'pointer-events-none invisible absolute inset-0'
+                }
+              >
+                <ProvisionView
+                  sessionId={workspace.sessionId}
+                  templateId={workspace.templateId}
+                  active={workspace.id === activeProvisionId}
+                  onExit={() => closeProvisionView(workspace.id)}
+                />
+              </div>
+            ))}
+
             <div
               className={
                 showDashboard ? 'absolute inset-0' : 'pointer-events-none invisible absolute inset-0'
@@ -1415,7 +1626,7 @@ export default function App() {
               <Dashboard sessions={sessions} statuses={statuses} onOpen={handleSelectRemote} />
             </div>
 
-            {showDashboard || activeLog || activeLocal || activeDeploy || activeDockerLog ? null : loading ? (
+            {showDashboard || activeLog || activeLocal || activeDeploy || activeDockerLog || activeProvision ? null : loading ? (
               <WorkspacePlaceholder
                 icon="⌁"
                 title={t('workspace.loadingServers')}
@@ -1474,6 +1685,12 @@ export default function App() {
             <span className="text-mint">● {activeDockerLog.containerName}</span>
             <span className="aspro-divider" />
             <span>DOCKER</span>
+          </>
+        ) : activeProvision ? (
+          <>
+            <span className="text-mint">● {activeProvision.templateName}</span>
+            <span className="aspro-divider" />
+            <span>SETUP</span>
           </>
         ) : activeLog ? (
           <>

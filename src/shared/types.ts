@@ -275,6 +275,12 @@ export interface GitStatus {
 
 export type GitAction = 'fetch' | 'pull';
 
+/** Isi mentah berkas .env project di server — di-parse/diserialisasi di renderer, lihat electron/ssh/env-file.ts. */
+export interface EnvFileResult {
+  exists: boolean;
+  content: string;
+}
+
 export interface DeployStep {
   id: string;
   /** Label yang ditampilkan di UI, mis. "Install dependencies". */
@@ -317,6 +323,42 @@ export interface DeployWorkspace {
   createdAt: number;
   /** Kalau terisi, tab ini menjalankan rollback ke entri riwayat ini, bukan deploy baru. */
   rollbackEntryId?: string;
+}
+
+/**
+ * Rangkaian langkah provisioning server (install Docker, tools dasar, dst.)
+ * — beda dari DeployTemplate: dijalankan langsung di session, TIDAK terikat
+ * ke Project/path manapun, karena tugasnya menyiapkan server itu sendiri,
+ * bukan men-deploy satu aplikasi. Struktur step-nya sengaja sama (DeployStep)
+ * supaya UI editornya bisa reuse pola yang sama dengan DeployTemplatesSettings.
+ */
+export interface ProvisionTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  steps: DeployStep[];
+  createdAt: number;
+}
+
+/** Event streaming satu proses provisioning — bentuk sama dengan DeployRunEvent, channel & runId-nya terpisah. */
+export interface ProvisionRunEvent {
+  runId: string;
+  type: 'stepStart' | 'output' | 'stepEnd' | 'done';
+  stepIndex?: number;
+  stepLabel?: string;
+  data?: string;
+  exitCode?: number;
+  success?: boolean;
+  message?: string;
+}
+
+/** Satu tab provisioning yang sedang berjalan/baru selesai di workspace. */
+export interface ProvisionWorkspace {
+  id: string;
+  sessionId: string;
+  templateId: string;
+  templateName: string;
+  createdAt: number;
 }
 
 /**

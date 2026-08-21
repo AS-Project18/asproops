@@ -12,6 +12,7 @@ import type {
   DeployRunEvent,
   DeployTemplate,
   DockerContainerInfo,
+  EnvFileResult,
   GitAction,
   GitStatus,
   LocalTerminalProfile,
@@ -19,6 +20,8 @@ import type {
   PortForwardRule,
   PortForwardStatus,
   ProjectProfile,
+  ProvisionRunEvent,
+  ProvisionTemplate,
   RemoteFile,
   ServiceAction,
   ServiceInfo,
@@ -84,6 +87,8 @@ const api = {
   },
 
   projects: {
+    detectLogs: (sessionId: string, path: string): Promise<string[]> =>
+      ipcRenderer.invoke('projects:detectLogs', sessionId, path),
     list: (sessionId: string): Promise<ProjectProfile[]> =>
       ipcRenderer.invoke('projects:list', sessionId),
     create: (
@@ -298,6 +303,13 @@ const api = {
       ipcRenderer.invoke('git:action', sessionId, path, action),
   },
 
+  env: {
+    read: (sessionId: string, path: string): Promise<EnvFileResult> =>
+      ipcRenderer.invoke('env:read', sessionId, path),
+    write: (sessionId: string, path: string, content: string): Promise<void> =>
+      ipcRenderer.invoke('env:write', sessionId, path, content),
+  },
+
   deploy: {
     run: (sessionId: string, projectId: string): Promise<string> =>
       ipcRenderer.invoke('deploy:run', sessionId, projectId),
@@ -309,6 +321,22 @@ const api = {
       ipcRenderer.invoke('deploy:listHistory', projectId),
     onHistoryChanged: (handler: (projectId: string) => void) =>
       subscribe('deploy:historyChanged', handler),
+  },
+
+  provision: {
+    listTemplates: (): Promise<ProvisionTemplate[]> =>
+      ipcRenderer.invoke('provision:listTemplates'),
+    createTemplate: (input: Pick<ProvisionTemplate, 'name' | 'description'>): Promise<ProvisionTemplate> =>
+      ipcRenderer.invoke('provision:createTemplate', input),
+    updateTemplate: (
+      id: string,
+      patch: Partial<Pick<ProvisionTemplate, 'name' | 'description' | 'steps'>>,
+    ): Promise<ProvisionTemplate | undefined> => ipcRenderer.invoke('provision:updateTemplate', id, patch),
+    removeTemplate: (id: string) => ipcRenderer.invoke('provision:removeTemplate', id),
+    run: (sessionId: string, templateId: string): Promise<string> =>
+      ipcRenderer.invoke('provision:run', sessionId, templateId),
+    cancel: (runId: string) => ipcRenderer.send('provision:cancel', runId),
+    onEvent: (handler: (event: ProvisionRunEvent) => void) => subscribe('provision:event', handler),
   },
 };
 
