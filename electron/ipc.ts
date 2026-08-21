@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join, parse as parsePath } from 'node:path';
-import { dialog, ipcMain, type BrowserWindow } from 'electron';
+import { app, dialog, ipcMain, shell, type BrowserWindow } from 'electron';
 import type { ClientChannel } from 'ssh2';
 
+import { checkForUpdate } from './update-check';
 import { ConnectionManager, type SshConnection } from './ssh/connection-manager';
 import { RemoteMonitor } from './ssh/monitor';
 import { listServices, runServiceAction } from './ssh/services';
@@ -116,6 +117,11 @@ export function registerIpc(window: BrowserWindow): void {
     (terminalId, data) => send('local:data', { terminalId, data }),
     (terminalId, exitCode) => send('local:close', { terminalId, exitCode }),
   );
+
+  // --- Aplikasi ---------------------------------------------------------------
+  ipcMain.handle('app:getVersion', () => app.getVersion());
+  ipcMain.handle('app:checkUpdate', () => checkForUpdate());
+  ipcMain.handle('app:openExternal', (_e, url: string) => shell.openExternal(url));
 
   // --- Kunci aplikasi -------------------------------------------------------
   ipcMain.handle('applock:status', () => appLock.status());

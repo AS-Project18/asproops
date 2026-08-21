@@ -281,6 +281,15 @@ export interface EnvFileResult {
   content: string;
 }
 
+/** Hasil cek versi terbaru lewat GitHub Releases — lihat electron/update-check.ts. */
+export interface UpdateCheckResult {
+  currentVersion: string;
+  latestVersion?: string;
+  hasUpdate: boolean;
+  releaseUrl?: string;
+  error?: string;
+}
+
 export interface DeployStep {
   id: string;
   /** Label yang ditampilkan di UI, mis. "Install dependencies". */

@@ -28,6 +28,7 @@ import type {
   SessionConfig,
   Secret,
   TransferProgress,
+  UpdateCheckResult,
 } from '../src/shared/types';
 
 /**
@@ -59,6 +60,12 @@ const api = {
   // renderer perlu jembatan ini untuk drag-and-drop file ke terminal.
   file: {
     getPathForFile: (file: File): string => webUtils.getPathForFile(file),
+  },
+
+  app: {
+    getVersion: (): Promise<string> => ipcRenderer.invoke('app:getVersion'),
+    checkUpdate: (): Promise<UpdateCheckResult> => ipcRenderer.invoke('app:checkUpdate'),
+    openExternal: (url: string): Promise<void> => ipcRenderer.invoke('app:openExternal', url),
   },
 
   appLock: {

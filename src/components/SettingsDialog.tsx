@@ -3,6 +3,7 @@ import { useI18n, type AppLanguage } from '../i18n';
 import { useTerminalPrefs, type CursorStyle } from '../terminalPrefs';
 import { DeployTemplatesSettings } from './DeployTemplatesSettings';
 import type { SshPreferences, SftpPreferences, ConflictPolicy } from '../../electron/store/preferences';
+import type { UpdateCheckResult } from '../shared/types';
 
 interface SettingsDialogProps {
   onClose: () => void;
@@ -114,6 +115,17 @@ export function SettingsDialog({ onClose }: SettingsDialogProps) {
             </div>
             <DeployTemplatesSettings />
           </section>
+
+          <section className="aspro-settings-section">
+            <div className="aspro-settings-section-heading">
+              <span>ℹ</span>
+              <div>
+                <strong>{t('settings.about')}</strong>
+                <small>{t('settings.aboutDesc')}</small>
+              </div>
+            </div>
+            <AboutSettings />
+          </section>
         </div>
 
         <footer className="aspro-settings-footer">
@@ -148,6 +160,80 @@ function LanguageButton({
       <span>{language === 'id' ? 'ID' : 'EN'}</span>
       {label}
     </button>
+  );
+}
+
+function AboutSettings() {
+  const { t } = useI18n();
+  const [version, setVersion] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState<UpdateCheckResult | null>(null);
+
+  useEffect(() => {
+    void window.ssh.app.getVersion().then(setVersion);
+  }, []);
+
+  const checkUpdate = async () => {
+    setChecking(true);
+    setResult(null);
+    try {
+      setResult(await window.ssh.app.checkUpdate());
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="aspro-setting-row">
+        <div>
+          <strong>ASProOps</strong>
+          <small>{t('settings.currentVersion', { version: version ?? '…' })}</small>
+        </div>
+        <button
+          type="button"
+          onClick={() => void checkUpdate()}
+          disabled={checking}
+          className="aspro-button aspro-button-secondary compact shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {checking ? t('settings.checkingUpdate') : t('settings.checkUpdate')}
+        </button>
+      </div>
+
+      {result && (
+        <div className="aspro-setting-row">
+          <div>
+            {result.error ? (
+              <>
+                <strong className="text-coral">{t('settings.updateCheckFailed')}</strong>
+                <small>{result.error}</small>
+              </>
+            ) : result.hasUpdate ? (
+              <>
+                <strong className="text-mint">
+                  {t('settings.updateAvailable', { version: result.latestVersion ?? '' })}
+                </strong>
+                <small>{t('settings.updateAvailableDesc')}</small>
+              </>
+            ) : (
+              <>
+                <strong>{t('settings.upToDate')}</strong>
+                <small>{t('settings.upToDateDesc')}</small>
+              </>
+            )}
+          </div>
+          {result.hasUpdate && result.releaseUrl && (
+            <button
+              type="button"
+              onClick={() => void window.ssh.app.openExternal(result.releaseUrl!)}
+              className="aspro-button aspro-button-primary compact shrink-0"
+            >
+              {t('settings.openRelease')}
+            </button>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
