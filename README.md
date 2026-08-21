@@ -10,9 +10,9 @@
   <strong>Developer & Server Operations Workspace — SSH, SFTP, deployment, dan monitoring server dalam satu aplikasi desktop.</strong>
 </p>
 
-ASProOps adalah aplikasi desktop berbasis Electron yang dirancang sebagai satu workspace untuk pekerjaan administrasi server dan operasi developer. Satu aplikasi menangani sesi SSH, terminal lokal Windows, distro WSL, browser file SFTP, remote editing, monitoring resource server, sampai alur DevOps — project profile, live log viewer, service manager, status Git, dan eksekusi deploy template — tanpa harus berpindah-pindah tool.
+ASProOps adalah aplikasi desktop berbasis Electron yang dirancang sebagai satu workspace untuk pekerjaan administrasi server dan operasi developer. Satu aplikasi menangani sesi SSH, terminal lokal Windows, distro WSL, browser file SFTP, remote editing, monitoring resource server, sampai alur DevOps lengkap — project profile, live log viewer, service manager, Docker, cron job, status Git, deploy template dengan riwayat/rollback, provisioning server, port forwarding, dan editor `.env` — tanpa harus berpindah-pindah tool.
 
-> **Status project:** aktif dikembangkan. Versi source saat ini `1.1.2`. Installer Windows (`.exe`) sudah bisa dibuat lewat `npm run dist:win`, tapi belum ditandatangani (code signing) dan belum punya auto-update — lihat [Installer / Release Binary](#installer--release-binary).
+> **Status project:** aktif dikembangkan. Versi source saat ini `1.2.0`. Installer Windows (`.exe`) sudah bisa dibuat lewat `npm run dist:win`, tapi belum ditandatangani (code signing) dan belum punya auto-update (unduh+pasang otomatis) — pengecekan versi terbaru sudah tersedia lewat **Settings → Tentang**, lihat [Installer / Release Binary](#installer--release-binary).
 
 ---
 
@@ -40,11 +40,16 @@ ASProOps adalah aplikasi desktop berbasis Electron yang dirancang sebagai satu w
 
 **DevOps workspace**
 
-- **Project Profile** — tandai satu working directory di server (path, environment variables) sebagai basis fitur di bawah ini.
+- **Project Profile** — tandai satu working directory di server (path, environment variables) sebagai basis fitur di bawah ini, dengan deteksi log Laravel/CodeIgniter 4 otomatis (`storage/logs/`, `writable/logs/`).
 - **Live Log Viewer** — `tail -F` streaming dengan pewarnaan otomatis (level log, timestamp, IP), pengelompokan blok multi-baris (stack trace), filter baris, dan pencarian.
+- **Editor `.env`** — sunting variabel `.env` sungguhan di root project langsung dari UI (terpisah dari environment variables ASProOps sendiri), dengan value ter-mask secara default.
 - **Service Manager** — daftar unit systemd, start/stop/restart dengan konfirmasi untuk aksi yang mengganggu.
+- **Docker Manager** — daftar container (`docker ps -a`), start/stop/restart, dan live log viewer per container.
+- **Cron Job Manager** — baca/tulis crontab milik user SSH yang login: tambah/ubah/hapus/nonaktifkan job, dengan parser yang tahan terhadap komentar dokumentasi bawaan `/etc/crontab`.
+- **Server Provisioning** — jalankan template setup server (install Docker, Node.js/NVM, PHP+Composer, MySQL, Nginx, update sistem) satu klik di server manapun, dengan output live.
+- **Port Forwarding** — local (`-L`) dan remote (`-R`) SSH tunnel, kelola beberapa aturan tersimpan per server dengan status tunnel real-time.
 - **Git Panel** — status branch, ahead/behind, file berubah, commit terakhir, fetch/pull langsung dari path project.
-- **Deploy Template & eksekusi** — rangkaian langkah deploy yang bisa dipasangkan ke banyak server; empat template bawaan (CodeIgniter 4, Laravel, Vue, NestJS) tersedia langsung. Eksekusi berhenti otomatis begitu satu langkah gagal, dengan output live dan tombol batal.
+- **Deploy Template, riwayat, & rollback** — rangkaian langkah deploy yang bisa dipasangkan ke banyak server; enam template bawaan (CodeIgniter 4, Laravel, Vue, NestJS, plus template Provisioning PHP/MySQL/Nginx/Docker/Node.js) tersedia langsung. Eksekusi berhenti otomatis begitu satu langkah gagal, dengan output live dan tombol batal. Setiap run tercatat di riwayat per project (commit git, sukses/gagal), dan bisa di-**rollback** ke commit sebelumnya satu klik.
 
 **Keamanan & preferensi**
 
@@ -52,6 +57,7 @@ ASProOps adalah aplikasi desktop berbasis Electron yang dirancang sebagai satu w
 - Kunci aplikasi (PIN) opsional, dengan kunci otomatis setelah sekian menit tanpa aktivitas (bisa dimatikan), plus tombol kunci manual di header.
 - Session persistence dan kredensial terenkripsi menggunakan Electron `safeStorage`.
 - Preferensi SSH (timeout, keepalive, auto-reconnect), Terminal (font, scrollback, cursor), dan SFTP (folder unduhan, kebijakan konflik) bisa diatur di Settings.
+- **Cek Update** — Settings → Tentang menampilkan versi aplikasi yang sedang berjalan dan bisa mengecek rilis terbaru di GitHub Releases, dengan link langsung ke halaman unduhan kalau ada versi baru.
 - Sidebar kiri bisa disembunyikan/ditampilkan untuk memperluas area kerja.
 - Bahasa Indonesia dan English (default: English).
 
@@ -91,7 +97,7 @@ Fitur terminal lokal bergantung pada tool Windows:
 
 Koneksi SSH/SFTP sendiri tidak bergantung pada WSL.
 
-Monitoring, Log Viewer, Service Manager, Git Panel, dan Deploy membaca/menjalankan perintah lewat SSH di server target, sehingga ditujukan untuk **server Linux**.
+Monitoring, Log Viewer, Service Manager, Docker Manager, Cron Job Manager, Provisioning, Git Panel, dan Deploy membaca/menjalankan perintah lewat SSH di server target, sehingga ditujukan untuk **server Linux**. Docker Manager butuh Docker terpasang di server target, dan template Provisioning bawaan mengasumsikan distro berbasis Debian/Ubuntu (`apt-get`) — bisa diedit bebas untuk distro lain.
 
 ---
 
@@ -213,6 +219,7 @@ asproops/
 │   ├── ipc.ts
 │   ├── app-lock.ts
 │   ├── local-terminal.ts
+│   ├── update-check.ts
 │   ├── ssh/
 │   │   ├── connection-manager.ts
 │   │   ├── known-hosts.ts
@@ -220,12 +227,21 @@ asproops/
 │   │   ├── remote-edit.ts
 │   │   ├── ssh-config.ts
 │   │   ├── services.ts
+│   │   ├── docker.ts
+│   │   ├── cron.ts
+│   │   ├── port-forward.ts
 │   │   ├── git.ts
-│   │   └── deploy.ts
+│   │   ├── deploy.ts
+│   │   ├── env-file.ts
+│   │   ├── auth-log.ts
+│   │   └── framework-detect.ts
 │   └── store/
 │       ├── sessions.ts
 │       ├── preferences.ts
-│       └── projects.ts
+│       ├── projects.ts
+│       ├── deploy-history.ts
+│       ├── provision-templates.ts
+│       └── port-forwards.ts
 ├── scripts/
 │   ├── dev.mjs
 │   └── rebuild-native.mjs
@@ -236,7 +252,9 @@ asproops/
 │   │   ├── TerminalView.tsx, LocalTerminalView.tsx, TerminalTabs.tsx
 │   │   ├── FileBrowser.tsx
 │   │   ├── MonitorPanel.tsx
-│   │   ├── ProjectsPanel.tsx, LogView.tsx, ServicesPanel.tsx, GitPanel.tsx, DeployView.tsx
+│   │   ├── ProjectsPanel.tsx, EnvFileEditor.tsx, LogView.tsx, ServicesPanel.tsx
+│   │   ├── DockerPanel.tsx, CronPanel.tsx, ProvisionPanel.tsx, ProvisionView.tsx
+│   │   ├── PortForwardPanel.tsx, GitPanel.tsx, DeployView.tsx, DeployHistoryModal.tsx
 │   │   ├── QuickConnectPalette.tsx, ContextMenu.tsx
 │   │   ├── AppLockGate.tsx, SettingsDialog.tsx
 │   │   └── ...
@@ -390,13 +408,19 @@ Bisa juga lihat histori tanggal lain (Hari ini/Kemarin/7 hari/pilih tanggal), le
 
 ---
 
-## DevOps: Project, Log Viewer, Service Manager, Git, dan Deploy
+## DevOps: Project, Log Viewer, Docker, Cron, Provisioning, Git, dan Deploy
 
-Kelima panel ini dibangun berurutan sebagai satu alur kerja DevOps di dalam aplikasi:
+Panel-panel ini dibangun sebagai satu alur kerja DevOps di dalam aplikasi, semuanya berjalan lewat koneksi SSH yang sama tanpa channel/kredensial tambahan:
 
 ### Project Profile
 
 Panel **Projects** menandai satu working directory di server (path absolut + environment variables) sebagai basis fitur-fitur berikutnya. Satu project bisa dipasangkan ke satu Deploy Template, dan menyimpan daftar log path serta nama service systemd yang relevan.
+
+Tombol **Deteksi otomatis** di form project mencari log Laravel (`storage/logs/`) dan CodeIgniter 4 (`writable/logs/`) — file apa pun yang dimodifikasi dalam 30 hari terakhir, tanpa terpaku pada pola nama tertentu (mendukung nama log custom), lalu menambahkannya ke daftar log project.
+
+### Editor `.env`
+
+Tombol **.env** pada tiap project membuka editor key-value untuk berkas `.env` sungguhan di root project (dibaca langsung oleh Laravel/CodeIgniter 4 saat runtime) — beda dari environment variables di form project yang cuma dipakai ASProOps sendiri saat menjalankan deploy. Semua value ter-mask secara default (toggle untuk menampilkan), dan baris komentar/kosong di `.env` asli tetap dipertahankan persis saat disimpan ulang.
 
 ### Live Log Viewer
 
@@ -411,15 +435,33 @@ Buka lewat chip log di panel Projects. Menjalankan `tail -F` dan menampilkannya 
 
 Panel **Services** menampilkan unit systemd di server yang sedang aktif, dengan pencarian, toggle tampilkan-semua, dan aksi start/stop/restart. Menghentikan service meminta konfirmasi terlebih dahulu.
 
+### Docker Manager
+
+Panel **Docker** menampilkan container (`docker ps -a`) di server yang sedang aktif — nama, image, status — dengan start/stop/restart dan tombol **Lihat log** yang membuka tab live log streaming per container (search/filter/pewarnaan sama seperti Live Log Viewer). Aksi container mencoba akses langsung lebih dulu, lalu fallback `sudo -n` kalau user belum di grup `docker`.
+
+### Cron Job Manager
+
+Panel **Cron** membaca/menulis crontab milik user SSH yang sedang login (`crontab -l`/`crontab -`, bukan `-u` user lain). Tambah, ubah, hapus, atau nonaktifkan (comment-out) job langsung dari UI. Parser jadwalnya divalidasi per-karakter supaya paragraf komentar dokumentasi bawaan `/etc/crontab` (mis. template default Debian/Ubuntu) tidak salah terbaca sebagai job.
+
+### Server Provisioning
+
+Panel **Provisioning** menjalankan template setup server (rangkaian langkah shell, sama strukturnya dengan Deploy Template) langsung di session aktif — tidak terikat ke Project/path manapun. Template bawaan: **Update & Tools Dasar**, **Install Docker**, **Install Node.js (NVM)**, **Install PHP (+ Composer)**, **Install MySQL**, **Install Nginx**. Sengaja tidak ada template bawaan yang mengubah SSH/firewall/akun (disable password auth, `ufw enable`, dst.) karena itu jenis perubahan yang bisa mengunci akses ke server sendiri kalau salah — bisa ditambahkan sendiri lewat editor step kalau diperlukan.
+
+### Port Forwarding
+
+Panel **Port Forward** mengelola SSH tunnel **local** (`-L`, port di komputer Anda diteruskan ke host/port yang dilihat dari server — mis. akses database yang cuma listen di `127.0.0.1` server) dan **remote** (`-R`, server membuka port yang meneruskan balik ke komputer Anda). Aturan tersimpan per server, status tunnel (aktif/error/berhenti) ditampilkan real-time, dan tunnel otomatis berhenti saat server disconnect atau aplikasi ditutup.
+
 ### Git Panel
 
 Panel **Git** membaca status repo (branch, upstream, ahead/behind, commit terakhir, file yang berubah) dari path sebuah project, dan menyediakan fetch/pull. Push sengaja tidak disediakan dari UI — butuh kredensial tulis yang risikonya lebih besar untuk dipicu satu klik.
 
-### Deploy Template & Eksekusi
+### Deploy Template, Riwayat, & Rollback
 
 Deploy Template adalah rangkaian langkah shell yang bisa dipasangkan ke banyak project/server (dikelola di **Settings → Deploy Template**). Empat template bawaan tersedia langsung: **CodeIgniter 4**, **Laravel**, **Vue**, dan **NestJS** — masing-masing bisa diedit bebas.
 
 Menjalankan deploy (chip "Deploy" di panel Projects, perlu konfirmasi) mengeksekusi tiap langkah berurutan di path project, dengan environment variables project di-export lebih dulu. Output di-stream live ke tab workspace, dan proses **berhenti otomatis begitu satu langkah gagal** (exit code bukan 0) — sama seperti pipeline CI biasa.
+
+Setiap run (deploy maupun rollback) tercatat di **riwayat** per project — chip "Riwayat" di panel Projects — lengkap dengan commit git yang aktif setelah run (kalau path-nya git repo), status sukses/gagal, dan pesan error. Dari satu entri riwayat yang sukses, tombol **Rollback** melakukan `git checkout` ke commit itu lalu menjalankan ulang langkah template yang sama (kecuali langkah `git pull`/`fetch`, supaya tidak langsung tertarik lagi ke commit terbaru).
 
 ---
 
@@ -543,10 +585,10 @@ Installer bersifat non-oneClick (pengguna bisa memilih lokasi instalasi) dan oto
 
 `npmRebuild` sengaja dimatikan (`false`): electron-builder secara default mencoba rebuild ulang native module dari source sebelum packaging, padahal binary prebuilt yang sudah ada di `node_modules` (lihat [Native Module dan Rebuild](#native-module-dan-rebuild)) sudah cocok dengan versi Electron yang dipakai — rebuild ulang di sini hanya menambah waktu build dan risiko gagal di lingkungan yang belum siap toolchain native (Visual Studio Build Tools, dsb).
 
-Yang **belum difinalkan** pada versi 1.0.0:
+Yang **belum difinalkan**:
 
 - code signing (installer saat ini tidak ditandatangani — Windows SmartScreen kemungkinan akan memperingatkan saat instalasi)
-- auto-update
+- auto-update sungguhan (unduh + pasang otomatis) — yang sudah ada baru **pengecekan versi terbaru** lewat GitHub Releases (Settings → Tentang), pengguna tetap unduh & pasang installer baru secara manual
 - release channel / checksum artifact publik
 - build untuk arch selain x64 (arm64 Windows, serta macOS/Linux — belum diuji meski `node-pty` menyediakan prebuild untuk platform tersebut)
 
@@ -610,6 +652,18 @@ Pastikan target adalah server Linux dan user SSH memiliki akses membaca informas
 
 Ketiganya menjalankan perintah lewat SSH (`systemctl`, `git`, shell biasa) — pastikan binary yang relevan (`systemctl`, `git`) terpasang di server target, dan user SSH punya izin yang cukup. Aksi start/stop/restart service dan `git pull` butuh privilese yang sesuai di server (root atau sudo tanpa password untuk `systemctl`).
 
+### Docker Manager kosong / gagal dimuat
+
+Pastikan Docker terpasang di server target dan user SSH punya akses ke `docker.sock` (anggota grup `docker`, atau sudo tanpa password untuk `docker`) — pesan errornya menjelaskan penyebab spesifiknya.
+
+### Cron menampilkan job yang tidak dikenal
+
+Kemungkinan crontab server itu masih memakai template komentar default (`/etc/crontab` Debian/Ubuntu) yang berisi contoh jadwal cron di dalam blok dokumentasi — satu baris contoh (`0 5 * * 1 tar -zcf ...`) kebetulan berformat sama seperti jadwal cron asli sehingga ambigu untuk dibedakan otomatis. Entri semacam ini muncul berstatus nonaktif (titik abu-abu) dan aman dihapus manual kalau mengganggu.
+
+### Deteksi log otomatis tidak menemukan apa pun
+
+Pastikan path project menunjuk ke root aplikasi (yang berisi `storage/`atau `writable/`, bukan `public/`), dan server memang sudah pernah menulis log dalam 30 hari terakhir — aplikasi yang sehat tanpa error tercatat memang belum punya berkas log untuk dideteksi.
+
 ---
 
 ## Kontribusi
@@ -640,10 +694,10 @@ Saat repository publik sudah ditetapkan, bagian ini dapat diperluas dengan workf
 
 Beberapa area yang direncanakan untuk pengembangan berikutnya:
 
-- code signing dan auto-update untuk installer Windows (packaging dasarnya sudah ada, lihat [Installer / Release Binary](#installer--release-binary))
+- code signing dan auto-update (unduh+pasang otomatis) untuk installer Windows — pengecekan versi manual sudah ada (Settings → Tentang), packaging dasarnya juga sudah ada, lihat [Installer / Release Binary](#installer--release-binary)
 - module icon (Terminal/Monitoring) dari asset pack untuk ikon rail/tab, saat ini baru dipakai di identitas aplikasi utama
-- riwayat/log hasil deploy yang tersimpan (saat ini hanya sebatas tab workspace yang sedang berjalan)
 - push dari Git Panel (saat ini sengaja dibatasi ke fetch/pull)
+- multi-server broadcast command (jalankan command yang sama ke beberapa server sekaligus)
 - notification/threshold untuk monitoring
 - diagnostics/logging aplikasi
 - release workflow

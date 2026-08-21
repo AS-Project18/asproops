@@ -10,9 +10,9 @@
   <strong>Developer & Server Operations Workspace — SSH, SFTP, deployment, and server monitoring in one desktop app.</strong>
 </p>
 
-ASProOps is an Electron-based desktop application designed as a single workspace for server administration and developer operations. One app handles SSH sessions, local Windows terminals, WSL distros, an SFTP file browser, remote editing, server resource monitoring, and a full DevOps flow — project profiles, a live log viewer, service manager, Git status, and deploy template execution — without switching between tools.
+ASProOps is an Electron-based desktop application designed as a single workspace for server administration and developer operations. One app handles SSH sessions, local Windows terminals, WSL distros, an SFTP file browser, remote editing, server resource monitoring, and a full DevOps flow — project profiles, live log viewer, service manager, Docker, cron jobs, Git status, deploy templates with history/rollback, server provisioning, port forwarding, and a `.env` editor — without switching between tools.
 
-> **Project status:** actively developed. Current source version `1.1.2`. A Windows installer (`.exe`) can already be built via `npm run dist:win`, but it isn't code-signed yet and has no auto-update — see [Installer / Release Binary](#installer--release-binary).
+> **Project status:** actively developed. Current source version `1.2.0`. A Windows installer (`.exe`) can already be built via `npm run dist:win`, but it isn't code-signed yet and has no auto-update (automatic download+install) — checking for the latest version is available under **Settings → About**, see [Installer / Release Binary](#installer--release-binary).
 
 ---
 
@@ -40,11 +40,16 @@ ASProOps is an Electron-based desktop application designed as a single workspace
 
 **DevOps workspace**
 
-- **Project Profile** — mark one working directory on a server (path, environment variables) as the foundation for the features below.
+- **Project Profile** — mark one working directory on a server (path, environment variables) as the foundation for the features below, with automatic Laravel/CodeIgniter 4 log detection (`storage/logs/`, `writable/logs/`).
 - **Live Log Viewer** — `tail -F` streaming with automatic coloring (log level, timestamp, IP address), multi-line block grouping (stack traces), line filtering, and search.
+- **`.env` editor** — edit a project's real `.env` file directly from the UI (separate from ASProOps's own environment variables), with values masked by default.
 - **Service Manager** — list systemd units, start/stop/restart with confirmation for disruptive actions.
+- **Docker Manager** — list containers (`docker ps -a`), start/stop/restart, and a live per-container log viewer.
+- **Cron Job Manager** — read/write the crontab belonging to the logged-in SSH user: add/edit/delete/disable jobs, with a parser resilient to the default documentation comments shipped in `/etc/crontab`.
+- **Server Provisioning** — run one-click server setup templates (install Docker, Node.js/NVM, PHP+Composer, MySQL, Nginx, system updates) on any server, with live output.
+- **Port Forwarding** — local (`-L`) and remote (`-R`) SSH tunnels, manage several saved rules per server with real-time tunnel status.
 - **Git Panel** — branch status, ahead/behind, changed files, last commit, fetch/pull directly from a project's path.
-- **Deploy Template & execution** — a sequence of deploy steps that can be attached to many servers; four built-in templates (CodeIgniter 4, Laravel, Vue, NestJS) are available out of the box. Execution stops automatically the moment a step fails, with live output and a cancel button.
+- **Deploy Template, history, & rollback** — a sequence of deploy steps that can be attached to many servers; six built-in templates (CodeIgniter 4, Laravel, Vue, NestJS, plus PHP/MySQL/Nginx/Docker/Node.js provisioning templates) are available out of the box. Execution stops automatically the moment a step fails, with live output and a cancel button. Every run is recorded per project (git commit, success/failure), and can be **rolled back** to a previous commit in one click.
 
 **Security & preferences**
 
@@ -52,6 +57,7 @@ ASProOps is an Electron-based desktop application designed as a single workspace
 - Optional application lock (PIN), with automatic re-lock after a configurable period of inactivity (can be turned off), plus a manual lock button in the header.
 - Session persistence and encrypted credentials via Electron `safeStorage`.
 - SSH preferences (timeout, keepalive, auto-reconnect), Terminal (font, scrollback, cursor), and SFTP (download folder, conflict policy) are all configurable in Settings.
+- **Update check** — Settings → About shows the running app version and can check GitHub Releases for a newer one, with a direct link to the download page if there is one.
 - The left sidebar can be collapsed/shown to reclaim workspace width.
 - Indonesian and English (default: English).
 
@@ -91,7 +97,7 @@ Local terminal features depend on Windows tools:
 
 The SSH/SFTP connection itself doesn't depend on WSL.
 
-Monitoring, Log Viewer, Service Manager, Git Panel, and Deploy read/run commands over SSH on the target server, so they're aimed at **Linux servers**.
+Monitoring, Log Viewer, Service Manager, Docker Manager, Cron Job Manager, Provisioning, Git Panel, and Deploy read/run commands over SSH on the target server, so they're aimed at **Linux servers**. Docker Manager needs Docker installed on the target server, and the built-in Provisioning templates assume a Debian/Ubuntu-based distro (`apt-get`) — they're freely editable for other distros.
 
 ---
 
@@ -213,6 +219,7 @@ asproops/
 │   ├── ipc.ts
 │   ├── app-lock.ts
 │   ├── local-terminal.ts
+│   ├── update-check.ts
 │   ├── ssh/
 │   │   ├── connection-manager.ts
 │   │   ├── known-hosts.ts
@@ -220,12 +227,21 @@ asproops/
 │   │   ├── remote-edit.ts
 │   │   ├── ssh-config.ts
 │   │   ├── services.ts
+│   │   ├── docker.ts
+│   │   ├── cron.ts
+│   │   ├── port-forward.ts
 │   │   ├── git.ts
-│   │   └── deploy.ts
+│   │   ├── deploy.ts
+│   │   ├── env-file.ts
+│   │   ├── auth-log.ts
+│   │   └── framework-detect.ts
 │   └── store/
 │       ├── sessions.ts
 │       ├── preferences.ts
-│       └── projects.ts
+│       ├── projects.ts
+│       ├── deploy-history.ts
+│       ├── provision-templates.ts
+│       └── port-forwards.ts
 ├── scripts/
 │   ├── dev.mjs
 │   └── rebuild-native.mjs
@@ -236,7 +252,9 @@ asproops/
 │   │   ├── TerminalView.tsx, LocalTerminalView.tsx, TerminalTabs.tsx
 │   │   ├── FileBrowser.tsx
 │   │   ├── MonitorPanel.tsx
-│   │   ├── ProjectsPanel.tsx, LogView.tsx, ServicesPanel.tsx, GitPanel.tsx, DeployView.tsx
+│   │   ├── ProjectsPanel.tsx, EnvFileEditor.tsx, LogView.tsx, ServicesPanel.tsx
+│   │   ├── DockerPanel.tsx, CronPanel.tsx, ProvisionPanel.tsx, ProvisionView.tsx
+│   │   ├── PortForwardPanel.tsx, GitPanel.tsx, DeployView.tsx, DeployHistoryModal.tsx
 │   │   ├── QuickConnectPalette.tsx, ContextMenu.tsx
 │   │   ├── AppLockGate.tsx, SettingsDialog.tsx
 │   │   └── ...
@@ -390,13 +408,19 @@ You can also browse other dates (Today/Yesterday/7 days/pick a date) via a one-s
 
 ---
 
-## DevOps: Project, Log Viewer, Service Manager, Git, and Deploy
+## DevOps: Project, Log Viewer, Docker, Cron, Provisioning, Git, and Deploy
 
-These five panels were built in sequence as one in-app DevOps workflow:
+These panels were built as one in-app DevOps workflow, all running over the same SSH connection with no extra channels or credentials:
 
 ### Project Profile
 
 The **Projects** panel marks one working directory on a server (absolute path + environment variables) as the foundation for the features below. A project can be linked to one Deploy Template, and stores a list of log paths and relevant systemd service names.
+
+The **Auto-detect** button in the project form looks for Laravel (`storage/logs/`) and CodeIgniter 4 (`writable/logs/`) logs — any file modified in the last 30 days, without relying on a specific naming pattern (works with custom log filenames too) — then adds them to the project's log list.
+
+### `.env` Editor
+
+The **.env** button on each project opens a key-value editor for the project's real `.env` file at its root (read directly by Laravel/CodeIgniter 4 at runtime) — different from the environment variables in the project form, which are only used by ASProOps itself when running a deploy. All values are masked by default (with a toggle to reveal them), and comments/blank lines in the original `.env` are preserved exactly when saving.
 
 ### Live Log Viewer
 
@@ -411,15 +435,33 @@ Opened via a log chip in the Projects panel. Runs `tail -F` and streams it live 
 
 The **Services** panel lists systemd units on the currently active server, with search, a show-all toggle, and start/stop/restart actions. Stopping a service asks for confirmation first.
 
+### Docker Manager
+
+The **Docker** panel lists containers (`docker ps -a`) on the currently active server — name, image, status — with start/stop/restart and a **View logs** button that opens a live per-container log streaming tab (same search/filter/coloring as the Live Log Viewer). Container actions try direct access first, then fall back to `sudo -n` if the user isn't in the `docker` group.
+
+### Cron Job Manager
+
+The **Cron** panel reads/writes the crontab belonging to the currently logged-in SSH user (`crontab -l`/`crontab -`, never another user's via `-u`). Add, edit, delete, or disable (comment out) jobs directly from the UI. The schedule parser is validated character-by-character so the documentation comments shipped in the default `/etc/crontab` (e.g. the standard Debian/Ubuntu template) aren't misread as jobs.
+
+### Server Provisioning
+
+The **Provisioning** panel runs server setup templates (a sequence of shell steps, structured the same as Deploy Templates) directly on the active session — not tied to any Project/path. Built-in templates: **Update & Base Tools**, **Install Docker**, **Install Node.js (NVM)**, **Install PHP (+ Composer)**, **Install MySQL**, **Install Nginx**. None of the built-in templates touch SSH/firewall/accounts (disabling password auth, `ufw enable`, etc.) on purpose — that kind of change can lock you out of the server if done wrong, so it's left for you to add yourself, deliberately, via the step editor.
+
+### Port Forwarding
+
+The **Port Forward** panel manages **local** (`-L`, a port on your machine forwarded to a host/port as seen from the server — e.g. reaching a database that only listens on the server's `127.0.0.1`) and **remote** (`-R`, the server opens a port that forwards back to your machine) SSH tunnels. Rules are saved per server, tunnel status (active/error/stopped) shows in real time, and tunnels stop automatically when the server disconnects or the app closes.
+
 ### Git Panel
 
 The **Git** panel reads repo status (branch, upstream, ahead/behind, last commit, changed files) from a project's path, and provides fetch/pull. Push is deliberately not exposed from the UI — it needs write credentials, which is a meaningfully bigger risk to trigger from a single button.
 
-### Deploy Template & Execution
+### Deploy Template, History, & Rollback
 
 A Deploy Template is a sequence of shell steps that can be attached to many projects/servers (managed under **Settings → Deploy Template**). Four built-in templates are available immediately: **CodeIgniter 4**, **Laravel**, **Vue**, and **NestJS** — each freely editable.
 
 Running a deploy (the "Deploy" chip in the Projects panel, which asks for confirmation) executes each step sequentially in the project's path, with the project's environment variables exported first. Output streams live into a workspace tab, and the run **stops automatically the moment a step fails** (non-zero exit code) — the same semantics as any CI pipeline.
+
+Every run (deploy or rollback) is recorded in a per-project **history** — the "History" chip in the Projects panel — including the git commit active right after the run (if the path is a git repo), success/failure status, and any error message. From a successful history entry, the **Rollback** button runs `git checkout` to that commit and re-runs the same template steps (skipping any `git pull`/`fetch` step, so it doesn't immediately get pulled back to the latest commit).
 
 ---
 
@@ -543,10 +585,10 @@ The installer is non-oneClick (users can pick an install location) and automatic
 
 `npmRebuild` is deliberately disabled (`false`): electron-builder by default tries to rebuild native modules from source before packaging, but the prebuilt binaries already present in `node_modules` (see [Native Modules and Rebuilding](#native-modules-and-rebuilding)) already match the Electron version in use — rebuilding here only adds build time and risks failure on environments without the native toolchain set up (Visual Studio Build Tools, etc.).
 
-Still **not finalized** as of version 1.0.0:
+Still **not finalized**:
 
 - code signing (the installer is currently unsigned — Windows SmartScreen will likely warn during install)
-- auto-update
+- real auto-update (automatic download + install) — what exists today is just **checking for the latest version** via GitHub Releases (Settings → About); users still download and install the new installer manually
 - a public release channel / checksum artifacts
 - builds for architectures other than x64 (Windows arm64, plus macOS/Linux — untested even though `node-pty` ships prebuilds for those platforms)
 
@@ -610,6 +652,18 @@ Make sure the target is a Linux server and the SSH user can read standard system
 
 All three run commands over SSH (`systemctl`, `git`, plain shell) — make sure the relevant binaries (`systemctl`, `git`) are installed on the target server, and the SSH user has sufficient permissions. Starting/stopping/restarting services and `git pull` need appropriate server privileges (root, or passwordless sudo for `systemctl`).
 
+### Docker Manager is empty / fails to load
+
+Make sure Docker is installed on the target server and the SSH user has access to `docker.sock` (a member of the `docker` group, or passwordless sudo for `docker`) — the error message explains the specific cause.
+
+### Cron shows an unfamiliar job
+
+The server's crontab is probably still using the default documentation template (Debian/Ubuntu `/etc/crontab`), which contains an example cron schedule inside its comment block — one example line (`0 5 * * 1 tar -zcf ...`) happens to be formatted exactly like a real cron schedule, so it's inherently ambiguous to tell apart automatically. Entries like this show up as disabled (grey dot) and are safe to delete manually if they bother you.
+
+### Auto-detect logs doesn't find anything
+
+Make sure the project path points at the application root (containing `storage/` or `writable/`, not `public/`), and that the server has actually written a log within the last 30 days — a healthy app with no recorded errors simply has no log file yet to detect.
+
 ---
 
 ## Contributing
@@ -640,10 +694,10 @@ Once the repository goes public, this section can be expanded with a branching w
 
 A few areas planned for future work:
 
-- code signing and auto-update for the Windows installer (basic packaging already exists, see [Installer / Release Binary](#installer--release-binary))
+- code signing and real auto-update (automatic download+install) for the Windows installer — manual version checking already exists (Settings → About), and basic packaging already exists too, see [Installer / Release Binary](#installer--release-binary)
 - Terminal/Monitoring module icons from the asset pack for rail/tab icons — currently only used for the main app identity
-- persisted deploy run history (currently limited to the workspace tab while it's running)
 - push support in the Git Panel (currently deliberately limited to fetch/pull)
+- multi-server broadcast commands (run the same command across several servers at once)
 - monitoring thresholds/notifications
 - application diagnostics/logging
 - release workflow
