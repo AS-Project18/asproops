@@ -53,9 +53,11 @@ interface DeployViewProps {
   projectId: string;
   active: boolean;
   onExit?: () => void;
+  /** Kalau terisi, tab ini menjalankan rollback ke entri riwayat ini alih-alih deploy baru. */
+  rollbackEntryId?: string;
 }
 
-export function DeployView({ sessionId, projectId, active, onExit }: DeployViewProps) {
+export function DeployView({ sessionId, projectId, active, onExit, rollbackEntryId }: DeployViewProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -173,7 +175,9 @@ export function DeployView({ sessionId, projectId, active, onExit }: DeployViewP
 
       void (async () => {
         try {
-          const runId = await window.ssh.deploy.run(sessionId, projectId);
+          const runId = rollbackEntryId
+            ? await window.ssh.deploy.rollback(sessionId, projectId, rollbackEntryId)
+            : await window.ssh.deploy.run(sessionId, projectId);
           if (disposed) {
             window.ssh.deploy.cancel(runId);
             return;
@@ -209,8 +213,8 @@ export function DeployView({ sessionId, projectId, active, onExit }: DeployViewP
       fitRef.current = null;
       runIdRef.current = null;
     };
-  // sessionId+projectId saja: satu run dipicu sekali per mount, tidak diulang tiap render.
-  }, [sessionId, projectId]);
+  // sessionId+projectId+rollbackEntryId saja: satu run dipicu sekali per mount, tidak diulang tiap render.
+  }, [sessionId, projectId, rollbackEntryId]);
 
   useEffect(() => {
     const term = termRef.current;

@@ -340,6 +340,25 @@ export default function App() {
     setActiveDeployId(workspace.id);
   };
 
+  /** Sama seperti openDeployView, tapi tab-nya menjalankan rollback ke entri riwayat tertentu. */
+  const openRollbackView = (project: ProjectProfile, templateName: string, entryId: string) => {
+    const workspace: DeployWorkspace = {
+      id: crypto.randomUUID(),
+      sessionId: project.sessionId,
+      projectId: project.id,
+      projectName: project.name,
+      templateName,
+      createdAt: Date.now(),
+      rollbackEntryId: entryId,
+    };
+    setDeployWorkspaces((current) => [...current, workspace]);
+    setActiveLocalId(null);
+    setActiveId(null);
+    setActiveLogId(null);
+    setDashboardActive(false);
+    setActiveDeployId(workspace.id);
+  };
+
   const closeLocalTerminal = (workspaceId: string) => {
     const remaining = localWorkspaces.filter((item) => item.id !== workspaceId);
     setLocalWorkspaces(remaining);
@@ -675,6 +694,7 @@ export default function App() {
                     onOpenService={openServiceManager}
                     onOpenGit={openGitPanel}
                     onOpenDeploy={openDeployView}
+                    onOpenRollback={openRollbackView}
                   />
                 </div>
 
@@ -1157,6 +1177,7 @@ export default function App() {
                   projectId={workspace.projectId}
                   active={workspace.id === activeDeployId}
                   onExit={() => closeDeployView(workspace.id)}
+                  rollbackEntryId={workspace.rollbackEntryId}
                 />
               </div>
             ))}

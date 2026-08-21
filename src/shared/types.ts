@@ -281,4 +281,30 @@ export interface DeployWorkspace {
   projectName: string;
   templateName: string;
   createdAt: number;
+  /** Kalau terisi, tab ini menjalankan rollback ke entri riwayat ini, bukan deploy baru. */
+  rollbackEntryId?: string;
+}
+
+/**
+ * Satu catatan riwayat deploy (atau rollback) — dipakai untuk daftar riwayat
+ * per project dan sebagai target rollback. `commitHash` diambil dari `git
+ * rev-parse --short HEAD` di path project SETELAH run selesai (apa pun hasil
+ * akhirnya), jadi hanya terisi kalau path itu git repo.
+ */
+export interface DeployHistoryEntry {
+  id: string;
+  sessionId: string;
+  projectId: string;
+  projectName: string;
+  templateId: string;
+  templateName: string;
+  startedAt: number;
+  finishedAt?: number;
+  /** undefined selama run masih berjalan. */
+  success?: boolean;
+  message?: string;
+  commitHash?: string;
+  isRollback: boolean;
+  /** id DeployHistoryEntry asal, terisi kalau entri ini adalah hasil rollback. */
+  rollbackOfEntryId?: string;
 }

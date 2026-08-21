@@ -23,6 +23,33 @@ export interface DeployRunHandle {
   cancel(): void;
 }
 
+/** Commit HEAD saat ini di `path`, atau undefined kalau bukan git repo (atau git tidak ada). */
+export async function getHeadCommit(
+  connection: SessionChannels,
+  path: string,
+): Promise<string | undefined> {
+  const { stdout, code } = await connection.exec(
+    `git -C ${shellQuote(path)} rev-parse --short HEAD 2>/dev/null`,
+  );
+  if (code !== 0) return undefined;
+  return stdout.trim() || undefined;
+}
+
+const PULL_STEP_RE = /^\s*git\s+(pull|fetch)\b/i;
+
+/**
+ * Susun langkah untuk rollback: checkout ke commit lama dulu, lalu jalankan
+ * ulang langkah template SELAIN yang menarik commit terbaru (git pull/fetch)
+ * — tujuannya kembali ke kode lama lalu build/migrate/restart ulang di
+ * commit itu, bukan langsung ketarik lagi ke HEAD terbaru.
+ */
+export function buildRollbackSteps(commitHash: string, templateSteps: DeployStep[]): DeployStep[] {
+  return [
+    { id: 'rollback-checkout', label: `Checkout ${commitHash}`, command: `git checkout ${shellQuote(commitHash)}` },
+    ...templateSteps.filter((step) => !PULL_STEP_RE.test(step.command)),
+  ];
+}
+
 export interface DeployCallbacks {
   onStepStart(index: number, label: string): void;
   onOutput(data: string): void;

@@ -6,6 +6,7 @@ import type {
   AuthLogOpenResult,
   AuthLogQueryResult,
   ConnectionStatus,
+  DeployHistoryEntry,
   DeployRunEvent,
   DeployTemplate,
   GitAction,
@@ -274,8 +275,14 @@ const api = {
   deploy: {
     run: (sessionId: string, projectId: string): Promise<string> =>
       ipcRenderer.invoke('deploy:run', sessionId, projectId),
+    rollback: (sessionId: string, projectId: string, entryId: string): Promise<string> =>
+      ipcRenderer.invoke('deploy:rollback', sessionId, projectId, entryId),
     cancel: (runId: string) => ipcRenderer.send('deploy:cancel', runId),
     onEvent: (handler: (event: DeployRunEvent) => void) => subscribe('deploy:event', handler),
+    listHistory: (projectId: string): Promise<DeployHistoryEntry[]> =>
+      ipcRenderer.invoke('deploy:listHistory', projectId),
+    onHistoryChanged: (handler: (projectId: string) => void) =>
+      subscribe('deploy:historyChanged', handler),
   },
 };
 

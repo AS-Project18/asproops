@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { ProjectProfile, DeployTemplate } from '../shared/types';
 import { useI18n } from '../i18n';
+import { DeployHistoryModal } from './DeployHistoryModal';
 
 /**
  * Panel Project — fondasi DevOps: menandai satu working directory di server
@@ -14,6 +15,7 @@ interface ProjectsPanelProps {
   onOpenService: (unit: string) => void;
   onOpenGit: (projectId: string) => void;
   onOpenDeploy: (project: ProjectProfile, templateName: string) => void;
+  onOpenRollback: (project: ProjectProfile, templateName: string, entryId: string) => void;
 }
 
 function basename(path: string): string {
@@ -28,6 +30,7 @@ export function ProjectsPanel({
   onOpenService,
   onOpenGit,
   onOpenDeploy,
+  onOpenRollback,
 }: ProjectsPanelProps) {
   const { t } = useI18n();
   const [projectList, setProjectList] = useState<ProjectProfile[]>([]);
@@ -36,6 +39,7 @@ export function ProjectsPanel({
   const [form, setForm] = useState<FormState>({ open: false });
   const [pendingDelete, setPendingDelete] = useState<ProjectProfile | null>(null);
   const [pendingDeploy, setPendingDeploy] = useState<ProjectProfile | null>(null);
+  const [historyProject, setHistoryProject] = useState<ProjectProfile | null>(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -123,6 +127,15 @@ export function ProjectsPanel({
                     className="rounded border border-line px-2 py-1 font-mono text-[10px] text-dim hover:border-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
                   >
                     ▶ {t('deploy.deployChip')}
+                  </button>
+                )}
+                {project.deployTemplateId && templateName(project.deployTemplateId) && (
+                  <button
+                    onClick={() => setHistoryProject(project)}
+                    title={t('deploy.historyButton')}
+                    className="rounded border border-line px-2 py-1 font-mono text-[10px] text-dim hover:border-azure hover:text-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+                  >
+                    🕘 {t('deploy.historyButton')}
                   </button>
                 )}
                 {project.logPaths.map((logPath) => (
@@ -226,6 +239,17 @@ export function ProjectsPanel({
             </div>
           </div>
         </div>
+      )}
+
+      {historyProject && (
+        <DeployHistoryModal
+          project={historyProject}
+          templateName={templateName(historyProject.deployTemplateId) ?? ''}
+          onRollback={(entryId) =>
+            onOpenRollback(historyProject, templateName(historyProject.deployTemplateId) ?? '', entryId)
+          }
+          onClose={() => setHistoryProject(null)}
+        />
       )}
     </section>
   );

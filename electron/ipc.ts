@@ -15,7 +15,7 @@ import {
   runAuthLogRangeQuery,
 } from './ssh/auth-log';
 import { getGitStatus, runGitAction } from './ssh/git';
-import { runDeploy, type DeployRunHandle } from './ssh/deploy';
+import { runDeploy, getHeadCommit, buildRollbackSteps, type DeployRunHandle } from './ssh/deploy';
 import { trustHostKey } from './ssh/known-hosts';
 import { parseSshConfig } from './ssh/ssh-config';
 import { RemoteEditManager } from './ssh/remote-edit';
@@ -26,8 +26,12 @@ import { AppLock } from './app-lock';
 import { preferences, sftpPreferences } from './store/preferences';
 import { projects } from './store/projects';
 import { portForwardRules } from './store/port-forwards';
+import { deployHistory } from './store/deploy-history';
 import type {
+  DeployStep,
+  DeployTemplate,
   GitAction,
+  ProjectProfile,
   RemoteFile,
   ServiceAction,
   SessionConfig,
@@ -179,6 +183,7 @@ export function registerIpc(window: BrowserWindow): void {
     store.remove(id);
     projects.removeProjectsForSession(id);
     portForwardRules.removeForSession(id);
+    deployHistory.removeForSession(id);
   });
 
   // --- Project & deploy template --------------------------------------------
@@ -187,7 +192,10 @@ export function registerIpc(window: BrowserWindow): void {
     projects.createProject(sessionId, input),
   );
   ipcMain.handle('projects:update', (_e, id: string, patch) => projects.updateProject(id, patch));
-  ipcMain.handle('projects:remove', (_e, id: string) => projects.removeProject(id));
+  ipcMain.handle('projects:remove', (_e, id: string) => {
+    projects.removeProject(id);
+    deployHistory.removeForProject(id);
+  });
 
   ipcMain.handle('templates:list', () => projects.listTemplates());
   ipcMain.handle('templates:create', (_e, input) => projects.createTemplate(input));
@@ -719,6 +727,54 @@ export function registerIpc(window: BrowserWindow): void {
   );
 
   // --- Deploy ------------------------------------------------------------
+
+  /**
+   * Dipakai oleh deploy:run DAN deploy:rollback — keduanya cuma beda di
+   * langkah mana yang dijalankan, sisanya (event streaming, pencatatan
+   * riwayat, commit HEAD sesudahnya) identik.
+   */
+  function executeDeploy(
+    sessionId: string,
+    project: ProjectProfile,
+    template: DeployTemplate,
+    steps: DeployStep[],
+    options: { isRollback: boolean; rollbackOfEntryId?: string },
+  ): string {
+    const connection = connections.require(sessionId);
+    const runId = randomUUID();
+
+    const historyEntry = deployHistory.start({
+      sessionId,
+      projectId: project.id,
+      projectName: project.name,
+      templateId: template.id,
+      templateName: template.name,
+      isRollback: options.isRollback,
+      rollbackOfEntryId: options.rollbackOfEntryId,
+    });
+
+    const handle = runDeploy(connection, project.path, project.env, steps, {
+      onStepStart: (stepIndex, stepLabel) =>
+        send('deploy:event', { runId, type: 'stepStart', stepIndex, stepLabel }),
+      onOutput: (data) => send('deploy:event', { runId, type: 'output', data }),
+      onStepEnd: (stepIndex, exitCode) =>
+        send('deploy:event', { runId, type: 'stepEnd', stepIndex, exitCode }),
+      onDone: (success, message) => {
+        deployRuns.delete(runId);
+        void getHeadCommit(connection, project.path)
+          .catch(() => undefined)
+          .then((commitHash) => {
+            deployHistory.finish(historyEntry.id, { success, message, commitHash });
+            send('deploy:historyChanged', project.id);
+          });
+        send('deploy:event', { runId, type: 'done', success, message });
+      },
+    });
+    deployRuns.set(runId, handle);
+
+    return runId;
+  }
+
   ipcMain.handle('deploy:run', async (_e, sessionId: string, projectId: string) => {
     const project = projects.getProject(projectId);
     if (!project) throw new Error('Project tidak ditemukan.');
@@ -729,29 +785,40 @@ export function registerIpc(window: BrowserWindow): void {
     if (!template) throw new Error('Deploy template tidak ditemukan.');
     if (template.steps.length === 0) throw new Error('Deploy template ini belum punya langkah.');
 
-    const connection = connections.require(sessionId);
-    const runId = randomUUID();
-
-    const handle = runDeploy(connection, project.path, project.env, template.steps, {
-      onStepStart: (stepIndex, stepLabel) =>
-        send('deploy:event', { runId, type: 'stepStart', stepIndex, stepLabel }),
-      onOutput: (data) => send('deploy:event', { runId, type: 'output', data }),
-      onStepEnd: (stepIndex, exitCode) =>
-        send('deploy:event', { runId, type: 'stepEnd', stepIndex, exitCode }),
-      onDone: (success, message) => {
-        deployRuns.delete(runId);
-        send('deploy:event', { runId, type: 'done', success, message });
-      },
-    });
-    deployRuns.set(runId, handle);
-
-    return runId;
+    return executeDeploy(sessionId, project, template, template.steps, { isRollback: false });
   });
+
+  ipcMain.handle(
+    'deploy:rollback',
+    async (_e, sessionId: string, projectId: string, entryId: string) => {
+      const project = projects.getProject(projectId);
+      if (!project) throw new Error('Project tidak ditemukan.');
+      if (!project.deployTemplateId) {
+        throw new Error('Project ini belum dipasangkan ke deploy template.');
+      }
+      const template = projects.getTemplate(project.deployTemplateId);
+      if (!template) throw new Error('Deploy template tidak ditemukan.');
+
+      const entry = deployHistory.get(entryId);
+      if (!entry || entry.projectId !== projectId) throw new Error('Riwayat deploy tidak ditemukan.');
+      if (!entry.commitHash) {
+        throw new Error('Riwayat ini tidak punya commit git untuk di-rollback.');
+      }
+
+      const steps = buildRollbackSteps(entry.commitHash, template.steps);
+      return executeDeploy(sessionId, project, template, steps, {
+        isRollback: true,
+        rollbackOfEntryId: entry.id,
+      });
+    },
+  );
 
   ipcMain.on('deploy:cancel', (_e, runId: string) => {
     deployRuns.get(runId)?.cancel();
     deployRuns.delete(runId);
   });
+
+  ipcMain.handle('deploy:listHistory', (_e, projectId: string) => deployHistory.list(projectId));
 }
 
 export function shutdown(): void {
