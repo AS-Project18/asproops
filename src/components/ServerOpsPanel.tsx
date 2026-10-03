@@ -24,7 +24,7 @@ export function ServerOpsPanel({
 
   return (
     <section className="aspro-server-ops">
-      <div className="aspro-left-mode-tabs aspro-server-ops-tabs" role="tablist">
+      <div className="aspro-server-ops-tabs" role="tablist" aria-label={t('nav.ops')}>
         <button
           type="button"
           role="tab"

@@ -115,7 +115,7 @@ export function DockerPanel({ sessionId, onOpenLogs }: DockerPanelProps) {
         <div className="aspro-local-empty">{t('sftp.loading')}</div>
       ) : loadError ? (
         <div className="aspro-local-empty">
-          <strong className="mb-1 block text-dim">{t('service.error')}</strong>
+          <strong className="mb-1 block text-dim">{t('docker.error')}</strong>
           <span>{loadError}</span>
         </div>
       ) : filtered.length === 0 ? (

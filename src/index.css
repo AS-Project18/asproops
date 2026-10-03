@@ -2328,3 +2328,53 @@ button:disabled {
 .aspro-server-ops > .relative {
   min-height: 0;
 }
+
+
+/* Ops tabs visibility fix: do not reuse hidden legacy .aspro-left-mode-tabs */
+.aspro-server-ops-tabs {
+  position: relative;
+  z-index: 5;
+  height: 38px;
+  min-height: 38px;
+  flex: 0 0 38px;
+  display: flex !important;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  border-bottom: 1px solid rgba(100, 42, 125, .28);
+  background: rgba(10, 5, 15, .96);
+}
+
+.aspro-server-ops-tabs button {
+  min-width: 0;
+  height: 38px;
+  flex: 1 1 0;
+  padding: 0 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #776d7e;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .35px;
+  text-align: center;
+}
+
+.aspro-server-ops-tabs button:hover {
+  color: #c9bdce;
+  background: rgba(100, 39, 127, .07);
+}
+
+.aspro-server-ops-tabs button.active,
+.aspro-server-ops-tabs button[aria-selected="true"] {
+  border-bottom-color: #ff8a00;
+  color: #ffad31;
+  background: rgba(90, 34, 6, .10);
+}
+
+.aspro-server-ops > .relative {
+  position: relative;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
