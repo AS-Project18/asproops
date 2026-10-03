@@ -46,9 +46,18 @@ interface LocalCliProfile {
 
 File: `local-projects.json`
 
-Schema version: 2
+Schema version: 3
 
-L1 schema version 1 is migrated in memory. Legacy `preferredCli` values (`omp`, `codex`, `claude`) map directly to registry IDs through `preferredCliProfileId`.
+Migrations:
+
+- v1 `preferredCli` values (`omp`, `codex`, `claude`) map to `preferredCliProfileId`
+- v2 projects gain the optional `favorite` flag
+
+Projects are ordered for workspace use rather than alphabetically only:
+
+1. favorites
+2. most recently opened
+3. name as stable fallback
 
 ### CLI registry
 
@@ -102,6 +111,36 @@ Local Workspace provides:
 - per-project CLI selector + Run
 
 Built-in profiles cannot be deleted, but may be edited or disabled.
+
+## Recent & Favorite Projects (L2D)
+
+Local Project cards support:
+
+- favorite / unfavorite
+- search by project name or path
+- relative last-opened information
+- favorites-first + recent-first ordering
+
+`lastOpenedAt` remains authoritative from the main-process project store and is
+updated when a project terminal is opened or its folder is opened.
+
+## CLI Health (L2D)
+
+CLI Registry summaries now include:
+
+- `resolvedPath` from Windows PATH resolution
+- availability / disabled / not-found status
+- version information for the unmodified built-in OMP, Codex, and Claude commands
+
+Version probing is intentionally conservative. ASProOps automatically invokes
+`--version` only for known built-in command identities. Custom CLI profiles are
+not executed merely to discover a version because an arbitrary executable is
+not guaranteed to treat `--version` as a side-effect-free operation.
+
+Health results are cached briefly. Manual Local Workspace refresh forces a fresh
+probe, while CLI create/edit/enable-disable/delete invalidates the cache.
+
+ASProOps does not install or update CLI tools automatically.
 
 ## Project-aware terminal
 
@@ -201,4 +240,4 @@ already covers the user's normal project command flow without adding button clut
 
 ## Next
 
-L2D: Recent & Favorite Projects / richer CLI health information.
+L3: local Git/project awareness, local process status, notes/context-handoff helpers.

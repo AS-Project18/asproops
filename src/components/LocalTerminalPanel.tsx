@@ -133,6 +133,32 @@ function parseArgs(value: string): string[] {
     .filter(Boolean);
 }
 
+function formatRecent(timestamp: number | undefined, language: 'id' | 'en', neverLabel: string): string {
+  if (!timestamp) return neverLabel;
+
+  const deltaMs = timestamp - Date.now();
+  const absMs = Math.abs(deltaMs);
+  const formatter = new Intl.RelativeTimeFormat(language === 'id' ? 'id-ID' : 'en-US', {
+    numeric: 'auto',
+  });
+
+  if (absMs < 60 * 60 * 1000) {
+    return formatter.format(Math.round(deltaMs / (60 * 1000)), 'minute');
+  }
+  if (absMs < 24 * 60 * 60 * 1000) {
+    return formatter.format(Math.round(deltaMs / (60 * 60 * 1000)), 'hour');
+  }
+  if (absMs < 30 * 24 * 60 * 60 * 1000) {
+    return formatter.format(Math.round(deltaMs / (24 * 60 * 60 * 1000)), 'day');
+  }
+
+  return new Intl.DateTimeFormat(language === 'id' ? 'id-ID' : 'en-US', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(timestamp);
+}
+
 export function LocalTerminalPanel({
   profiles,
   loading,
@@ -140,13 +166,14 @@ export function LocalTerminalPanel({
   onOpenProject,
   onRefresh,
 }: LocalTerminalPanelProps) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [projects, setProjects] = useState<LocalProjectSummary[]>([]);
   const [cliProfiles, setCliProfiles] = useState<LocalCliAvailability[]>([]);
   const [projectLoading, setProjectLoading] = useState(true);
   const [projectDraft, setProjectDraft] = useState<ProjectDraft | null>(null);
   const [cliDraft, setCliDraft] = useState<CliDraft | null>(null);
   const [cliSelection, setCliSelection] = useState<Record<string, string>>({});
+  const [projectQuery, setProjectQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sectionLayout, setSectionLayout] = useState<LocalSectionLayout>(loadSectionLayout);
@@ -156,6 +183,16 @@ export function LocalTerminalPanel({
     () => new Map(cliProfiles.map((profile) => [profile.id, profile])),
     [cliProfiles],
   );
+
+  const visibleProjects = useMemo(() => {
+    const query = projectQuery.trim().toLowerCase();
+    if (!query) return projects;
+    return projects.filter(
+      (project) =>
+        project.name.toLowerCase().includes(query) ||
+        project.path.toLowerCase().includes(query),
+    );
+  }, [projects, projectQuery]);
 
   useEffect(() => {
     localStorage.setItem(LOCAL_SECTION_LAYOUT_KEY, JSON.stringify(sectionLayout));
@@ -274,12 +311,12 @@ export function LocalTerminalPanel({
     window.addEventListener('pointerup', handleUp);
   };
 
-  const refreshWorkspace = async () => {
+  const refreshWorkspace = async (forceCliHealthRefresh = false) => {
     setProjectLoading(true);
     try {
       const [savedProjects, cli] = await Promise.all([
         window.ssh.localProjects.list(),
-        window.ssh.localCli.list(),
+        window.ssh.localCli.list(forceCliHealthRefresh),
       ]);
       setProjects(savedProjects);
       setCliProfiles(cli);
@@ -297,7 +334,7 @@ export function LocalTerminalPanel({
 
   const handleRefresh = async () => {
     await onRefresh();
-    await refreshWorkspace();
+    await refreshWorkspace(true);
   };
 
   const browseFolder = async () => {
@@ -351,6 +388,15 @@ export function LocalTerminalPanel({
       setError((err as Error).message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const toggleFavorite = async (project: LocalProjectSummary) => {
+    try {
+      await window.ssh.localProjects.update(project.id, { favorite: !project.favorite });
+      await refreshWorkspace();
+    } catch (err) {
+      setError((err as Error).message);
     }
   };
 
@@ -415,7 +461,7 @@ export function LocalTerminalPanel({
       }
 
       setCliDraft(null);
-      await refreshWorkspace();
+      await refreshWorkspace(true);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -426,7 +472,7 @@ export function LocalTerminalPanel({
   const toggleCli = async (cli: LocalCliProfile) => {
     try {
       await window.ssh.localCli.update(cli.id, { enabled: !cli.enabled });
-      await refreshWorkspace();
+      await refreshWorkspace(true);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -436,7 +482,7 @@ export function LocalTerminalPanel({
     if (!window.confirm(t('local.deleteCliConfirm', { name: cli.name }))) return;
     try {
       await window.ssh.localCli.remove(cli.id);
-      await refreshWorkspace();
+      await refreshWorkspace(true);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -562,13 +608,38 @@ export function LocalTerminalPanel({
                 </form>
               ) : null}
 
+              <div className="aspro-local-project-search">
+                <span>⌕</span>
+                <input
+                  type="search"
+                  value={projectQuery}
+                  onChange={(event) => setProjectQuery(event.target.value)}
+                  placeholder={t('local.searchProjects')}
+                  aria-label={t('local.searchProjects')}
+                />
+                {projectQuery ? (
+                  <button
+                    type="button"
+                    title={t('local.clearProjectSearch')}
+                    aria-label={t('local.clearProjectSearch')}
+                    onClick={() => setProjectQuery('')}
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </div>
+
               <div className="aspro-local-projects">
                 {projectLoading ? (
                   <div className="aspro-local-empty">{t('local.loadingProjects')}</div>
                 ) : projects.length === 0 ? (
                   <div className="aspro-local-empty">{t('local.noProjects')}</div>
+                ) : visibleProjects.length === 0 ? (
+                  <div className="aspro-local-empty">
+                    {t('local.noProjectMatch', { query: projectQuery })}
+                  </div>
                 ) : (
-                  projects.map((project) => {
+                  visibleProjects.map((project) => {
                     const profile = resolveProjectShell(project, profiles);
                     const selectedId =
                       cliSelection[project.id] ??
@@ -587,8 +658,45 @@ export function LocalTerminalPanel({
                           <div className="min-w-0">
                             <strong title={project.name}>{project.name}</strong>
                             <small title={project.path}>{project.path}</small>
+                            <span
+                              className="aspro-local-project-recent"
+                              title={
+                                project.lastOpenedAt
+                                  ? new Date(project.lastOpenedAt).toLocaleString(
+                                      language === 'id' ? 'id-ID' : 'en-US',
+                                    )
+                                  : undefined
+                              }
+                            >
+                              {t('local.lastOpened')}: {' '}
+                              {formatRecent(
+                                project.lastOpenedAt,
+                                language,
+                                t('local.neverOpened'),
+                              )}
+                            </span>
                           </div>
                           <div className="aspro-local-project-head-actions">
+                            <button
+                              type="button"
+                              className={`aspro-local-icon-action favorite ${
+                                project.favorite ? 'active' : ''
+                              }`}
+                              title={
+                                project.favorite
+                                  ? t('local.removeFavorite')
+                                  : t('local.addFavorite')
+                              }
+                              aria-label={
+                                project.favorite
+                                  ? t('local.removeFavorite')
+                                  : t('local.addFavorite')
+                              }
+                              aria-pressed={Boolean(project.favorite)}
+                              onClick={() => void toggleFavorite(project)}
+                            >
+                              {project.favorite ? '★' : '☆'}
+                            </button>
                             {!project.pathExists ? (
                               <span className="aspro-local-missing-badge">{t('local.missing')}</span>
                             ) : null}
@@ -828,6 +936,27 @@ export function LocalTerminalPanel({
                         </button>
                       ) : null}
                     </div>
+                    <small
+                      className="aspro-local-cli-health"
+                      title={cli.resolvedPath ?? t('local.cliPathMissing')}
+                    >
+                      <span>
+                        {cli.version
+                          ? cli.version
+                          : cli.versionStatus === 'failed'
+                            ? t('local.cliVersionUnknown')
+                            : cli.source === 'custom'
+                              ? t('local.cliVersionSkipped')
+                              : ''}
+                      </span>
+                      {cli.resolvedPath ? (
+                        <span className="aspro-local-cli-path">{cli.resolvedPath}</span>
+                      ) : (
+                        <span className="aspro-local-cli-path missing">
+                          {t('local.cliPathMissing')}
+                        </span>
+                      )}
+                    </small>
                   </div>
                 ))}
               </div>

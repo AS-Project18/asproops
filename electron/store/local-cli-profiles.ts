@@ -157,6 +157,7 @@ export class LocalCliProfileStore {
         ...profile,
         available,
         status: !profile.enabled ? 'disabled' : available ? 'available' : 'not_found',
+        versionStatus: 'skipped',
       };
     });
   }

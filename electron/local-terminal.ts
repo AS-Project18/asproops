@@ -7,6 +7,7 @@ import * as pty from 'node-pty';
 import type { IPty } from 'node-pty';
 
 import type {
+  LocalCliAvailability,
   LocalCliProfile,
   LocalTerminalOpenOptions,
   LocalTerminalProfile,
@@ -15,12 +16,78 @@ import type {
 type LocalDataHandler = (terminalId: string, data: string) => void;
 type LocalCloseHandler = (terminalId: string, exitCode: number) => void;
 
-function executableExists(name: string): boolean {
+function resolveExecutablePath(name: string): string | undefined {
   const result = spawnSync('where.exe', [name], {
     windowsHide: true,
-    stdio: 'ignore',
+    encoding: 'utf8',
+    timeout: 1500,
   });
-  return result.status === 0;
+
+  if (result.status !== 0 || !result.stdout) return undefined;
+
+  return result.stdout
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((line) => line.trim())
+    .find(Boolean);
+}
+
+function executableExists(name: string): boolean {
+  return Boolean(resolveExecutablePath(name));
+}
+
+function stripAnsiForHealth(value: string): string {
+  return value
+    .replace(/\x1B\[[0-?]*[ -\/]*[@-~]/g, '')
+    .replace(/\x1B\][^\x07]*(?:\x07|\x1B\\)/g, '')
+    .replace(/[\r\n]+/g, ' ')
+    .trim();
+}
+
+const BUILTIN_VERSION_COMMANDS: Record<string, string> = {
+  omp: 'omp',
+  codex: 'codex',
+  claude: 'claude',
+};
+
+function canProbeBuiltinVersion(profile: LocalCliProfile): boolean {
+  const expected = BUILTIN_VERSION_COMMANDS[profile.id];
+  if (!expected || profile.source !== 'builtin') return false;
+
+  const command = profile.command.trim().toLowerCase();
+  return command === expected || command === `${expected}.exe`;
+}
+
+function probeCliVersion(
+  profile: LocalCliProfile,
+  resolvedPath: string,
+): { version?: string; versionStatus: LocalCliAvailability['versionStatus'] } {
+  if (!canProbeBuiltinVersion(profile) || !profile.enabled) {
+    return { versionStatus: 'skipped' };
+  }
+
+  let result = spawnSync(resolvedPath, ['--version'], {
+    windowsHide: true,
+    encoding: 'utf8',
+    timeout: 2500,
+  });
+
+  if (result.error && /\.(?:cmd|bat)$/i.test(resolvedPath)) {
+    const comspec = process.env.ComSpec || 'cmd.exe';
+    result = spawnSync(comspec, ['/d', '/s', '/c', `"${resolvedPath}" --version`], {
+      windowsHide: true,
+      encoding: 'utf8',
+      timeout: 2500,
+    });
+  }
+
+  const raw = `${result.stdout ?? ''} ${result.stderr ?? ''}`;
+  const version = stripAnsiForHealth(raw).slice(0, 180);
+  if (result.status === 0 && version) {
+    return { version, versionStatus: 'detected' };
+  }
+
+  return { versionStatus: 'failed' };
 }
 
 function decodeWindowsOutput(buffer: Buffer): string {
@@ -146,6 +213,10 @@ function cliStartupCommand(
 
 export class LocalTerminalManager {
   private readonly terminals = new Map<string, IPty>();
+  private readonly cliHealthCache = new Map<
+    string,
+    { checkedAt: number; value: LocalCliAvailability }
+  >();
 
   constructor(
     private readonly onData: LocalDataHandler,
@@ -154,6 +225,42 @@ export class LocalTerminalManager {
 
   commandAvailable(command: string): boolean {
     return executableExists(command);
+  }
+
+  inspectCli(profile: LocalCliProfile, force = false): LocalCliAvailability {
+    const cacheKey = [
+      profile.id,
+      profile.command,
+      profile.enabled ? '1' : '0',
+      String(profile.updatedAt),
+    ].join('|');
+    const cached = this.cliHealthCache.get(cacheKey);
+
+    if (!force && cached && Date.now() - cached.checkedAt < 60_000) {
+      return { ...cached.value, args: [...cached.value.args] };
+    }
+
+    const resolvedPath = resolveExecutablePath(profile.command);
+    const available = profile.enabled && Boolean(resolvedPath);
+    const versionResult = resolvedPath
+      ? probeCliVersion(profile, resolvedPath)
+      : { versionStatus: 'skipped' as const };
+
+    const value: LocalCliAvailability = {
+      ...profile,
+      args: [...profile.args],
+      available,
+      status: !profile.enabled ? 'disabled' : available ? 'available' : 'not_found',
+      ...(resolvedPath ? { resolvedPath } : {}),
+      ...versionResult,
+    };
+
+    this.cliHealthCache.set(cacheKey, { checkedAt: Date.now(), value });
+    return { ...value, args: [...value.args] };
+  }
+
+  clearCliHealthCache(): void {
+    this.cliHealthCache.clear();
   }
 
   listProfiles(): LocalTerminalProfile[] {

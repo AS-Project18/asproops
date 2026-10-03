@@ -522,19 +522,28 @@ export function registerIpc(window: BrowserWindow): void {
   });
 
   // --- Local CLI Registry --------------------------------------------------
-  ipcMain.handle('localCli:list', () =>
-    localCliProfiles.listWithAvailability((command) => localTerminals.commandAvailable(command)),
+  ipcMain.handle('localCli:list', (_e, forceHealthRefresh = false) =>
+    localCliProfiles
+      .list()
+      .map((profile) => localTerminals.inspectCli(profile, Boolean(forceHealthRefresh))),
   );
-  ipcMain.handle('localCli:create', (_e, input: LocalCliCreateInput) =>
-    localCliProfiles.create(input),
-  );
+  ipcMain.handle('localCli:create', (_e, input: LocalCliCreateInput) => {
+    const created = localCliProfiles.create(input);
+    localTerminals.clearCliHealthCache();
+    return created;
+  });
   ipcMain.handle(
     'localCli:update',
-    (_e, id: string, patch: LocalCliUpdatePatch) => localCliProfiles.update(id, patch),
+    (_e, id: string, patch: LocalCliUpdatePatch) => {
+      const updated = localCliProfiles.update(id, patch);
+      localTerminals.clearCliHealthCache();
+      return updated;
+    },
   );
   ipcMain.handle('localCli:remove', (_e, id: string) => {
     localCliProfiles.remove(id);
     localProjects.clearPreferredCliProfile(id);
+    localTerminals.clearCliHealthCache();
   });
 
   // --- Saved Local Projects -----------------------------------------------

@@ -152,6 +152,9 @@ export interface LocalCliProfile {
 export interface LocalCliAvailability extends LocalCliProfile {
   available: boolean;
   status: 'available' | 'not_found' | 'disabled';
+  resolvedPath?: string;
+  version?: string;
+  versionStatus: 'detected' | 'skipped' | 'failed';
 }
 
 export type LocalCliCreateInput = Pick<LocalCliProfile, 'name' | 'command'> &
@@ -167,6 +170,7 @@ export interface LocalProjectProfile {
   path: string;
   defaultTerminalProfileId?: string;
   preferredCliProfileId?: string;
+  favorite?: boolean;
   createdAt: number;
   updatedAt: number;
   lastOpenedAt?: number;
@@ -176,7 +180,7 @@ export type LocalProjectCreateInput = Pick<LocalProjectProfile, 'name' | 'path'>
   Partial<Pick<LocalProjectProfile, 'defaultTerminalProfileId' | 'preferredCliProfileId'>>;
 
 export type LocalProjectUpdatePatch = Partial<
-  Pick<LocalProjectProfile, 'name' | 'path'> & {
+  Pick<LocalProjectProfile, 'name' | 'path' | 'favorite'> & {
     defaultTerminalProfileId: string | null;
     preferredCliProfileId: string | null;
   }

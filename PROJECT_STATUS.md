@@ -98,12 +98,28 @@ Implemented:
 
 No SSH auto-connect, no CLI auto-run, and no one-shot operation replay.
 
-### L2D
+### L2D: Recent & Favorite Projects + CLI Health
 
-Status: PLANNED
+Status: IMPLEMENTED / MANUAL VERIFICATION PENDING
 
-- recent projects
-- richer CLI version information
+Implemented:
+
+- Local Project favorites persisted in `local-projects.json`
+- project store schema v3 with v1/v2 migration
+- favorites sort before non-favorites
+- within each group, most recently opened projects sort first
+- compact project search by name/path
+- relative "last opened" metadata
+- favorite toggle on each project card
+- CLI health includes resolved executable path from Windows PATH
+- built-in OMP/Codex/Claude version probing with short timeout
+- CLI health cache avoids repeatedly spawning version checks
+- manual refresh forces a fresh health probe
+- custom CLI version probing is intentionally skipped to avoid executing unknown
+  `--version` behavior automatically
+- CLI create/edit/enable-disable/delete invalidates health cache
+
+No CLI is installed, updated, or modified automatically.
 
 ### L3
 

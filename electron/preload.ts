@@ -205,7 +205,8 @@ const api = {
   },
 
   localCli: {
-    list: (): Promise<LocalCliAvailability[]> => ipcRenderer.invoke('localCli:list'),
+    list: (forceHealthRefresh = false): Promise<LocalCliAvailability[]> =>
+      ipcRenderer.invoke('localCli:list', forceHealthRefresh),
     create: (input: LocalCliCreateInput): Promise<LocalCliProfile> =>
       ipcRenderer.invoke('localCli:create', input),
     update: (id: string, patch: LocalCliUpdatePatch): Promise<LocalCliProfile | undefined> =>

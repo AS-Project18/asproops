@@ -11,20 +11,25 @@ import type {
 } from '../../src/shared/types';
 
 interface StoreFile {
-  version: 2;
+  version: 3;
   projects: LocalProjectProfile[];
 }
 
-interface LegacyProject extends Omit<LocalProjectProfile, 'preferredCliProfileId'> {
+type LegacyProject = Omit<LocalProjectProfile, 'preferredCliProfileId' | 'favorite'> & {
   preferredCli?: string;
-}
+};
 
 interface LegacyStoreFile {
   version: 1;
   projects: LegacyProject[];
 }
 
-const EMPTY: StoreFile = { version: 2, projects: [] };
+interface V2StoreFile {
+  version: 2;
+  projects: Array<Omit<LocalProjectProfile, 'favorite'>>;
+}
+
+const EMPTY: StoreFile = { version: 3, projects: [] };
 
 function normalizePathForCompare(path: string): string {
   const normalized = resolve(path).replace(/[\\/]+$/, '');
@@ -50,18 +55,32 @@ export class LocalProjectStore {
 
   private read(): StoreFile {
     try {
-      const parsed = JSON.parse(readFileSync(this.path, 'utf8')) as StoreFile | LegacyStoreFile;
+      const parsed = JSON.parse(readFileSync(this.path, 'utf8')) as
+        | StoreFile
+        | V2StoreFile
+        | LegacyStoreFile;
+
+      if (parsed.version === 3 && Array.isArray(parsed.projects)) {
+        return parsed;
+      }
 
       if (parsed.version === 2 && Array.isArray(parsed.projects)) {
-        return parsed;
+        return {
+          version: 3,
+          projects: parsed.projects.map((project) => ({
+            ...project,
+            favorite: false,
+          })),
+        };
       }
 
       if (parsed.version === 1 && Array.isArray(parsed.projects)) {
         return {
-          version: 2,
+          version: 3,
           projects: parsed.projects.map(({ preferredCli, ...project }) => ({
             ...project,
             preferredCliProfileId: preferredCli || undefined,
+            favorite: false,
           })),
         };
       }
@@ -120,7 +139,15 @@ export class LocalProjectStore {
 
   list(): LocalProjectProfile[] {
     return [...this.data.projects]
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => {
+        const favoriteDelta = Number(Boolean(b.favorite)) - Number(Boolean(a.favorite));
+        if (favoriteDelta !== 0) return favoriteDelta;
+
+        const recentDelta = (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0);
+        if (recentDelta !== 0) return recentDelta;
+
+        return a.name.localeCompare(b.name);
+      })
       .map((project) => ({ ...project }));
   }
 
@@ -155,6 +182,7 @@ export class LocalProjectStore {
       path,
       defaultTerminalProfileId: input.defaultTerminalProfileId || undefined,
       preferredCliProfileId: input.preferredCliProfileId || undefined,
+      favorite: false,
       createdAt: now,
       updatedAt: now,
     };
@@ -186,6 +214,9 @@ export class LocalProjectStore {
     }
     if (patch.preferredCliProfileId !== undefined) {
       project.preferredCliProfileId = patch.preferredCliProfileId || undefined;
+    }
+    if (patch.favorite !== undefined) {
+      project.favorite = Boolean(patch.favorite);
     }
 
     project.updatedAt = Date.now();
