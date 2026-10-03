@@ -12,7 +12,7 @@
 
 ASProOps is an Electron-based desktop application designed as a single workspace for server administration and developer operations. One app handles SSH sessions, local Windows terminals, WSL distros, an SFTP file browser, remote editing, server resource monitoring, and a full DevOps flow — project profiles, live log viewer, service manager, Docker, cron jobs, Git status, deploy templates with history/rollback, server provisioning, port forwarding, and a `.env` editor — without switching between tools.
 
-> **Project status:** actively developed. Current source version `1.2.0`. A Windows installer (`.exe`) can already be built via `npm run dist:win`, but it isn't code-signed yet and has no auto-update (automatic download+install) — checking for the latest version is available under **Settings → About**, see [Installer / Release Binary](#installer--release-binary).
+> **Project status:** actively developed. Current source version `1.3.0`. A Windows installer (`.exe`) can already be built via `npm run dist:win`, but it isn't code-signed yet and has no auto-update (automatic download+install) — checking for the latest version is available under **Settings → About**, see [Installer / Release Binary](#installer--release-binary).
 
 ---
 
@@ -74,7 +74,7 @@ The UI is still evolving. Latest screenshots should live under `docs/screenshots
 
 | Part | Technology |
 | --- | --- |
-| Desktop runtime | Electron 39.8.10 |
+| Desktop runtime | Electron 44.5.1 |
 | UI | React 19 + TypeScript |
 | Bundler | Vite 7 |
 | Styling | Tailwind CSS 4 + custom CSS |
@@ -164,14 +164,14 @@ On the first install, a post-install step checks and, if needed, builds `node-pt
 Example:
 
 ```text
-[ASProOps] Rebuild node-pty untuk Electron 39.8.10 (win32/x64)
+[ASProOps] Rebuild node-pty untuk Electron 44.5.1 (win32/x64)
 [ASProOps] node-pty rebuild selesai dan cache build disimpan.
 ```
 
 After the first native build succeeds, subsequent installs use a smart cache and typically show:
 
 ```text
-[ASProOps] node-pty sudah cocok untuk Electron 39.8.10 (win32/x64) — rebuild dilewati.
+[ASProOps] node-pty sudah cocok untuk Electron 44.5.1 (win32/x64) — rebuild dilewati.
 ```
 
 ### 3. Verify TypeScript

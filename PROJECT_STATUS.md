@@ -4,8 +4,8 @@
 
 Status: COMPLETE
 
-- Source version: `1.2.0`
-- Electron: `39.8.10`
+- Source version: `1.3.0`
+- Electron: `44.5.1`
 - React: `19`
 - TypeScript + Vite `7`
 - Local terminal: xterm.js `5.5` + `node-pty 1.1.0` + Windows ConPTY
