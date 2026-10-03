@@ -14,9 +14,7 @@ import { LogView, ContainerLogView } from './components/LogView';
 import { DeployView } from './components/DeployView';
 import { ProvisionView } from './components/ProvisionView';
 import { ProjectsPanel } from './components/ProjectsPanel';
-import { ServicesPanel } from './components/ServicesPanel';
-import { DockerPanel } from './components/DockerPanel';
-import { CronPanel } from './components/CronPanel';
+import { ServerOpsPanel, type ServerOpsTab } from './components/ServerOpsPanel';
 import { ProvisionPanel } from './components/ProvisionPanel';
 import { PortForwardPanel } from './components/PortForwardPanel';
 import { GitPanel } from './components/GitPanel';
@@ -52,9 +50,7 @@ type LeftMode =
   | 'files'
   | 'monitor'
   | 'projects'
-  | 'services'
-  | 'docker'
-  | 'cron'
+  | 'ops'
   | 'provision'
   | 'portforward'
   | 'git'
@@ -88,6 +84,7 @@ export default function App() {
   const [dockerLogWorkspaces, setDockerLogWorkspaces] = useState<DockerLogWorkspace[]>([]);
   const [provisionWorkspaces, setProvisionWorkspaces] = useState<ProvisionWorkspace[]>([]);
   const [serviceFocus, setServiceFocus] = useState<string | null>(null);
+  const [serverOpsTab, setServerOpsTab] = useState<ServerOpsTab>('docker');
   const [gitFocusProjectId, setGitFocusProjectId] = useState<string | null>(null);
   const [leftMode, setLeftMode] = useState<LeftMode>('servers');
   const [leftWidth, setLeftWidth] = useState(330);
@@ -446,7 +443,8 @@ export default function App() {
    */
   const openServiceManager = (unit: string) => {
     setServiceFocus(unit);
-    setLeftMode('services');
+    setServerOpsTab('services');
+    selectLeftMode('ops');
   };
 
   const openGitPanel = (projectId: string) => {
@@ -795,17 +793,25 @@ export default function App() {
         }}
       >
         <aside className="aspro-rail" aria-label={t('nav.connections')}>
-          <RailButton
-            active={leftMode === 'servers'}
-            icon="$_"
-            label={t('nav.connections')}
-            onClick={() => selectLeftMode('servers')}
-          />
+          <div className="aspro-rail-fixed-top">
+            <RailButton
+              icon={leftCollapsed ? '⇥' : '⇤'}
+              label={leftCollapsed ? t('nav.showSidebar') : t('nav.hideSidebar')}
+              onClick={() => setLeftCollapsed((v) => !v)}
+            />
+          </div>
+
           <RailButton
             active={leftMode === 'local'}
             icon=">_"
             label={t('nav.local')}
             onClick={() => selectLeftMode('local')}
+          />
+          <RailButton
+            active={leftMode === 'servers'}
+            icon="$_"
+            label={t('nav.connections')}
+            onClick={() => selectLeftMode('servers')}
           />
           <RailButton
             active={leftMode === 'files'}
@@ -832,22 +838,10 @@ export default function App() {
             onClick={() => selectLeftMode('git')}
           />
           <RailButton
-            active={leftMode === 'services'}
-            icon="⏻"
-            label={t('nav.services')}
-            onClick={() => selectLeftMode('services')}
-          />
-          <RailButton
-            active={leftMode === 'docker'}
-            icon="⬢"
-            label={t('nav.docker')}
-            onClick={() => selectLeftMode('docker')}
-          />
-          <RailButton
-            active={leftMode === 'cron'}
-            icon="◷"
-            label={t('nav.cron')}
-            onClick={() => selectLeftMode('cron')}
+            active={leftMode === 'ops'}
+            icon="▦"
+            label={t('nav.ops')}
+            onClick={() => selectLeftMode('ops')}
           />
           <RailButton
             active={leftMode === 'provision'}
@@ -868,11 +862,6 @@ export default function App() {
             onClick={() => selectLeftMode('authlog')}
           />
           <div className="flex-1" />
-          <RailButton
-            icon={leftCollapsed ? '⇥' : '⇤'}
-            label={leftCollapsed ? t('nav.showSidebar') : t('nav.hideSidebar')}
-            onClick={() => setLeftCollapsed((v) => !v)}
-          />
           <RailButton icon="⚙" label={t('nav.settings')} onClick={() => setSettingsOpen(true)} />
         </aside>
 
@@ -959,32 +948,18 @@ export default function App() {
 
                 <div
                   className={
-                    leftMode === 'services'
+                    leftMode === 'ops'
                       ? 'absolute inset-0'
                       : 'pointer-events-none invisible absolute inset-0'
                   }
                 >
-                  <ServicesPanel sessionId={activeSession.id} focusService={serviceFocus} />
-                </div>
-
-                <div
-                  className={
-                    leftMode === 'docker'
-                      ? 'absolute inset-0'
-                      : 'pointer-events-none invisible absolute inset-0'
-                  }
-                >
-                  <DockerPanel sessionId={activeSession.id} onOpenLogs={openDockerLogView} />
-                </div>
-
-                <div
-                  className={
-                    leftMode === 'cron'
-                      ? 'absolute inset-0'
-                      : 'pointer-events-none invisible absolute inset-0'
-                  }
-                >
-                  <CronPanel sessionId={activeSession.id} />
+                  <ServerOpsPanel
+                    sessionId={activeSession.id}
+                    activeTab={serverOpsTab}
+                    onTabChange={setServerOpsTab}
+                    focusService={serviceFocus}
+                    onOpenLogs={openDockerLogView}
+                  />
                 </div>
 
                 <div
@@ -1031,9 +1006,7 @@ export default function App() {
               (leftMode === 'files' ||
                 leftMode === 'monitor' ||
                 leftMode === 'projects' ||
-                leftMode === 'services' ||
-                leftMode === 'docker' ||
-                leftMode === 'cron' ||
+                leftMode === 'ops' ||
                 leftMode === 'provision' ||
                 leftMode === 'portforward' ||
                 leftMode === 'git' ||
@@ -1044,42 +1017,34 @@ export default function App() {
                       ? '□'
                       : leftMode === 'monitor'
                         ? '⌁'
-                        : leftMode === 'services'
-                          ? '⏻'
-                          : leftMode === 'docker'
-                            ? '⬢'
-                            : leftMode === 'cron'
-                              ? '◷'
-                              : leftMode === 'provision'
-                                ? '⚒'
-                                : leftMode === 'portforward'
-                                  ? '⇌'
-                                  : leftMode === 'git'
-                                    ? '⎇'
-                                    : leftMode === 'authlog'
-                                      ? '⚿'
-                                      : '▣'}
+                        : leftMode === 'ops'
+                          ? '▦'
+                          : leftMode === 'provision'
+                            ? '⚒'
+                            : leftMode === 'portforward'
+                              ? '⇌'
+                              : leftMode === 'git'
+                                ? '⎇'
+                                : leftMode === 'authlog'
+                                  ? '⚿'
+                                  : '▣'}
                   </div>
                   <strong>
                     {leftMode === 'files'
                       ? t('placeholder.sftp')
                       : leftMode === 'monitor'
                         ? t('placeholder.monitor')
-                        : leftMode === 'services'
-                          ? t('placeholder.services')
-                          : leftMode === 'docker'
-                            ? t('placeholder.docker')
-                            : leftMode === 'cron'
-                              ? t('placeholder.cron')
-                              : leftMode === 'provision'
-                                ? t('placeholder.provision')
-                                : leftMode === 'portforward'
-                                  ? t('placeholder.portforward')
-                                  : leftMode === 'git'
-                                    ? t('placeholder.git')
-                                  : leftMode === 'authlog'
-                                    ? t('placeholder.authlog')
-                                    : t('placeholder.projects')}
+                        : leftMode === 'ops'
+                          ? t('placeholder.ops')
+                          : leftMode === 'provision'
+                            ? t('placeholder.provision')
+                            : leftMode === 'portforward'
+                              ? t('placeholder.portforward')
+                              : leftMode === 'git'
+                                ? t('placeholder.git')
+                              : leftMode === 'authlog'
+                                ? t('placeholder.authlog')
+                                : t('placeholder.projects')}
                   </strong>
                   <span>{t('placeholder.connectRequired')}</span>
                 </div>

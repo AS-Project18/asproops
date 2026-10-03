@@ -2288,3 +2288,43 @@ button:disabled {
 .aspro-local-cli-tools.compact .aspro-local-icon-action {
   font-size: 11px;
 }
+
+
+/* Sidebar rail reorganization + combined Server Ops panel */
+.aspro-rail-fixed-top {
+  position: sticky;
+  z-index: 4;
+  top: -8px;
+  flex: 0 0 auto;
+  margin: -8px -5px 4px;
+  padding: 8px 5px 4px;
+  border-bottom: 1px solid rgba(108, 44, 136, .18);
+  background: rgba(8, 4, 12, .97);
+}
+
+.aspro-server-ops {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.aspro-server-ops-tabs {
+  height: 38px;
+  flex: 0 0 38px;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+}
+
+.aspro-server-ops-tabs button {
+  min-width: 0;
+  flex: 1 1 0;
+  padding: 0 8px;
+  font-size: 10px;
+  text-align: center;
+}
+
+.aspro-server-ops > .relative {
+  min-height: 0;
+}
