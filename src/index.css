@@ -2000,3 +2000,143 @@ button:disabled {
   color: #6c5f73;
   font-size: 7px;
 }
+
+
+/* Local Workspace VS Code-style collapsible/resizable panes */
+.aspro-local-section-stack {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  margin: 4px -3px -2px;
+  overflow: hidden;
+  border-top: 1px solid rgba(102, 54, 119, .18);
+}
+
+.aspro-local-pane {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.aspro-local-pane.collapsed {
+  min-height: 29px !important;
+}
+
+.aspro-local-pane-header {
+  display: flex;
+  flex: 0 0 29px;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid rgba(102, 54, 119, .14);
+  background: rgba(12, 5, 18, .9);
+}
+
+.aspro-local-pane-toggle {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 5px;
+  height: 100%;
+  padding: 0 5px;
+  color: #86788c;
+  text-align: left;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .75px;
+  user-select: none;
+}
+
+.aspro-local-pane-toggle:hover {
+  color: #b7a8be;
+  background: rgba(73, 28, 87, .12);
+}
+
+.aspro-local-pane-chevron {
+  display: inline-flex;
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+  align-items: center;
+  justify-content: center;
+  color: #75677c;
+  font-size: 14px;
+  line-height: 11px;
+  transform: rotate(90deg);
+  transition: transform 90ms ease;
+}
+
+.aspro-local-pane.collapsed .aspro-local-pane-chevron {
+  transform: rotate(0deg);
+}
+
+.aspro-local-pane-header .aspro-local-add {
+  flex: 0 0 auto;
+  margin-right: 5px;
+  padding: 3px 6px;
+}
+
+.aspro-local-pane-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 7px 5px 8px;
+}
+
+/* Scroll independently inside each category, instead of the old fixed
+   max-height lists fighting the new splitter layout. */
+.aspro-local-pane-body .aspro-local-projects,
+.aspro-local-pane-body .aspro-local-cli-list {
+  max-height: none;
+  overflow: visible;
+}
+
+.aspro-local-pane-body > .aspro-local-list {
+  overflow: visible;
+}
+
+.aspro-local-pane-sash {
+  position: relative;
+  z-index: 4;
+  flex: 0 0 4px;
+  margin: -2px 0;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.aspro-local-pane-sash::after {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: rgba(115, 63, 133, .18);
+  content: '';
+  transition: background 90ms ease, height 90ms ease;
+}
+
+.aspro-local-pane-sash:hover::after,
+.aspro-local-resizing .aspro-local-pane-sash::after {
+  top: 0;
+  height: 3px;
+  background: rgba(184, 72, 226, .74);
+}
+
+.aspro-local-pane-sash.disabled {
+  cursor: default;
+}
+
+.aspro-local-pane-sash.disabled:hover::after {
+  top: 1px;
+  height: 1px;
+  background: rgba(115, 63, 133, .18);
+}
+
+.aspro-local-resizing,
+.aspro-local-resizing * {
+  cursor: row-resize !important;
+  user-select: none !important;
+}
