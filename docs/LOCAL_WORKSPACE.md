@@ -151,15 +151,54 @@ features that intentionally disable themselves over SSH can also be disabled
 for that OMP invocation. This trade-off is preferable to spoofing SSH for the
 entire ASProOps terminal environment.
 
+## Workspace Restore (L2C)
+
+ASProOps stores a small, versioned renderer snapshot in:
+
+```text
+asproops.workspace.v1
+```
+
+The snapshot restores workspace shape, not live processes.
+
+Restored automatically:
+
+- open SSH workspace tabs
+- Local Terminal / Local Project tabs
+- active Dashboard / SSH / Local tab when still valid
+- left sidebar mode
+- left sidebar width
+- hidden/shown sidebar state
+- active Ops tab (Docker / Cron / Service)
+
+The existing Local Workspace pane storage continues to restore:
+
+- Projects / CLI Tools / Shells collapsed state
+- user-adjusted vertical pane proportions
+
+Safety rules:
+
+- SSH tabs are restored **disconnected**; ASProOps never auto-connects them
+- Local tabs are new shell instances; process state and scrollback are not restored
+- a tab that previously launched OMP/Codex/Claude restores as a plain project shell
+- `cliProfileId` and `cliName` are deliberately excluded from the snapshot
+- Deploy, Rollback, Provision, Log Viewer, and Docker Log workspaces are not replayed
+- SSH session IDs must still exist in the current saved-session store
+- Local Project IDs must still exist and their folders must still be available
+- terminal profiles are resolved from the current detected profile list
+- renderer localStorage is never allowed to supply a raw executable, command, or authoritative project path
+
+If a requested active tab is no longer valid, Dashboard becomes active.
+
 ## WSL boundary
 
 Windows PATH availability does not imply the same executable exists inside a WSL distribution. L2A intentionally does not perform Windows-to-WSL path translation or WSL-specific CLI discovery.
 
+## Roadmap decision
+
+L2B Quick Commands is deferred / not planned for now. The current CLI-first workflow
+already covers the user's normal project command flow without adding button clutter.
+
 ## Next
 
-L2B: project Quick Commands.
-
-Quick Commands are intentionally separate from CLI Registry:
-
-- CLI Registry = trusted executable/tool identity
-- Quick Commands = user-defined project command/workflow
+L2D: Recent & Favorite Projects / richer CLI health information.

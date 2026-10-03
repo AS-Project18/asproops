@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import asproIcon from './assets/asproops-icon.png';
 import { SessionSidebar } from './components/SessionSidebar';
 import { SessionForm } from './components/SessionForm';
@@ -25,6 +25,15 @@ import { Dashboard } from './components/Dashboard';
 import { useI18n } from './i18n';
 import { useSessions } from './hooks/useSessions';
 import { formatBytes, formatRate } from './lib/format';
+import {
+  loadWorkspaceSnapshot,
+  resolveRestoredActive,
+  restoreLocalWorkspaces,
+  restoreOpenSessions,
+  saveWorkspaceSnapshot,
+  type WorkspaceActiveTarget,
+  type WorkspaceLeftMode,
+} from './workspaceRestore';
 import type {
   DeployWorkspace,
   DockerLogWorkspace,
@@ -44,17 +53,7 @@ function basename(path: string): string {
 }
 
 type FormState = { open: false } | { open: true; editing: SessionConfig | null };
-type LeftMode =
-  | 'servers'
-  | 'local'
-  | 'files'
-  | 'monitor'
-  | 'projects'
-  | 'ops'
-  | 'provision'
-  | 'portforward'
-  | 'git'
-  | 'authlog';
+type LeftMode = WorkspaceLeftMode;
 
 export default function App() {
   const { t } = useI18n();
@@ -115,6 +114,8 @@ export default function App() {
   const [quickConnectOpen, setQuickConnectOpen] = useState(false);
   /** Cuma dipakai buat tahu apakah tombol "Kunci sekarang" di header perlu ditampilkan. */
   const [appLockEnabled, setAppLockEnabled] = useState(false);
+  const [workspaceRestoreReady, setWorkspaceRestoreReady] = useState(false);
+  const workspaceRestoreAttemptedRef = useRef(false);
 
   useEffect(() => {
     void window.ssh.appLock.status().then((status) => setAppLockEnabled(status.enabled));
@@ -149,6 +150,94 @@ export default function App() {
   useEffect(() => {
     void refreshLocalProfiles();
   }, []);
+
+  // L2C workspace restore. Tunggu daftar server dan terminal profile selesai
+  // dimuat supaya snapshot dapat divalidasi terhadap state aktual.
+  useEffect(() => {
+    if (loading || localProfilesLoading || workspaceRestoreAttemptedRef.current) return;
+
+    workspaceRestoreAttemptedRef.current = true;
+
+    void (async () => {
+      const snapshot = loadWorkspaceSnapshot();
+      if (!snapshot) {
+        setWorkspaceRestoreReady(true);
+        return;
+      }
+
+      let projects: LocalProjectSummary[] = [];
+      try {
+        projects = await window.ssh.localProjects.list();
+      } catch {
+        // Layout + remote tabs masih boleh dipulihkan bila local-project store bermasalah.
+      }
+
+      const restoredSessions = restoreOpenSessions(snapshot, sessions);
+      const restoredLocals = restoreLocalWorkspaces(snapshot, localProfiles, projects);
+      const restoredActive = resolveRestoredActive(
+        snapshot.active,
+        restoredSessions,
+        restoredLocals,
+      );
+
+      setOpenSessions(restoredSessions);
+      setLocalWorkspaces(restoredLocals);
+      setLeftMode(snapshot.layout.leftMode);
+      setLeftWidth(snapshot.layout.leftWidth);
+      setLeftCollapsed(snapshot.layout.leftCollapsed);
+      setServerOpsTab(snapshot.layout.serverOpsTab);
+
+      // Runtime/one-shot workspaces sengaja tidak direstore.
+      // mountedSessions juga dibiarkan kosong: SSH tidak auto-connect.
+      setActiveId(null);
+      setActiveLocalId(null);
+      setActiveLogId(null);
+      setActiveDeployId(null);
+      setActiveDockerLogId(null);
+      setActiveProvisionId(null);
+      setDashboardActive(restoredActive.kind === 'dashboard');
+
+      if (restoredActive.kind === 'remote') {
+        setActiveId(restoredActive.sessionId);
+      } else if (restoredActive.kind === 'local') {
+        setActiveLocalId(restoredActive.workspaceId);
+      }
+
+      setWorkspaceRestoreReady(true);
+    })();
+  }, [loading, localProfilesLoading, sessions, localProfiles]);
+
+  useEffect(() => {
+    if (!workspaceRestoreReady) return;
+
+    let active: WorkspaceActiveTarget = { kind: 'dashboard' };
+    if (!dashboardActive && activeLocalId) {
+      active = { kind: 'local', workspaceId: activeLocalId };
+    } else if (!dashboardActive && activeId) {
+      active = { kind: 'remote', sessionId: activeId };
+    }
+
+    saveWorkspaceSnapshot({
+      openSessions,
+      localWorkspaces,
+      active,
+      leftMode,
+      leftWidth,
+      leftCollapsed,
+      serverOpsTab,
+    });
+  }, [
+    workspaceRestoreReady,
+    openSessions,
+    localWorkspaces,
+    dashboardActive,
+    activeLocalId,
+    activeId,
+    leftMode,
+    leftWidth,
+    leftCollapsed,
+    serverOpsTab,
+  ]);
 
   useEffect(() => {
     setMonitorSnapshot(null);

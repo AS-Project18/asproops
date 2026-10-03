@@ -69,17 +69,34 @@ Implemented:
 Purpose: prevent OMP's Windows ConPTY win32-input fallback from interpreting
 normal xterm.js VT arrow sequences as separate Escape/text input.
 
-### L2B
+### L2B: Project Quick Commands
 
-Status: NEXT
+Status: DEFERRED / NOT PLANNED FOR NOW
 
-- project Quick Commands
+Decision:
 
-### L2C
+- current CLI-first workflow already covers the user's normal project commands
+- do not add command-button clutter unless a concrete need appears later
 
-Status: PLANNED
+### L2C: Workspace Restore
 
-- workspace/layout restore
+Status: IMPLEMENTED / MANUAL VERIFICATION PENDING
+
+Implemented:
+
+- versioned renderer snapshot: `asproops.workspace.v1`
+- restore open SSH tabs without auto-connect
+- restore Local Terminal / Local Project tabs as fresh shell instances
+- CLI-started local tabs restore as plain project shells; OMP/Codex/Claude are never auto-run
+- restore active Dashboard / SSH / Local workspace when the target still exists
+- restore sidebar mode, width, hidden state, and active Ops tab
+- Local Workspace Projects/CLI/Shells collapse + pane heights remain restored by their existing dedicated layout storage
+- stale SSH session IDs are dropped
+- stale/missing local projects are dropped
+- terminal profiles are re-resolved from currently detected profiles, not trusted from localStorage
+- Deploy / Rollback / Provision / Log / Docker Log runtime workspaces are intentionally not restored
+
+No SSH auto-connect, no CLI auto-run, and no one-shot operation replay.
 
 ### L2D
 
@@ -111,7 +128,7 @@ Status: PLANNED
 - No speculative Windows path to WSL path translation is performed.
 - CLI Registry commands are intentionally executable names, not arbitrary shell expressions.
 - Arguments are intentionally simple safe tokens in L2A. Complex quoted shell expressions belong to Quick Commands, not CLI Registry.
-- workspace restore is not implemented yet.
+- Workspace Restore restores layout/tabs, not live process state or terminal scrollback.
 - OMP compatibility applies only when OMP is launched through the Local CLI Registry.
   Manually typing `omp` inside a plain Local Terminal bypasses the wrapper.
 - OMP compatibility is intentionally not applied to WSL.
