@@ -27,6 +27,7 @@ import { RemoteEditManager } from './ssh/remote-edit';
 import { PortForwardManager } from './ssh/port-forward';
 import { SessionStore } from './store/sessions';
 import { LocalTerminalManager } from './local-terminal';
+import { buildLocalProjectContext } from './local-project-context';
 import { AppLock } from './app-lock';
 import { preferences, sftpPreferences } from './store/preferences';
 import { projects } from './store/projects';
@@ -561,6 +562,12 @@ export function registerIpc(window: BrowserWindow): void {
     const error = await shell.openPath(project.path);
     if (error) throw new Error(error);
     localProjects.touch(project.id);
+  });
+  ipcMain.handle('localProjects:context', (_e, id: string) => {
+    // Renderer hanya mengirim projectId. Path authoritative selalu diambil
+    // dari LocalProjectStore dan diverifikasi masih tersedia.
+    const project = localProjects.requireAvailable(id);
+    return buildLocalProjectContext(project);
   });
 
   // --- SFTP browser -------------------------------------------------------

@@ -12,11 +12,13 @@ import type {
   LocalCliAvailability,
   LocalCliCreateInput,
   LocalCliProfile,
+  LocalProjectContextResult,
   LocalProjectCreateInput,
   LocalProjectSummary,
   LocalTerminalProfile,
 } from '../shared/types';
 import { useI18n } from '../i18n';
+import { ProjectContextDialog } from './ProjectContextDialog';
 
 
 
@@ -176,6 +178,10 @@ export function LocalTerminalPanel({
   const [projectQuery, setProjectQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [contextProject, setContextProject] = useState<LocalProjectSummary | null>(null);
+  const [projectContext, setProjectContext] = useState<LocalProjectContextResult | null>(null);
+  const [contextLoading, setContextLoading] = useState(false);
+  const [contextError, setContextError] = useState<string | null>(null);
   const [sectionLayout, setSectionLayout] = useState<LocalSectionLayout>(loadSectionLayout);
   const sectionStackRef = useRef<HTMLDivElement>(null);
 
@@ -417,6 +423,27 @@ export function LocalTerminalPanel({
     } catch (err) {
       setError((err as Error).message);
     }
+  };
+
+  const loadProjectContext = async (project: LocalProjectSummary) => {
+    setContextProject(project);
+    setContextLoading(true);
+    setContextError(null);
+    try {
+      setProjectContext(await window.ssh.localProjects.context(project.id));
+    } catch (err) {
+      setProjectContext(null);
+      setContextError((err as Error).message || t('local.contextFailed'));
+    } finally {
+      setContextLoading(false);
+    }
+  };
+
+  const closeProjectContext = () => {
+    setContextProject(null);
+    setProjectContext(null);
+    setContextError(null);
+    setContextLoading(false);
   };
 
   const openProject = (project: LocalProjectSummary, cli?: LocalCliProfile) => {
@@ -700,6 +727,16 @@ export function LocalTerminalPanel({
                             {!project.pathExists ? (
                               <span className="aspro-local-missing-badge">{t('local.missing')}</span>
                             ) : null}
+                            <button
+                              type="button"
+                              className="aspro-local-icon-action"
+                              title={t('local.contextAction')}
+                              aria-label={t('local.contextAction')}
+                              onClick={() => void loadProjectContext(project)}
+                              disabled={!project.pathExists}
+                            >
+                              ⧉
+                            </button>
                             <button
                               type="button"
                               className="aspro-local-icon-action"
@@ -1018,6 +1055,17 @@ export function LocalTerminalPanel({
           ) : null}
         </section>
       </div>
+
+      {contextProject ? (
+        <ProjectContextDialog
+          projectName={contextProject.name}
+          context={projectContext}
+          loading={contextLoading}
+          error={contextError}
+          onClose={closeProjectContext}
+          onRefresh={() => void loadProjectContext(contextProject)}
+        />
+      ) : null}
     </section>
   );
 }

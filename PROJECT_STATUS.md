@@ -121,14 +121,50 @@ Implemented:
 
 No CLI is installed, updated, or modified automatically.
 
-### L3
+### L3A: Local Git Awareness
 
-Status: PLANNED
+Status: SKIPPED
 
-- local Git status
-- local process/service status
-- task/project notes
-- context/handoff helper
+Decision:
+
+- skipped by user; no standalone Local Git panel is planned
+- L3C may read a bounded Git snapshot only for handoff context
+
+### L3B: CLI Registry Health
+
+Status: COMPLETE / ABSORBED INTO L2D
+
+- executable resolution, availability, built-in version probing, and health cache
+  are already implemented by L2D
+
+### L3C: Project Context / Handoff Helper
+
+Status: IMPLEMENTED / MANUAL VERIFICATION PENDING
+
+Implemented:
+
+- per-project Context/Handoff action in Local Workspace
+- renderer sends only `projectId`; main process resolves authoritative project path
+- bounded Git snapshot: branch, HEAD, upstream, ahead/behind, last commit,
+  clean/dirty state, and changed-file summary
+- bounded allowlist-only project document capture
+- supported context documents include AGENTS/CLAUDE/GEMINI instructions,
+  PROJECT_STATUS/STATUS, architecture/design/PRD/spec/task docs, README, and
+  ASProOps Local Workspace documentation when present
+- `.env`, private-key, credential, and arbitrary renderer-supplied paths are not read
+- large context files are bounded with head/tail excerpts
+- total copied document context is capped
+- preview dialog before copy
+- Copy Context uses Electron clipboard bridge
+- no file mutation, Git fetch/pull, agent launch, or automatic external sharing
+
+### L3D: Local Process Status
+
+Status: SKIPPED
+
+Decision:
+
+- skipped by user; no local process/status manager is planned at this time
 
 ### L4
 

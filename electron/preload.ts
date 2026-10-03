@@ -19,6 +19,7 @@ import type {
   LocalCliCreateInput,
   LocalCliProfile,
   LocalCliUpdatePatch,
+  LocalProjectContextResult,
   LocalProjectCreateInput,
   LocalProjectProfile,
   LocalProjectSummary,
@@ -225,6 +226,8 @@ const api = {
       ipcRenderer.invoke('localProjects:update', id, patch),
     remove: (id: string): Promise<void> => ipcRenderer.invoke('localProjects:remove', id),
     openFolder: (id: string): Promise<void> => ipcRenderer.invoke('localProjects:openFolder', id),
+    context: (id: string): Promise<LocalProjectContextResult> =>
+      ipcRenderer.invoke('localProjects:context', id),
   },
 
   sftp: {

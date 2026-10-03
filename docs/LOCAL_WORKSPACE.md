@@ -229,6 +229,56 @@ Safety rules:
 
 If a requested active tab is no longer valid, Dashboard becomes active.
 
+## Project Context / Handoff Helper (L3C)
+
+Each saved Local Project exposes a Context/Handoff action. The renderer submits
+only the project ID. Electron main resolves the authoritative path from
+`LocalProjectStore.requireAvailable()` before reading anything.
+
+The generated snapshot contains:
+
+- project name/path and generation timestamp
+- bounded local Git metadata when Git and a repository are available:
+  - branch
+  - HEAD
+  - upstream
+  - ahead/behind
+  - last commit
+  - clean/dirty state
+  - bounded changed-file list
+- bounded excerpts from recognized project-context documents
+
+Recognized document candidates are deliberately allowlisted. They include common
+agent/project documents such as:
+
+- `AGENTS.md`
+- `CLAUDE.md`
+- `GEMINI.md`
+- `PROJECT_STATUS.md`
+- `STATUS.md`
+- `TECH_STACK.md`
+- design/PRD/spec/task markdown files
+- `README.md`
+- `docs/LOCAL_WORKSPACE.md`
+
+Safety boundaries:
+
+- renderer cannot provide a raw path for the context reader
+- `.env`, secrets, private keys, credential stores, and arbitrary files are not
+  part of the automatic context scan
+- per-file reads and total context size are bounded
+- large documents use a head/tail excerpt with an omission marker
+- Git inspection is read-only and does not fetch, pull, checkout, or mutate
+- context is previewed before the user explicitly copies it
+- ASProOps never auto-sends the generated context to an external service
+
+L3 roadmap decisions:
+
+- L3A standalone Local Git Awareness: skipped
+- L3B CLI Registry Health: completed earlier as part of L2D
+- L3C Context/Handoff Helper: implemented
+- L3D Local Process Status: skipped
+
 ## WSL boundary
 
 Windows PATH availability does not imply the same executable exists inside a WSL distribution. L2A intentionally does not perform Windows-to-WSL path translation or WSL-specific CLI discovery.
@@ -240,4 +290,8 @@ already covers the user's normal project command flow without adding button clut
 
 ## Next
 
-L3: local Git/project awareness, local process status, notes/context-handoff helpers.
+L3 is intentionally closed after L3C. L3A and L3D are skipped by user decision,
+while L3B was absorbed into L2D.
+
+Next planned area: L4 environment profiles / higher-level local automation,
+subject to user priority.

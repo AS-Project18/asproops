@@ -190,6 +190,35 @@ export interface LocalProjectSummary extends LocalProjectProfile {
   pathExists: boolean;
 }
 
+export interface LocalProjectContextGit {
+  available: boolean;
+  isRepository: boolean;
+  branch?: string;
+  head?: string;
+  upstream?: string;
+  ahead?: number;
+  behind?: number;
+  clean?: boolean;
+  changes: string[];
+  lastCommit?: string;
+}
+
+export interface LocalProjectContextFile {
+  path: string;
+  content: string;
+  truncated: boolean;
+}
+
+export interface LocalProjectContextResult {
+  projectId: string;
+  projectName: string;
+  projectPath: string;
+  generatedAt: number;
+  git: LocalProjectContextGit;
+  files: LocalProjectContextFile[];
+  handoffText: string;
+}
+
 export interface LocalTerminalOpenOptions {
   profileId: string;
   cols: number;

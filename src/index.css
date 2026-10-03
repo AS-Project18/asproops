@@ -2483,3 +2483,219 @@ button:disabled {
 .aspro-local-cli-path.missing {
   color: #725158;
 }
+
+
+/* L3C Project Context / Handoff */
+.aspro-context-backdrop {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: rgba(3, 1, 6, .78);
+  backdrop-filter: blur(5px);
+}
+
+.aspro-context-dialog {
+  display: flex;
+  width: min(920px, 94vw);
+  height: min(760px, 90vh);
+  min-height: 420px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(130, 66, 151, .32);
+  border-radius: 10px;
+  background: #100914;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .48);
+}
+
+.aspro-context-header {
+  display: flex;
+  min-height: 54px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 13px;
+  border-bottom: 1px solid rgba(115, 62, 132, .22);
+  background: rgba(19, 10, 24, .96);
+}
+
+.aspro-context-header > div {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.aspro-context-header strong {
+  color: #d7cadc;
+  font-size: 11px;
+  letter-spacing: .08em;
+}
+
+.aspro-context-header span {
+  overflow: hidden;
+  color: #796e80;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aspro-context-body {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 9px;
+  padding: 10px 12px;
+}
+
+.aspro-context-state,
+.aspro-context-error {
+  margin: auto;
+  color: #83768a;
+  font-size: 11px;
+}
+
+.aspro-context-error {
+  color: #d27b83;
+}
+
+.aspro-context-summary {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.aspro-context-summary > div {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid rgba(106, 58, 122, .2);
+  border-radius: 6px;
+  background: rgba(16, 9, 20, .72);
+}
+
+.aspro-context-summary > div > span {
+  display: block;
+  margin-bottom: 5px;
+  color: #817487;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.aspro-context-summary small {
+  color: #69606e;
+  font-size: 9px;
+}
+
+.aspro-context-chips,
+.aspro-context-docs {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.aspro-context-chips i,
+.aspro-context-docs i {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 2px 5px;
+  border: 1px solid rgba(117, 74, 129, .22);
+  border-radius: 999px;
+  background: rgba(39, 20, 45, .48);
+  color: #9a8ca0;
+  font-size: 8px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aspro-context-chips i.ok {
+  color: #7ca88a;
+}
+
+.aspro-context-chips i.warn {
+  color: #d3a269;
+}
+
+.aspro-context-preview {
+  min-height: 0;
+  flex: 1 1 auto;
+  resize: none;
+  border: 1px solid rgba(104, 59, 118, .24);
+  border-radius: 6px;
+  outline: none;
+  padding: 10px 11px;
+  background: #09060b;
+  color: #bbb0bf;
+  font-family: "Cascadia Code", "CaskaydiaCove Nerd Font", Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.aspro-context-warning {
+  flex: 0 0 auto;
+  color: #6f6574;
+  font-size: 8px;
+  line-height: 1.35;
+}
+
+.aspro-context-footer {
+  display: flex;
+  min-height: 50px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid rgba(115, 62, 132, .22);
+  background: rgba(15, 8, 19, .96);
+}
+
+.aspro-context-footer button {
+  min-height: 29px;
+  padding: 0 11px;
+  border: 1px solid rgba(106, 67, 117, .28);
+  border-radius: 5px;
+  background: rgba(31, 19, 35, .72);
+  color: #9a8da0;
+  font-size: 9px;
+}
+
+.aspro-context-footer button:hover:not(:disabled) {
+  border-color: rgba(142, 78, 160, .44);
+  color: #d1c4d5;
+}
+
+.aspro-context-footer button.primary {
+  border-color: rgba(179, 91, 48, .45);
+  background: rgba(118, 51, 16, .34);
+  color: #e2aa78;
+}
+
+.aspro-context-footer button:disabled {
+  cursor: not-allowed;
+  opacity: .35;
+}
+
+@media (max-width: 760px) {
+  .aspro-context-backdrop {
+    padding: 12px;
+  }
+
+  .aspro-context-dialog {
+    width: 100%;
+    height: 92vh;
+  }
+
+  .aspro-context-summary {
+    grid-template-columns: 1fr;
+  }
+}
