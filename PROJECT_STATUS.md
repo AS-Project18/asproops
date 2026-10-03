@@ -51,6 +51,24 @@ Implemented:
 
 Manual verification is intentionally left to the developer workstation. No automated test/build run is part of this change.
 
+### L2A.1: OMP Windows/ConPTY compatibility
+
+Status: IMPLEMENTED / MANUAL VERIFICATION PENDING
+
+Implemented:
+
+- OMP registry launches on Windows PowerShell / Windows PowerShell 5 use a
+  command-scoped compatibility environment
+- OMP registry launches on CMD use `setlocal` / `endlocal`
+- compatibility marker is a structurally valid `SSH_CONNECTION`
+- the previous `SSH_CONNECTION` value is restored after OMP exits
+- Codex, Claude, custom CLI, plain terminals, SSH sessions, and WSL are not modified
+- no global ASProOps environment spoofing
+- no OMP binary patching and no xterm.js / node-pty engine rewrite
+
+Purpose: prevent OMP's Windows ConPTY win32-input fallback from interpreting
+normal xterm.js VT arrow sequences as separate Escape/text input.
+
 ### L2B
 
 Status: NEXT
@@ -94,4 +112,6 @@ Status: PLANNED
 - CLI Registry commands are intentionally executable names, not arbitrary shell expressions.
 - Arguments are intentionally simple safe tokens in L2A. Complex quoted shell expressions belong to Quick Commands, not CLI Registry.
 - workspace restore is not implemented yet.
-- OMP Win32 input regressions are not worked around by ASProOps.
+- OMP compatibility applies only when OMP is launched through the Local CLI Registry.
+  Manually typing `omp` inside a plain Local Terminal bypasses the wrapper.
+- OMP compatibility is intentionally not applied to WSL.

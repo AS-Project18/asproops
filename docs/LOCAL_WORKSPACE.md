@@ -119,6 +119,38 @@ CLI launch opens the selected project shell first and writes the registry comman
 4. Command Prompt
 5. first available profile
 
+## OMP Windows / ConPTY compatibility
+
+OMP is a special case in the Local CLI Registry because its Windows TUI can
+enable the console `win32-input-mode` fallback while ASProOps presents an
+xterm.js frontend over ConPTY. In that combination normal VT cursor sequences
+can be interpreted as Escape plus literal text.
+
+When a registry profile whose command is `omp` or `omp.exe` is launched on
+Windows PowerShell or CMD, ASProOps temporarily supplies a structurally valid:
+
+```text
+SSH_CONNECTION=127.0.0.1 0 127.0.0.1 0
+```
+
+This makes OMP use its remote-terminal-safe input path instead of the
+host-local Win32 input mode. The variable is scoped to the OMP invocation and
+the prior shell value is restored after OMP exits.
+
+This compatibility path is deliberately narrow:
+
+- it applies only to OMP launched through the Local CLI Registry
+- it does not modify plain local terminals
+- it does not affect Codex, Claude, or custom CLI commands
+- it is not applied to WSL
+- manually typing `omp` in a plain terminal bypasses it
+- ASProOps does not patch the OMP binary or rewrite xterm.js/node-pty input
+
+Because OMP treats the wrapped process as an SSH-like session, host-local OMP
+features that intentionally disable themselves over SSH can also be disabled
+for that OMP invocation. This trade-off is preferable to spoofing SSH for the
+entire ASProOps terminal environment.
+
 ## WSL boundary
 
 Windows PATH availability does not imply the same executable exists inside a WSL distribution. L2A intentionally does not perform Windows-to-WSL path translation or WSL-specific CLI discovery.

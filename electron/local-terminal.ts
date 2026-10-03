@@ -83,6 +83,67 @@ function cliInvocation(profile: LocalCliProfile): string {
   return [profile.command, ...profile.args].join(' ');
 }
 
+const OMP_COMPAT_SSH_CONNECTION = '127.0.0.1 0 127.0.0.1 0';
+
+function isOmpCli(profile: LocalCliProfile): boolean {
+  const command = profile.command.trim().toLowerCase();
+  return command === 'omp' || command === 'omp.exe';
+}
+
+/**
+ * OMP 18.4.9+ may enable Windows console win32-input-mode (CSI ? 9001 h)
+ * when it sees a native Windows + ConPTY session. ASProOps is actually an
+ * xterm.js frontend over ConPTY, so it keeps sending normal VT key sequences;
+ * OMP then splits arrows into Escape + literal "[A"/"[B"/etc.
+ *
+ * OMP deliberately skips that host-local input mode when SSH_* is present.
+ * We reproduce the proven workaround only for an OMP registry launch and
+ * scope it to the lifetime of that one command. The shell environment is
+ * restored after OMP exits.
+ */
+function cliStartupCommand(
+  cliProfile: LocalCliProfile,
+  terminalProfile: LocalTerminalProfile,
+): string {
+  const invocation = cliInvocation(cliProfile);
+
+  if (
+    process.platform !== 'win32' ||
+    terminalProfile.kind === 'wsl' ||
+    !isOmpCli(cliProfile)
+  ) {
+    return invocation;
+  }
+
+  if (terminalProfile.kind === 'powershell') {
+    return [
+      '$__asproopsPrevSshConnection=$env:SSH_CONNECTION',
+      `$env:SSH_CONNECTION='${OMP_COMPAT_SSH_CONNECTION}'`,
+      `try { ${invocation} } finally {`,
+      'if ($null -eq $__asproopsPrevSshConnection) {',
+      'Remove-Item Env:SSH_CONNECTION -ErrorAction SilentlyContinue',
+      '} else {',
+      '$env:SSH_CONNECTION=$__asproopsPrevSshConnection',
+      '}',
+      'Remove-Variable __asproopsPrevSshConnection -ErrorAction SilentlyContinue',
+      '}',
+    ].join('; ');
+  }
+
+  if (terminalProfile.kind === 'cmd') {
+    // SETLOCAL/ENDLOCAL restores an existing SSH_CONNECTION automatically,
+    // including the previously-unset case.
+    return [
+      'setlocal',
+      `set "SSH_CONNECTION=${OMP_COMPAT_SSH_CONNECTION}"`,
+      invocation,
+      'endlocal',
+    ].join(' & ');
+  }
+
+  return invocation;
+}
+
 export class LocalTerminalManager {
   private readonly terminals = new Map<string, IPty>();
 
@@ -191,7 +252,9 @@ export class LocalTerminalManager {
 
       // command + args berasal dari registry main-process yang sudah
       // divalidasi, bukan string command yang dikirim renderer saat launch.
-      terminal.write(`${cliInvocation(cliProfile)}\r`);
+      // OMP mendapat wrapper compatibility terbatas di sini; CLI lain tetap
+      // menerima invocation normal.
+      terminal.write(`${cliStartupCommand(cliProfile, profile)}\r`);
     };
 
     if (cliProfile) {
