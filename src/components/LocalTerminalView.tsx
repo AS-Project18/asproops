@@ -5,7 +5,10 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 
-import type { LocalTerminalProfile } from '../shared/types';
+import type {
+  LocalCliLauncher,
+  LocalTerminalProfile,
+} from '../shared/types';
 import { useTerminalPrefs } from '../terminalPrefs';
 import { ContextMenu, ContextMenuItem, type ContextMenuPosition } from './ContextMenu';
 import { useI18n } from '../i18n';
@@ -20,6 +23,9 @@ function defaultFontFamily(): string {
 interface LocalTerminalViewProps {
   workspaceId: string;
   profile: LocalTerminalProfile;
+  projectId?: string;
+  cwd?: string;
+  launcher?: LocalCliLauncher;
   active: boolean;
   onExit?: () => void;
 }
@@ -51,6 +57,9 @@ const THEME = {
 export function LocalTerminalView({
   workspaceId,
   profile,
+  projectId,
+  cwd,
+  launcher,
   active,
   onExit,
 }: LocalTerminalViewProps) {
@@ -169,7 +178,14 @@ export function LocalTerminalView({
 
         void (async () => {
           try {
-            const terminalId = await window.ssh.local.open(profile.id, term.cols, term.rows);
+            const terminalId = await window.ssh.local.open({
+              profileId: profile.id,
+              cols: term.cols,
+              rows: term.rows,
+              projectId,
+              cwd,
+              launcher,
+            });
             if (disposed) {
               window.ssh.local.close(terminalId);
               return;
@@ -243,7 +259,7 @@ export function LocalTerminalView({
     };
   // initialized hanya berubah false -> true sekali. Setelah terminal dibuat,
   // pindah tab tidak membongkar PTY.
-  }, [initialized, workspaceId, profile.id]);
+  }, [initialized, workspaceId, profile.id, projectId, cwd, launcher]);
 
   // Terapkan perubahan preferensi ke terminal yang sudah terbuka, tanpa
   // menutup PTY-nya (beda effect dari effect mount di atas).

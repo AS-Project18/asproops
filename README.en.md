@@ -22,6 +22,7 @@ ASProOps is an Electron-based desktop application designed as a single workspace
 
 - Interactive SSH terminal built on `ssh2` + xterm.js, with copy/paste (Ctrl+Shift+C/V, right-click) and multiple tabs per server.
 - Local terminals: PowerShell 7, Windows PowerShell, Command Prompt, and WSL (automatic distro detection).
+- **Saved Local Projects**: save local project folders, open a terminal directly in that project, and launch OMP, Codex, or Claude from the project workspace without hardcoding executable paths.
 - Password, private key, and SSH Agent authentication; jump host / bastion support.
 - Import `~/.ssh/config`, host key verification via `known_hosts`.
 - Quick Connect (Ctrl+K) — search and connect to a saved server without touching the mouse.
@@ -73,7 +74,7 @@ The UI is still evolving. Latest screenshots should live under `docs/screenshots
 
 | Part | Technology |
 | --- | --- |
-| Desktop runtime | Electron 37 |
+| Desktop runtime | Electron 39.8.10 |
 | UI | React 19 + TypeScript |
 | Bundler | Vite 7 |
 | Styling | Tailwind CSS 4 + custom CSS |
@@ -163,14 +164,14 @@ On the first install, a post-install step checks and, if needed, builds `node-pt
 Example:
 
 ```text
-[ASProOps] Rebuild node-pty untuk Electron 37.4.0 (win32/x64)
+[ASProOps] Rebuild node-pty untuk Electron 39.8.10 (win32/x64)
 [ASProOps] node-pty rebuild selesai dan cache build disimpan.
 ```
 
 After the first native build succeeds, subsequent installs use a smart cache and typically show:
 
 ```text
-[ASProOps] node-pty sudah cocok untuk Electron 37.4.0 (win32/x64) — rebuild dilewati.
+[ASProOps] node-pty sudah cocok untuk Electron 39.8.10 (win32/x64) — rebuild dilewati.
 ```
 
 ### 3. Verify TypeScript
@@ -349,7 +350,9 @@ ASProOps detects:
 
 Local terminals use `node-pty`, so interactive apps, ANSI escape sequences, terminal resizing, and shell shortcuts work like a native terminal.
 
-WSL isn't required for SSH connections.
+The **Local** menu can also save Local Projects. Each project stores a name, project folder, optional default shell, and optional preferred CLI. **Terminal**, **OMP**, **Codex**, and **Claude** open a shell in that project folder; CLI launchers are enabled only when the command is detected through Windows PATH. Moved or deleted folders are marked without crashing the app.
+
+WSL isn't required for SSH connections. L1 does not automatically translate Windows paths into WSL paths, and launcher detection uses Windows PATH, so it does not prove that the same CLI is installed inside a WSL distro.
 
 **Terminal shortcuts:**
 

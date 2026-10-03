@@ -127,6 +127,7 @@ export interface TransferProgress {
 
 
 export type LocalTerminalKind = 'powershell' | 'cmd' | 'wsl';
+export type LocalCliLauncher = 'omp' | 'codex' | 'claude';
 
 export interface LocalTerminalProfile {
   id: string;
@@ -137,9 +138,54 @@ export interface LocalTerminalProfile {
   detail?: string;
 }
 
+export interface LocalCliAvailability {
+  id: LocalCliLauncher;
+  label: string;
+  command: string;
+  available: boolean;
+}
+
+export interface LocalProjectProfile {
+  id: string;
+  name: string;
+  path: string;
+  defaultTerminalProfileId?: string;
+  preferredCli?: LocalCliLauncher;
+  createdAt: number;
+  updatedAt: number;
+  lastOpenedAt?: number;
+}
+
+export type LocalProjectCreateInput = Pick<LocalProjectProfile, 'name' | 'path'> &
+  Partial<Pick<LocalProjectProfile, 'defaultTerminalProfileId' | 'preferredCli'>>;
+
+export type LocalProjectUpdatePatch = Partial<
+  Pick<LocalProjectProfile, 'name' | 'path'> & {
+    defaultTerminalProfileId: string | null;
+    preferredCli: LocalCliLauncher | null;
+  }
+>;
+
+export interface LocalProjectSummary extends LocalProjectProfile {
+  pathExists: boolean;
+}
+
+export interface LocalTerminalOpenOptions {
+  profileId: string;
+  cols: number;
+  rows: number;
+  cwd?: string;
+  projectId?: string;
+  launcher?: LocalCliLauncher;
+}
+
 export interface LocalTerminalWorkspace {
   id: string;
   profile: LocalTerminalProfile;
+  projectId?: string;
+  projectName?: string;
+  cwd?: string;
+  launcher?: LocalCliLauncher;
   createdAt: number;
 }
 

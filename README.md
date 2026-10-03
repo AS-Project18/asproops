@@ -22,6 +22,7 @@ ASProOps adalah aplikasi desktop berbasis Electron yang dirancang sebagai satu w
 
 - Terminal SSH interaktif berbasis `ssh2` + xterm.js, dengan copy/paste (Ctrl+Shift+C/V, klik kanan) dan multi-tab per server.
 - Terminal lokal: PowerShell 7, Windows PowerShell, Command Prompt, dan WSL (deteksi distro otomatis).
+- **Saved Local Projects**: simpan folder project lokal, buka terminal langsung pada project tersebut, dan jalankan OMP, Codex, atau Claude dari workspace project tanpa hardcode path executable.
 - Password, private key, dan SSH Agent authentication; jump host / bastion.
 - Import `~/.ssh/config`, verifikasi host key melalui `known_hosts`.
 - Quick Connect (Ctrl+K) — cari dan connect ke server tersimpan tanpa menyentuh mouse.
@@ -73,7 +74,7 @@ Tampilan aplikasi terus berkembang. Screenshot terbaru sebaiknya ditempatkan di 
 
 | Bagian | Teknologi |
 | --- | --- |
-| Desktop runtime | Electron 37 |
+| Desktop runtime | Electron 39.8.10 |
 | UI | React 19 + TypeScript |
 | Bundler | Vite 7 |
 | Styling | Tailwind CSS 4 + custom CSS |
@@ -163,14 +164,14 @@ Pada instalasi pertama, post-install akan memeriksa dan jika perlu membangun `no
 Contoh:
 
 ```text
-[ASProOps] Rebuild node-pty untuk Electron 37.4.0 (win32/x64)
+[ASProOps] Rebuild node-pty untuk Electron 39.8.10 (win32/x64)
 [ASProOps] node-pty rebuild selesai dan cache build disimpan.
 ```
 
 Setelah build native pertama berhasil, instalasi berikutnya menggunakan smart cache dan biasanya akan menampilkan:
 
 ```text
-[ASProOps] node-pty sudah cocok untuk Electron 37.4.0 (win32/x64) — rebuild dilewati.
+[ASProOps] node-pty sudah cocok untuk Electron 39.8.10 (win32/x64) — rebuild dilewati.
 ```
 
 ### 3. Verifikasi TypeScript
@@ -349,7 +350,9 @@ ASProOps mendeteksi:
 
 Terminal lokal menggunakan `node-pty` sehingga aplikasi interaktif, ANSI escape sequence, resize terminal, dan shortcut shell dapat bekerja seperti terminal native.
 
-WSL tidak wajib digunakan untuk koneksi SSH.
+Menu **Local** juga dapat menyimpan Local Project. Setiap project menyimpan nama, folder, default shell opsional, dan CLI favorit opsional. Tombol **Terminal**, **OMP**, **Codex**, dan **Claude** membuka shell pada folder project tersebut; launcher CLI hanya aktif bila command terdeteksi melalui Windows PATH. Folder yang dipindah/dihapus ditandai tanpa membuat aplikasi crash.
+
+WSL tidak wajib digunakan untuk koneksi SSH. L1 tidak melakukan translasi path Windows ke WSL secara otomatis, dan deteksi launcher memakai Windows PATH sehingga tidak membuktikan CLI yang sama tersedia di dalam distro WSL.
 
 **Shortcut terminal:**
 

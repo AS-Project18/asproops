@@ -15,6 +15,12 @@ import type {
   EnvFileResult,
   GitAction,
   GitStatus,
+  LocalCliAvailability,
+  LocalProjectCreateInput,
+  LocalProjectProfile,
+  LocalProjectSummary,
+  LocalProjectUpdatePatch,
+  LocalTerminalOpenOptions,
   LocalTerminalProfile,
   MonitorSnapshot,
   PortForwardRule,
@@ -182,8 +188,10 @@ const api = {
 
   local: {
     list: (): Promise<LocalTerminalProfile[]> => ipcRenderer.invoke('local:list'),
-    open: (profileId: string, cols: number, rows: number): Promise<string> =>
-      ipcRenderer.invoke('local:open', profileId, cols, rows),
+    listLaunchers: (): Promise<LocalCliAvailability[]> =>
+      ipcRenderer.invoke('local:listLaunchers'),
+    open: (options: LocalTerminalOpenOptions): Promise<string> =>
+      ipcRenderer.invoke('local:open', options),
     write: (terminalId: string, data: string) =>
       ipcRenderer.send('local:write', terminalId, data),
     resize: (terminalId: string, cols: number, rows: number) =>
@@ -193,6 +201,19 @@ const api = {
       subscribe('local:data', handler),
     onClose: (handler: (p: { terminalId: string; exitCode: number }) => void) =>
       subscribe('local:close', handler),
+  },
+
+  localProjects: {
+    list: (): Promise<LocalProjectSummary[]> => ipcRenderer.invoke('localProjects:list'),
+    create: (input: LocalProjectCreateInput): Promise<LocalProjectProfile> =>
+      ipcRenderer.invoke('localProjects:create', input),
+    update: (
+      id: string,
+      patch: LocalProjectUpdatePatch,
+    ): Promise<LocalProjectProfile | undefined> =>
+      ipcRenderer.invoke('localProjects:update', id, patch),
+    remove: (id: string): Promise<void> => ipcRenderer.invoke('localProjects:remove', id),
+    openFolder: (id: string): Promise<void> => ipcRenderer.invoke('localProjects:openFolder', id),
   },
 
   sftp: {
@@ -232,6 +253,8 @@ const api = {
     pickDownload: (suggestedName: string): Promise<string | null> =>
       ipcRenderer.invoke('dialog:pickDownload', suggestedName),
     pickFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickFolder'),
+    pickProjectFolder: (): Promise<string | null> =>
+      ipcRenderer.invoke('dialog:pickProjectFolder'),
   },
 
   edit: {

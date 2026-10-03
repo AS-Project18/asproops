@@ -1,13 +1,30 @@
-import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { isAbsolute, resolve } from 'node:path';
 import * as pty from 'node-pty';
 import type { IPty } from 'node-pty';
 
-import type { LocalTerminalProfile } from '../src/shared/types';
+import type {
+  LocalCliAvailability,
+  LocalCliLauncher,
+  LocalTerminalOpenOptions,
+  LocalTerminalProfile,
+} from '../src/shared/types';
 
 type LocalDataHandler = (terminalId: string, data: string) => void;
 type LocalCloseHandler = (terminalId: string, exitCode: number) => void;
+
+const CLI_DEFINITIONS: ReadonlyArray<{
+  id: LocalCliLauncher;
+  label: string;
+  command: string;
+}> = [
+  { id: 'omp', label: 'OMP', command: 'omp' },
+  { id: 'codex', label: 'Codex', command: 'codex' },
+  { id: 'claude', label: 'Claude', command: 'claude' },
+];
 
 function executableExists(name: string): boolean {
   const result = spawnSync('where.exe', [name], {
@@ -54,6 +71,29 @@ function environment(): Record<string, string> {
   result.TERM = 'xterm-256color';
   result.COLORTERM = 'truecolor';
   return result;
+}
+
+function validatedCwd(requested?: string): string {
+  if (!requested) return homedir();
+  if (!isAbsolute(requested)) throw new Error('Working directory terminal harus path absolut.');
+
+  const cwd = resolve(requested);
+  try {
+    if (!statSync(cwd).isDirectory()) {
+      throw new Error('Working directory terminal bukan directory.');
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Working directory terminal bukan directory.') {
+      throw err;
+    }
+    throw new Error(`Working directory terminal tidak tersedia: ${requested}`);
+  }
+
+  return cwd;
+}
+
+function launcherDefinition(id: LocalCliLauncher) {
+  return CLI_DEFINITIONS.find((item) => item.id === id);
 }
 
 export class LocalTerminalManager {
@@ -114,26 +154,76 @@ export class LocalTerminalManager {
     return profiles;
   }
 
-  open(profileId: string, cols: number, rows: number): string {
-    const profile = this.listProfiles().find((item) => item.id === profileId);
+  listLaunchers(): LocalCliAvailability[] {
+    return CLI_DEFINITIONS.map((launcher) => ({
+      ...launcher,
+      available: executableExists(launcher.command),
+    }));
+  }
+
+  open(options: LocalTerminalOpenOptions): string {
+    const profile = this.listProfiles().find((item) => item.id === options.profileId);
     if (!profile) {
-      throw new Error(`Terminal lokal "${profileId}" tidak tersedia.`);
+      throw new Error(`Terminal lokal "${options.profileId}" tidak tersedia.`);
     }
+
+    const cwd = validatedCwd(options.cwd);
+    const launcher = options.launcher ? launcherDefinition(options.launcher) : undefined;
+    if (options.launcher && !launcher) {
+      throw new Error(`Launcher lokal "${options.launcher}" tidak dikenali.`);
+    }
+    if (launcher && !executableExists(launcher.command)) {
+      throw new Error(`${launcher.label} tidak tersedia di PATH Windows.`);
+    }
+
+    const cols = Math.max(20, Math.floor(Number(options.cols) || 80));
+    const rows = Math.max(5, Math.floor(Number(options.rows) || 24));
 
     const terminalId = randomUUID();
     const terminal = pty.spawn(profile.command, profile.args, {
       name: 'xterm-256color',
-      cols: Math.max(20, cols),
-      rows: Math.max(5, rows),
-      cwd: homedir(),
+      cols,
+      rows,
+      cwd,
       env: environment(),
       useConpty: true,
     });
 
     this.terminals.set(terminalId, terminal);
 
-    terminal.onData((data) => this.onData(terminalId, data));
+    let startupSent = launcher === undefined;
+    let startupTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const sendStartupCommand = () => {
+      if (startupSent || !launcher) return;
+      startupSent = true;
+      if (startupTimer) {
+        clearTimeout(startupTimer);
+        startupTimer = null;
+      }
+      // Command sengaja masuk lewat shell yang sudah dibuka, bukan spawn
+      // executable CLI secara terpisah. Saat CLI keluar, user kembali ke shell.
+      terminal.write(`${launcher.command}\r`);
+    };
+
+    if (launcher) {
+      // Fallback kalau shell tidak mengirim banner/prompt awal.
+      startupTimer = setTimeout(sendStartupCommand, 400);
+    }
+
+    terminal.onData((data) => {
+      this.onData(terminalId, data);
+
+      // Output pertama adalah sinyal bahwa shell sudah hidup. Tunggu sedikit
+      // supaya prompt/profile init selesai, lalu kirim command hanya sekali.
+      if (!startupSent && launcher) {
+        if (startupTimer) clearTimeout(startupTimer);
+        startupTimer = setTimeout(sendStartupCommand, 40);
+      }
+    });
+
     terminal.onExit(({ exitCode }) => {
+      if (startupTimer) clearTimeout(startupTimer);
       this.terminals.delete(terminalId);
       this.onClose(terminalId, exitCode);
     });

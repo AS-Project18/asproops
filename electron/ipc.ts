@@ -30,6 +30,7 @@ import { LocalTerminalManager } from './local-terminal';
 import { AppLock } from './app-lock';
 import { preferences, sftpPreferences } from './store/preferences';
 import { projects } from './store/projects';
+import { localProjects } from './store/local-projects';
 import { portForwardRules } from './store/port-forwards';
 import { deployHistory } from './store/deploy-history';
 import { provisionTemplates } from './store/provision-templates';
@@ -38,6 +39,9 @@ import type {
   DeployStep,
   DeployTemplate,
   GitAction,
+  LocalProjectCreateInput,
+  LocalProjectUpdatePatch,
+  LocalTerminalOpenOptions,
   ProjectProfile,
   RemoteFile,
   ServiceAction,
@@ -482,12 +486,22 @@ export function registerIpc(window: BrowserWindow): void {
 
   // --- Terminal lokal Windows / WSL --------------------------------------
   ipcMain.handle('local:list', () => localTerminals.listProfiles());
+  ipcMain.handle('local:listLaunchers', () => localTerminals.listLaunchers());
 
-  ipcMain.handle(
-    'local:open',
-    (_e, profileId: string, cols: number, rows: number) =>
-      localTerminals.open(profileId, cols, rows),
-  );
+  ipcMain.handle('local:open', (_e, options: LocalTerminalOpenOptions) => {
+    const safeOptions = { ...options };
+
+    if (options.projectId) {
+      // Project ID menjadi authority untuk cwd. Renderer boleh menyimpan cwd
+      // untuk label/tooltip, tetapi tidak bisa memalsukan path project ketika
+      // meminta PTY.
+      const project = localProjects.requireAvailable(options.projectId);
+      safeOptions.cwd = project.path;
+      localProjects.touch(project.id);
+    }
+
+    return localTerminals.open(safeOptions);
+  });
 
   ipcMain.on('local:write', (_e, terminalId: string, data: string) => {
     localTerminals.write(terminalId, data);
@@ -499,6 +513,23 @@ export function registerIpc(window: BrowserWindow): void {
 
   ipcMain.on('local:close', (_e, terminalId: string) => {
     localTerminals.close(terminalId);
+  });
+
+  // --- Saved Local Projects -----------------------------------------------
+  ipcMain.handle('localProjects:list', () => localProjects.listWithStatus());
+  ipcMain.handle('localProjects:create', (_e, input: LocalProjectCreateInput) =>
+    localProjects.create(input),
+  );
+  ipcMain.handle(
+    'localProjects:update',
+    (_e, id: string, patch: LocalProjectUpdatePatch) => localProjects.update(id, patch),
+  );
+  ipcMain.handle('localProjects:remove', (_e, id: string) => localProjects.remove(id));
+  ipcMain.handle('localProjects:openFolder', async (_e, id: string) => {
+    const project = localProjects.requireAvailable(id);
+    const error = await shell.openPath(project.path);
+    if (error) throw new Error(error);
+    localProjects.touch(project.id);
   });
 
   // --- SFTP browser -------------------------------------------------------
@@ -652,6 +683,14 @@ export function registerIpc(window: BrowserWindow): void {
       properties: ['openFile', 'multiSelections'],
     });
     return result.canceled ? [] : result.filePaths;
+  });
+
+  ipcMain.handle('dialog:pickProjectFolder', async () => {
+    const result = await dialog.showOpenDialog(window, {
+      title: 'Pilih folder project lokal',
+      properties: ['openDirectory'],
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
   });
 
   ipcMain.handle('dialog:pickDownload', async (_e, suggestedName: string) => {
