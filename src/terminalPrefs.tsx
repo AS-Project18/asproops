@@ -12,6 +12,9 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from 're
 
 export type CursorStyle = 'block' | 'underline' | 'bar';
 
+export const MIN_TERMINAL_FONT_SIZE = 8;
+export const MAX_TERMINAL_FONT_SIZE = 32;
+
 export interface TerminalPrefs {
   /** Kosong berarti ikut variabel CSS --font-mono (bawaan tema). */
   fontFamily: string;

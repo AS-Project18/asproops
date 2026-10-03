@@ -6,6 +6,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import { useTerminalPrefs } from '../terminalPrefs';
+import { useTerminalFontWheelZoom } from '../hooks/useTerminalFontWheelZoom';
 import { stripAnsi } from '../lib/ansi';
 import { ContextMenu, ContextMenuItem, type ContextMenuPosition } from './ContextMenu';
 import { useI18n } from '../i18n';
@@ -107,6 +108,18 @@ export function TerminalView({
   closeTabRef.current = onRequestCloseTab;
   exitRef.current = onExit;
   prefsRef.current = prefs;
+
+  useTerminalFontWheelZoom({
+    containerRef,
+    termRef,
+    fitRef,
+    active,
+    onResize: (cols, rows) => {
+      if (terminalIdRef.current) {
+        window.ssh.shell.resize(terminalIdRef.current, cols, rows);
+      }
+    },
+  });
 
   useEffect(() => {
     const container = containerRef.current;
@@ -310,6 +323,9 @@ export function TerminalView({
     term.options.scrollback = prefs.scrollback;
     try {
       fitRef.current?.fit();
+      if (terminalIdRef.current && fitRef.current) {
+        window.ssh.shell.resize(terminalIdRef.current, term.cols, term.rows);
+      }
     } catch {
       /* container mungkin belum terlihat; ResizeObserver akan menyusul */
     }

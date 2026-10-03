@@ -7,6 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 
 import type { LocalTerminalProfile } from '../shared/types';
 import { useTerminalPrefs } from '../terminalPrefs';
+import { useTerminalFontWheelZoom } from '../hooks/useTerminalFontWheelZoom';
 import { ContextMenu, ContextMenuItem, type ContextMenuPosition } from './ContextMenu';
 import { useI18n } from '../i18n';
 
@@ -75,6 +76,18 @@ export function LocalTerminalView({
 
   exitRef.current = onExit;
   prefsRef.current = prefs;
+
+  useTerminalFontWheelZoom({
+    containerRef,
+    termRef,
+    fitRef,
+    active,
+    onResize: (cols, rows) => {
+      if (terminalIdRef.current) {
+        window.ssh.local.resize(terminalIdRef.current, cols, rows);
+      }
+    },
+  });
 
   useEffect(() => {
     if (active) setInitialized(true);
@@ -270,6 +283,9 @@ export function LocalTerminalView({
     term.options.scrollback = prefs.scrollback;
     try {
       fitRef.current?.fit();
+      if (terminalIdRef.current && fitRef.current) {
+        window.ssh.local.resize(terminalIdRef.current, term.cols, term.rows);
+      }
     } catch {
       /* container mungkin belum terlihat; ResizeObserver akan menyusul */
     }

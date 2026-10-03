@@ -1,6 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useI18n, type AppLanguage } from '../i18n';
-import { useTerminalPrefs, type CursorStyle } from '../terminalPrefs';
+import {
+  MAX_TERMINAL_FONT_SIZE,
+  MIN_TERMINAL_FONT_SIZE,
+  useTerminalPrefs,
+  type CursorStyle,
+} from '../terminalPrefs';
 import { DeployTemplatesSettings } from './DeployTemplatesSettings';
 import type { SshPreferences, SftpPreferences, ConflictPolicy } from '../../electron/store/preferences';
 import type { UpdateCheckResult } from '../shared/types';
@@ -606,8 +611,8 @@ function TerminalSettings() {
         </div>
         <NumberField
           value={prefs.fontSize}
-          min={8}
-          max={32}
+          min={MIN_TERMINAL_FONT_SIZE}
+          max={MAX_TERMINAL_FONT_SIZE}
           suffix="px"
           onCommit={(fontSize) => setPrefs({ fontSize })}
         />
