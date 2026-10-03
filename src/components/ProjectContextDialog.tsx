@@ -22,7 +22,7 @@ export function ProjectContextDialog({
 
   const copyContext = () => {
     if (!context) return;
-    window.ssh.clipboard.writeText(context.handoffText);
+    void window.ssh.clipboard.writeText(context.handoffText).catch(() => undefined);
   };
 
   return (

@@ -1,4 +1,4 @@
-import { clipboard, contextBridge, ipcRenderer, webUtils } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { EditStatus } from './ssh/remote-edit';
 import type { LockStatus, VerifyResult } from './app-lock';
 import type { SshPreferences, SftpPreferences } from './store/preferences';
@@ -61,8 +61,9 @@ const api = {
   // langsung tersedia di preload karena sandbox:false, jadi dipakai di sini
   // supaya copy/paste terminal dan log selalu bekerja.
   clipboard: {
-    readText: (): string => clipboard.readText(),
-    writeText: (text: string): void => clipboard.writeText(text),
+    readText: (): Promise<string> => ipcRenderer.invoke('clipboard:readText'),
+    writeText: (text: string): Promise<void> =>
+      ipcRenderer.invoke('clipboard:writeText', text),
   },
 
   // File.path dihapus Electron sejak v32 demi keamanan — path asli file yang

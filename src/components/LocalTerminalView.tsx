@@ -144,7 +144,9 @@ export function LocalTerminalView({
         if (key === 'c') {
           event.preventDefault();
           const selection = term.getSelection();
-          if (selection) window.ssh.clipboard.writeText(selection);
+          if (selection) {
+            void window.ssh.clipboard.writeText(selection).catch(() => undefined);
+          }
           return false;
         }
         if (key === 'v') {
@@ -158,8 +160,12 @@ export function LocalTerminalView({
           // browser itu. Ini sudah ada sejak shortcut ini dibuat, bukan
           // regresi baru.
           event.preventDefault();
-          const text = window.ssh.clipboard.readText();
-          if (text && terminalIdRef.current) term.paste(text);
+          void window.ssh.clipboard
+            .readText()
+            .then((text) => {
+              if (text && terminalIdRef.current) term.paste(text);
+            })
+            .catch(() => undefined);
           return false;
         }
         return true;
@@ -343,11 +349,17 @@ export function LocalTerminalView({
       if (!event.shiftKey) {
         if (term?.hasSelection()) {
           const selection = term.getSelection();
-          if (selection) window.ssh.clipboard.writeText(selection);
+          if (selection) {
+            void window.ssh.clipboard.writeText(selection).catch(() => undefined);
+          }
           term.clearSelection();
         } else {
-          const text = window.ssh.clipboard.readText();
-          if (text && terminalIdRef.current) term?.paste(text);
+          void window.ssh.clipboard
+            .readText()
+            .then((text) => {
+              if (text && terminalIdRef.current) term?.paste(text);
+            })
+            .catch(() => undefined);
         }
         term?.focus();
         return;
@@ -374,16 +386,22 @@ export function LocalTerminalView({
   // bisa langsung mengetik tanpa perlu klik ulang ke area terminal.
   const copySelection = () => {
     const selection = termRef.current?.getSelection();
-    if (selection) window.ssh.clipboard.writeText(selection);
+    if (selection) {
+      void window.ssh.clipboard.writeText(selection).catch(() => undefined);
+    }
     setContextMenu(null);
     termRef.current?.focus();
   };
 
   const pasteClipboard = () => {
-    const text = window.ssh.clipboard.readText();
-    if (text && terminalIdRef.current) termRef.current?.paste(text);
     setContextMenu(null);
     termRef.current?.focus();
+    void window.ssh.clipboard
+      .readText()
+      .then((text) => {
+        if (text && terminalIdRef.current) termRef.current?.paste(text);
+      })
+      .catch(() => undefined);
   };
 
   const closeContextMenu = () => {

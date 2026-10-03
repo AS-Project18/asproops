@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join, parse as parsePath } from 'node:path';
-import { app, dialog, ipcMain, shell, type BrowserWindow } from 'electron';
+import { app, clipboard, dialog, ipcMain, shell, type BrowserWindow } from 'electron';
 import type { ClientChannel } from 'ssh2';
 
 import { checkForUpdate } from './update-check';
@@ -130,6 +130,16 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle('app:getVersion', () => app.getVersion());
   ipcMain.handle('app:checkUpdate', () => checkForUpdate());
   ipcMain.handle('app:openExternal', (_e, url: string) => shell.openExternal(url));
+
+  // --- Clipboard ------------------------------------------------------------
+  // Electron 44 menghapus akses clipboard dari renderer process. Renderer
+  // hanya mendapatkan helper sempit via preload, lalu operasi clipboard
+  // sungguhan dijalankan di main process melalui IPC.
+  ipcMain.handle('clipboard:readText', () => clipboard.readText());
+  ipcMain.handle('clipboard:writeText', async (_e, text: string) => {
+    if (typeof text !== 'string') throw new Error('Clipboard text tidak valid.');
+    await clipboard.writeText(text);
+  });
 
   // --- Kunci aplikasi -------------------------------------------------------
   ipcMain.handle('applock:status', () => appLock.status());

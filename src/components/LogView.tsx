@@ -145,7 +145,9 @@ export function LogStreamView({ tailId, active, onExit }: LogStreamViewProps) {
         event.key.toLowerCase() === 'c'
       ) {
         const selection = term.getSelection();
-        if (selection) window.ssh.clipboard.writeText(selection);
+        if (selection) {
+          void window.ssh.clipboard.writeText(selection).catch(() => undefined);
+        }
         return false;
       }
       return true;
@@ -354,7 +356,7 @@ export function LogStreamView({ tailId, active, onExit }: LogStreamViewProps) {
       : linesRef.current;
     const text = source.map(stripAnsi).join('\n');
     if (!text) return;
-    window.ssh.clipboard.writeText(text);
+    void window.ssh.clipboard.writeText(text).catch(() => undefined);
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
   };
@@ -368,7 +370,9 @@ export function LogStreamView({ tailId, active, onExit }: LogStreamViewProps) {
 
   const copySelection = () => {
     const selection = termRef.current?.getSelection();
-    if (selection) window.ssh.clipboard.writeText(selection);
+    if (selection) {
+      void window.ssh.clipboard.writeText(selection).catch(() => undefined);
+    }
     setContextMenu(null);
   };
 
