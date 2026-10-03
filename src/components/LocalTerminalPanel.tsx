@@ -583,22 +583,65 @@ export function LocalTerminalPanel({
                         key={project.id}
                         className={`aspro-local-project-card ${project.pathExists ? '' : 'missing'}`}
                       >
-                        <div className="aspro-local-project-head">
+                        <div className="aspro-local-project-head compact">
                           <div className="min-w-0">
                             <strong title={project.name}>{project.name}</strong>
                             <small title={project.path}>{project.path}</small>
                           </div>
-                          {!project.pathExists ? (
-                            <span className="aspro-local-missing-badge">{t('local.missing')}</span>
-                          ) : null}
+                          <div className="aspro-local-project-head-actions">
+                            {!project.pathExists ? (
+                              <span className="aspro-local-missing-badge">{t('local.missing')}</span>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="aspro-local-icon-action"
+                              title={t('local.edit')}
+                              aria-label={t('local.edit')}
+                              onClick={() => editProject(project)}
+                            >
+                              ✎
+                            </button>
+                            <button
+                              type="button"
+                              className="aspro-local-icon-action"
+                              title={t('local.openFolder')}
+                              aria-label={t('local.openFolder')}
+                              onClick={() => void openFolder(project)}
+                              disabled={!project.pathExists}
+                            >
+                              ↗
+                            </button>
+                            <button
+                              type="button"
+                              className="aspro-local-icon-action danger"
+                              title={t('local.remove')}
+                              aria-label={t('local.remove')}
+                              onClick={() => void removeProject(project)}
+                            >
+                              ×
+                            </button>
+                          </div>
                         </div>
 
                         <div className="aspro-local-project-actions registry">
                           <button
+                            className="aspro-local-terminal-button"
                             disabled={!project.pathExists || !profile}
                             onClick={() => openProject(project)}
+                            title={
+                              profile
+                                ? `${t('local.terminal')} · ${
+                                    profile.kind === 'wsl' ? `WSL · ${profile.name}` : profile.name
+                                  }`
+                                : t('local.noShellForProject')
+                            }
                           >
-                            {t('local.terminal')}
+                            <span>{t('local.terminal')}</span>
+                            {profile ? (
+                              <small>
+                                {profile.kind === 'wsl' ? `WSL · ${profile.name}` : profile.name}
+                              </small>
+                            ) : null}
                           </button>
                           <select
                             value={selectedId}
@@ -641,30 +684,7 @@ export function LocalTerminalPanel({
                           </button>
                         </div>
 
-                        <div className="aspro-local-project-tools">
-                          <span>
-                            {profile
-                              ? `${t('local.shell')}: ${
-                                  profile.kind === 'wsl' ? `WSL · ${profile.name}` : profile.name
-                                }`
-                              : t('local.noShellForProject')}
-                          </span>
-                          <div>
-                            <button onClick={() => editProject(project)}>{t('local.edit')}</button>
-                            <button
-                              onClick={() => void openFolder(project)}
-                              disabled={!project.pathExists}
-                            >
-                              {t('local.openFolder')}
-                            </button>
-                            <button
-                              className="danger"
-                              onClick={() => void removeProject(project)}
-                            >
-                              {t('local.remove')}
-                            </button>
-                          </div>
-                        </div>
+
                       </article>
                     );
                   })
@@ -766,28 +786,47 @@ export function LocalTerminalPanel({
 
               <div className="aspro-local-cli-list">
                 {cliProfiles.map((cli) => (
-                  <div key={cli.id} className="aspro-local-cli-row">
-                    <div className="min-w-0">
-                      <strong>{cli.name}</strong>
-                      <small title={[cli.command, ...cli.args].join(' ')}>
-                        {[cli.command, ...cli.args].join(' ')}
-                      </small>
-                    </div>
+                  <div key={cli.id} className="aspro-local-cli-row compact">
+                    <strong className="aspro-local-cli-name">{cli.name}</strong>
                     <span className={`aspro-local-cli-status ${cli.status}`}>
                       {statusLabel(cli)}
                     </span>
-                    <div className="aspro-local-cli-tools">
-                      <button onClick={() => editCli(cli)}>{t('local.edit')}</button>
-                      <button onClick={() => void toggleCli(cli)}>
-                        {cli.enabled ? t('local.disableCli') : t('local.enableCli')}
+                    <small
+                      className="aspro-local-cli-command"
+                      title={[cli.command, ...cli.args].join(' ')}
+                    >
+                      {[cli.command, ...cli.args].join(' ')}
+                    </small>
+                    <div className="aspro-local-cli-tools compact">
+                      <button
+                        type="button"
+                        className="aspro-local-icon-action"
+                        title={t('local.edit')}
+                        aria-label={t('local.edit')}
+                        onClick={() => editCli(cli)}
+                      >
+                        ✎
+                      </button>
+                      <button
+                        type="button"
+                        className="aspro-local-icon-action"
+                        title={cli.enabled ? t('local.disableCli') : t('local.enableCli')}
+                        aria-label={cli.enabled ? t('local.disableCli') : t('local.enableCli')}
+                        onClick={() => void toggleCli(cli)}
+                      >
+                        ⏻
                       </button>
                       {cli.source === 'custom' ? (
-                        <button className="danger" onClick={() => void removeCli(cli)}>
-                          {t('local.deleteCli')}
+                        <button
+                          type="button"
+                          className="aspro-local-icon-action danger"
+                          title={t('local.deleteCli')}
+                          aria-label={t('local.deleteCli')}
+                          onClick={() => void removeCli(cli)}
+                        >
+                          ×
                         </button>
-                      ) : (
-                        <span title={t('local.cliBuiltin')}>●</span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 ))}

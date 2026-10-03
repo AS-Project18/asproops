@@ -2140,3 +2140,151 @@ button:disabled {
   cursor: row-resize !important;
   user-select: none !important;
 }
+
+
+/* Local Workspace compact project + CLI cards */
+.aspro-local-pane-body .aspro-local-projects,
+.aspro-local-pane-body .aspro-local-cli-list {
+  gap: 4px;
+}
+
+.aspro-local-project-card {
+  padding: 6px 7px;
+}
+
+.aspro-local-project-head.compact {
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.aspro-local-project-head.compact > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.aspro-local-project-head.compact strong {
+  line-height: 18px;
+}
+
+.aspro-local-project-head.compact small {
+  margin-top: 0;
+  line-height: 12px;
+}
+
+.aspro-local-project-head-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 1px;
+  min-height: 20px;
+}
+
+.aspro-local-project-head-actions .aspro-local-missing-badge {
+  margin-right: 2px;
+}
+
+.aspro-local-icon-action {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  outline: none;
+  background: transparent;
+  color: #827588;
+  font-size: 12px;
+  line-height: 1;
+  opacity: .56;
+  transition: background 80ms ease, color 80ms ease, opacity 80ms ease;
+}
+
+.aspro-local-icon-action:hover:not(:disabled) {
+  background: rgba(106, 43, 126, .24);
+  color: #ddcfe3;
+  opacity: 1;
+}
+
+.aspro-local-icon-action.danger:hover:not(:disabled) {
+  background: rgba(123, 31, 43, .2);
+  color: #ff7e8a;
+}
+
+.aspro-local-icon-action:disabled {
+  cursor: not-allowed;
+  opacity: .18;
+}
+
+.aspro-local-project-actions.registry {
+  grid-template-columns: minmax(88px, 1.2fr) minmax(74px, 1fr) 40px;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.aspro-local-project-actions.registry > button,
+.aspro-local-project-actions.registry > select {
+  min-height: 27px;
+}
+
+.aspro-local-terminal-button {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.05;
+}
+
+.aspro-local-terminal-button > span,
+.aspro-local-terminal-button > small {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aspro-local-terminal-button > small {
+  margin-top: 2px;
+  color: #786d7e;
+  font-size: 7px;
+  font-weight: 500;
+}
+
+.aspro-local-cli-row.compact {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 1px 7px;
+  padding: 5px 7px;
+}
+
+.aspro-local-cli-name {
+  min-width: 0;
+  line-height: 17px;
+}
+
+.aspro-local-cli-row.compact .aspro-local-cli-status {
+  align-self: center;
+}
+
+.aspro-local-cli-command {
+  min-width: 0;
+  margin-top: 0 !important;
+  line-height: 17px;
+}
+
+.aspro-local-cli-tools.compact {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+}
+
+.aspro-local-cli-tools.compact .aspro-local-icon-action {
+  font-size: 11px;
+}
