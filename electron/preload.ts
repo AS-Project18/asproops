@@ -16,6 +16,9 @@ import type {
   GitAction,
   GitStatus,
   LocalCliAvailability,
+  LocalCliCreateInput,
+  LocalCliProfile,
+  LocalCliUpdatePatch,
   LocalProjectCreateInput,
   LocalProjectProfile,
   LocalProjectSummary,
@@ -188,8 +191,6 @@ const api = {
 
   local: {
     list: (): Promise<LocalTerminalProfile[]> => ipcRenderer.invoke('local:list'),
-    listLaunchers: (): Promise<LocalCliAvailability[]> =>
-      ipcRenderer.invoke('local:listLaunchers'),
     open: (options: LocalTerminalOpenOptions): Promise<string> =>
       ipcRenderer.invoke('local:open', options),
     write: (terminalId: string, data: string) =>
@@ -201,6 +202,15 @@ const api = {
       subscribe('local:data', handler),
     onClose: (handler: (p: { terminalId: string; exitCode: number }) => void) =>
       subscribe('local:close', handler),
+  },
+
+  localCli: {
+    list: (): Promise<LocalCliAvailability[]> => ipcRenderer.invoke('localCli:list'),
+    create: (input: LocalCliCreateInput): Promise<LocalCliProfile> =>
+      ipcRenderer.invoke('localCli:create', input),
+    update: (id: string, patch: LocalCliUpdatePatch): Promise<LocalCliProfile | undefined> =>
+      ipcRenderer.invoke('localCli:update', id, patch),
+    remove: (id: string): Promise<void> => ipcRenderer.invoke('localCli:remove', id),
   },
 
   localProjects: {

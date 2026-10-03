@@ -11,11 +11,20 @@ import type {
 } from '../../src/shared/types';
 
 interface StoreFile {
-  version: 1;
+  version: 2;
   projects: LocalProjectProfile[];
 }
 
-const EMPTY: StoreFile = { version: 1, projects: [] };
+interface LegacyProject extends Omit<LocalProjectProfile, 'preferredCliProfileId'> {
+  preferredCli?: string;
+}
+
+interface LegacyStoreFile {
+  version: 1;
+  projects: LegacyProject[];
+}
+
+const EMPTY: StoreFile = { version: 2, projects: [] };
 
 function normalizePathForCompare(path: string): string {
   const normalized = resolve(path).replace(/[\\/]+$/, '');
@@ -41,11 +50,23 @@ export class LocalProjectStore {
 
   private read(): StoreFile {
     try {
-      const parsed = JSON.parse(readFileSync(this.path, 'utf8')) as StoreFile;
-      if (parsed.version !== 1 || !Array.isArray(parsed.projects)) {
-        throw new Error('Format local-projects.json tidak dikenali.');
+      const parsed = JSON.parse(readFileSync(this.path, 'utf8')) as StoreFile | LegacyStoreFile;
+
+      if (parsed.version === 2 && Array.isArray(parsed.projects)) {
+        return parsed;
       }
-      return parsed;
+
+      if (parsed.version === 1 && Array.isArray(parsed.projects)) {
+        return {
+          version: 2,
+          projects: parsed.projects.map(({ preferredCli, ...project }) => ({
+            ...project,
+            preferredCliProfileId: preferredCli || undefined,
+          })),
+        };
+      }
+
+      throw new Error('Format local-projects.json tidak dikenali.');
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code === 'ENOENT') return { ...EMPTY };
@@ -133,7 +154,7 @@ export class LocalProjectStore {
       name,
       path,
       defaultTerminalProfileId: input.defaultTerminalProfileId || undefined,
-      preferredCli: input.preferredCli,
+      preferredCliProfileId: input.preferredCliProfileId || undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -153,8 +174,6 @@ export class LocalProjectStore {
       const incomingComparable = normalizePathForCompare(patch.path);
       const currentComparable = normalizePathForCompare(project.path);
 
-      // Edit metadata tetap boleh disimpan ketika folder lama hilang. Path
-      // hanya divalidasi ulang kalau benar-benar diganti.
       if (incomingComparable !== currentComparable) {
         const nextPath = this.validateDirectory(patch.path);
         this.ensureUniquePath(nextPath, id);
@@ -165,8 +184,8 @@ export class LocalProjectStore {
     if (patch.defaultTerminalProfileId !== undefined) {
       project.defaultTerminalProfileId = patch.defaultTerminalProfileId || undefined;
     }
-    if (patch.preferredCli !== undefined) {
-      project.preferredCli = patch.preferredCli || undefined;
+    if (patch.preferredCliProfileId !== undefined) {
+      project.preferredCliProfileId = patch.preferredCliProfileId || undefined;
     }
 
     project.updatedAt = Date.now();
@@ -187,6 +206,17 @@ export class LocalProjectStore {
     project.lastOpenedAt = Date.now();
     project.updatedAt = Date.now();
     this.flush();
+  }
+
+  clearPreferredCliProfile(cliProfileId: string): void {
+    let changed = false;
+    for (const project of this.data.projects) {
+      if (project.preferredCliProfileId !== cliProfileId) continue;
+      project.preferredCliProfileId = undefined;
+      project.updatedAt = Date.now();
+      changed = true;
+    }
+    if (changed) this.flush();
   }
 }
 

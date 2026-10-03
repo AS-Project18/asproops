@@ -12,40 +12,63 @@ Status: COMPLETE
 - Remote transport: `ssh2`
 - Primary platform: Windows 10/11 x64
 
-Remote capabilities already present include saved SSH sessions, interactive SSH terminal, SFTP, remote editing, monitoring, remote Project Profiles, live logs, `.env` editing, systemd services, Docker, cron, provisioning, port forwarding, Git status/actions, deploy history/rollback, and SSH login-log viewing.
+Remote capabilities remain isolated from the Local Workspace domain.
 
 ## LOCAL WORKSPACE
 
 ### L1: Saved Local Projects + project-aware terminal + CLI launchers
 
-Status: IN PROGRESS
+Status: IN PROGRESS / MANUAL VERIFICATION PENDING
 
-Implementation scope:
+Implemented:
 
-- Saved Local Projects in a dedicated `local-projects.json` store
-- project-aware local terminal `cwd`
-- built-in OMP / Codex / Claude launchers detected through Windows PATH
-- project-aware local workspace/tab identity
-- local project folder picker and Open Folder action
+- saved Local Projects in `local-projects.json`
+- project-aware local terminal cwd
+- project-aware tabs/workspaces
+- folder picker / Open Folder
 - missing-folder handling
 - default terminal profile per project
-- local-project persistence and `lastOpenedAt`
-- renderer -> preload -> IPC -> main security boundary preserved
+- persistence and `lastOpenedAt`
+- renderer -> preload -> IPC -> main security boundary
 
-Verification still required on a Windows checkout before marking COMPLETE:
+### L2A: Extensible CLI Registry
 
-- `npm run typecheck`
-- `npm run build`
-- manual smoke checklist in `docs/LOCAL_WORKSPACE.md`
+Status: IMPLEMENTED / MANUAL VERIFICATION PENDING
 
-### L2
+Implemented:
+
+- independent global CLI registry in `local-cli-profiles.json`
+- built-in seed profiles: OMP, Codex, Claude
+- custom CLI Add / Edit / Enable / Disable / Delete
+- Windows PATH detection via `where.exe`
+- status: Available / Not found / Disabled
+- project preferred CLI now references `cliProfileId`, not a hardcoded union
+- project cards launch any enabled + available registry CLI
+- renderer sends only `cliProfileId` at launch; main resolves authoritative command/args
+- L1 `local-projects.json` v1 is migrated in memory to v2 (`preferredCli` -> `preferredCliProfileId`)
+- deleting a custom CLI clears dangling preferred-CLI references from local projects
+- CLI command/arguments reject shell operators and arbitrary shell expressions
+
+Manual verification is intentionally left to the developer workstation. No automated test/build run is part of this change.
+
+### L2B
+
+Status: NEXT
+
+- project Quick Commands
+
+### L2C
 
 Status: PLANNED
 
-- project Quick Commands
 - workspace/layout restore
-- CLI tool registry and version information
+
+### L2D
+
+Status: PLANNED
+
 - recent projects
+- richer CLI version information
 
 ### L3
 
@@ -66,12 +89,9 @@ Status: PLANNED
 
 ## Current known limitations
 
-- CLI availability in L1 is detected from Windows PATH. A CLI available only inside WSL is not detected.
+- CLI availability is detected from Windows PATH. A CLI available only inside WSL is not detected.
 - No speculative Windows path to WSL path translation is performed.
-- Local terminal/workspace restore after an app restart remains L2.
-- Quick Commands and arbitrary configurable command execution remain L2.
-- OMP 18.4.9/18.4.10 Win32 input regressions are upstream and are not worked around in this phase.
-
-## Next recommended task
-
-Finish L1 verification on Windows. After the gate is green, move to L2 with Quick Commands and workspace/layout restore as separate tasks rather than bundling process management or Git UI into the same change.
+- CLI Registry commands are intentionally executable names, not arbitrary shell expressions.
+- Arguments are intentionally simple safe tokens in L2A. Complex quoted shell expressions belong to Quick Commands, not CLI Registry.
+- workspace restore is not implemented yet.
+- OMP Win32 input regressions are not worked around by ASProOps.

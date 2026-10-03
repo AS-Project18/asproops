@@ -7,24 +7,13 @@ import * as pty from 'node-pty';
 import type { IPty } from 'node-pty';
 
 import type {
-  LocalCliAvailability,
-  LocalCliLauncher,
+  LocalCliProfile,
   LocalTerminalOpenOptions,
   LocalTerminalProfile,
 } from '../src/shared/types';
 
 type LocalDataHandler = (terminalId: string, data: string) => void;
 type LocalCloseHandler = (terminalId: string, exitCode: number) => void;
-
-const CLI_DEFINITIONS: ReadonlyArray<{
-  id: LocalCliLauncher;
-  label: string;
-  command: string;
-}> = [
-  { id: 'omp', label: 'OMP', command: 'omp' },
-  { id: 'codex', label: 'Codex', command: 'codex' },
-  { id: 'claude', label: 'Claude', command: 'claude' },
-];
 
 function executableExists(name: string): boolean {
   const result = spawnSync('where.exe', [name], {
@@ -37,8 +26,6 @@ function executableExists(name: string): boolean {
 function decodeWindowsOutput(buffer: Buffer): string {
   if (buffer.length === 0) return '';
 
-  // Beberapa build wsl.exe menulis output UTF-16LE. NUL byte adalah sinyal
-  // yang cukup aman untuk membedakannya dari UTF-8/ANSI normal.
   const hasNull = buffer.includes(0);
   return (hasNull ? buffer.toString('utf16le') : buffer.toString('utf8'))
     .replace(/\u0000/g, '')
@@ -92,8 +79,8 @@ function validatedCwd(requested?: string): string {
   return cwd;
 }
 
-function launcherDefinition(id: LocalCliLauncher) {
-  return CLI_DEFINITIONS.find((item) => item.id === id);
+function cliInvocation(profile: LocalCliProfile): string {
+  return [profile.command, ...profile.args].join(' ');
 }
 
 export class LocalTerminalManager {
@@ -103,6 +90,10 @@ export class LocalTerminalManager {
     private readonly onData: LocalDataHandler,
     private readonly onClose: LocalCloseHandler,
   ) {}
+
+  commandAvailable(command: string): boolean {
+    return executableExists(command);
+  }
 
   listProfiles(): LocalTerminalProfile[] {
     const profiles: LocalTerminalProfile[] = [];
@@ -154,26 +145,22 @@ export class LocalTerminalManager {
     return profiles;
   }
 
-  listLaunchers(): LocalCliAvailability[] {
-    return CLI_DEFINITIONS.map((launcher) => ({
-      ...launcher,
-      available: executableExists(launcher.command),
-    }));
-  }
-
-  open(options: LocalTerminalOpenOptions): string {
+  open(options: LocalTerminalOpenOptions, cliProfile?: LocalCliProfile): string {
     const profile = this.listProfiles().find((item) => item.id === options.profileId);
     if (!profile) {
       throw new Error(`Terminal lokal "${options.profileId}" tidak tersedia.`);
     }
 
     const cwd = validatedCwd(options.cwd);
-    const launcher = options.launcher ? launcherDefinition(options.launcher) : undefined;
-    if (options.launcher && !launcher) {
-      throw new Error(`Launcher lokal "${options.launcher}" tidak dikenali.`);
+
+    if (options.cliProfileId && !cliProfile) {
+      throw new Error('CLI profile tidak dapat di-resolve oleh main process.');
     }
-    if (launcher && !executableExists(launcher.command)) {
-      throw new Error(`${launcher.label} tidak tersedia di PATH Windows.`);
+    if (cliProfile && options.cliProfileId !== cliProfile.id) {
+      throw new Error('CLI profile tidak cocok dengan request terminal.');
+    }
+    if (cliProfile && !this.commandAvailable(cliProfile.command)) {
+      throw new Error(`${cliProfile.name} tidak tersedia di PATH Windows.`);
     }
 
     const cols = Math.max(20, Math.floor(Number(options.cols) || 80));
@@ -191,32 +178,30 @@ export class LocalTerminalManager {
 
     this.terminals.set(terminalId, terminal);
 
-    let startupSent = launcher === undefined;
+    let startupSent = cliProfile === undefined;
     let startupTimer: ReturnType<typeof setTimeout> | null = null;
 
     const sendStartupCommand = () => {
-      if (startupSent || !launcher) return;
+      if (startupSent || !cliProfile) return;
       startupSent = true;
       if (startupTimer) {
         clearTimeout(startupTimer);
         startupTimer = null;
       }
-      // Command sengaja masuk lewat shell yang sudah dibuka, bukan spawn
-      // executable CLI secara terpisah. Saat CLI keluar, user kembali ke shell.
-      terminal.write(`${launcher.command}\r`);
+
+      // command + args berasal dari registry main-process yang sudah
+      // divalidasi, bukan string command yang dikirim renderer saat launch.
+      terminal.write(`${cliInvocation(cliProfile)}\r`);
     };
 
-    if (launcher) {
-      // Fallback kalau shell tidak mengirim banner/prompt awal.
+    if (cliProfile) {
       startupTimer = setTimeout(sendStartupCommand, 400);
     }
 
     terminal.onData((data) => {
       this.onData(terminalId, data);
 
-      // Output pertama adalah sinyal bahwa shell sudah hidup. Tunggu sedikit
-      // supaya prompt/profile init selesai, lalu kirim command hanya sekali.
-      if (!startupSent && launcher) {
+      if (!startupSent && cliProfile) {
         if (startupTimer) clearTimeout(startupTimer);
         startupTimer = setTimeout(sendStartupCommand, 40);
       }

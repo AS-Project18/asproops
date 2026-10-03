@@ -30,7 +30,7 @@ import { formatBytes, formatRate } from './lib/format';
 import type {
   DeployWorkspace,
   DockerLogWorkspace,
-  LocalCliLauncher,
+  LocalCliProfile,
   LocalProjectSummary,
   LocalTerminalProfile,
   LocalTerminalWorkspace,
@@ -346,7 +346,7 @@ export default function App() {
   const openLocalProject = (
     project: LocalProjectSummary,
     profile: LocalTerminalProfile,
-    launcher?: LocalCliLauncher,
+    cli?: LocalCliProfile,
   ) => {
     activateNewLocalWorkspace({
       id: crypto.randomUUID(),
@@ -354,7 +354,8 @@ export default function App() {
       projectId: project.id,
       projectName: project.name,
       cwd: project.path,
-      launcher,
+      cliProfileId: cli?.id,
+      cliName: cli?.name,
       createdAt: Date.now(),
     });
   };
@@ -1169,13 +1170,13 @@ export default function App() {
                   />
                   <span className="truncate">
                     {workspace.projectName
-                      ? `${workspace.projectName} · ${workspace.launcher?.toUpperCase() ?? 'Terminal'}`
+                      ? `${workspace.projectName} · ${workspace.cliName ?? 'Terminal'}`
                       : workspace.profile.kind === 'wsl'
                         ? `WSL · ${workspace.profile.name}`
                         : workspace.profile.name}
                   </span>
                   <span className="aspro-workspace-tab-kind">
-                    {workspace.launcher?.toUpperCase() ??
+                    {workspace.cliName ??
                       (workspace.profile.kind === 'wsl' ? 'WSL' : 'LOCAL')}
                   </span>
                   <span
@@ -1457,12 +1458,12 @@ export default function App() {
                   </div>
                   <div className="truncate font-mono text-[12px] text-faint">
                     {activeLocal.cwd
-                      ? `${activeLocal.launcher?.toUpperCase() ?? t('local.terminal')} · ${activeLocal.cwd}`
+                      ? `${activeLocal.cliName ?? t('local.terminal')} · ${activeLocal.cwd}`
                       : `${t('workspace.localTerminal')} · ${activeLocal.profile.command}`}
                   </div>
                 </div>
                 <span className="aspro-local-chip">
-                  {activeLocal.launcher?.toUpperCase() ??
+                  {activeLocal.cliName ??
                     (activeLocal.profile.kind === 'wsl' ? 'WSL' : 'LOCAL')}
                 </span>
                 <span className="aspro-status-chip connected">{t('workspace.active')}</span>
@@ -1569,7 +1570,7 @@ export default function App() {
                   profile={workspace.profile}
                   projectId={workspace.projectId}
                   cwd={workspace.cwd}
-                  launcher={workspace.launcher}
+                  cliProfileId={workspace.cliProfileId}
                   active={workspace.id === activeLocalId}
                   onExit={() => closeLocalTerminal(workspace.id)}
                 />

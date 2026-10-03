@@ -4,192 +4,130 @@ This document is the source of truth for the ASProOps Local Workspace domain.
 
 ## Goal
 
-Evolve ASProOps from a predominantly SSH/server operations tool into a Local + Remote Project & CLI Operations Workspace without regressing the mature remote feature set.
+Evolve ASProOps into a Local + Remote Project & CLI Operations Workspace while keeping mature SSH/remote behavior isolated and stable.
 
 ## Domain boundary
 
-Remote `ProjectProfile` and local `LocalProjectProfile` are deliberately separate.
+Remote `ProjectProfile` and local `LocalProjectProfile` remain separate domains.
 
-Remote projects are session-bound and include remote absolute paths, deploy environment, log paths, service names, deploy templates, and SSH-based actions. Local projects represent a saved directory on the operator workstation plus local terminal/CLI preferences.
+Remote projects are session-bound and contain remote paths and remote operational metadata. Local projects represent a saved workstation directory plus local shell/CLI preferences.
 
-They may be presented together in future UX, but their storage and domain semantics must not be merged merely for UI convenience.
-
-## L1 data model
+## Current local data model
 
 ```ts
-type LocalCliLauncher = 'omp' | 'codex' | 'claude';
-
 interface LocalProjectProfile {
   id: string;
   name: string;
   path: string;
   defaultTerminalProfileId?: string;
-  preferredCli?: LocalCliLauncher;
+  preferredCliProfileId?: string;
   createdAt: number;
   updatedAt: number;
   lastOpenedAt?: number;
 }
-```
 
-Transient renderer summaries may additionally include `pathExists`. That value is not persisted.
-
-## Storage
-
-File: `local-projects.json`
-
-Location: Electron `userData`
-
-Rules:
-
-- versioned JSON
-- atomic temp-write + rename
-- corrupt-file quarantine
-- no secrets
-- duplicate paths rejected
-- paths validated in Electron main
-- missing/moved folders remain listable and editable without crashing the app
-
-Remote projects stay in `projects.json`.
-
-## IPC flow
-
-```text
-Renderer
-  -> typed preload API
-  -> IPC
-  -> Electron main
-      -> LocalProjectStore / LocalTerminalManager / Electron shell/dialog
-```
-
-Renderer code never receives unrestricted filesystem or process APIs.
-
-Local terminal opening uses a structured request:
-
-```ts
-interface LocalTerminalOpenOptions {
-  profileId: string;
-  cols: number;
-  rows: number;
-  cwd?: string;
-  projectId?: string;
-  launcher?: 'omp' | 'codex' | 'claude';
+interface LocalCliProfile {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  source: 'builtin' | 'custom';
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
 }
 ```
 
-When `projectId` is present, main resolves the stored project and uses its stored path as the authoritative `cwd`.
+`pathExists` and CLI `availability/status` are transient summaries and are not persisted as authority.
 
-## Project-aware terminal
+## Storage
 
-A normal shell opened from the Shells list continues to use the user home directory.
+### Local projects
 
-A shell opened from a saved local project uses the saved project path.
+File: `local-projects.json`
 
-PTY lifecycle rules are unchanged:
+Schema version: 2
 
-- PTY is created only after xterm is mounted and fitted.
-- hiding a workspace or switching tabs does not kill its PTY.
-- explicit tab close kills the PTY.
-- resize, clipboard, right-click, file-path drag, PowerShell, CMD, and WSL behavior remain on the existing engine.
+L1 schema version 1 is migrated in memory. Legacy `preferredCli` values (`omp`, `codex`, `claude`) map directly to registry IDs through `preferredCliProfileId`.
 
-## CLI launchers
+### CLI registry
 
-Built-in L1 launchers:
+File: `local-cli-profiles.json`
+
+Schema version: 1
+
+Default built-in profiles:
 
 - OMP -> `omp`
 - Codex -> `codex`
 - Claude -> `claude`
 
-Availability is detected through Windows PATH with `where.exe`.
+Users may create additional custom CLI profiles without rebuilding ASProOps.
 
-The launcher is not spawned as a separate detached process. ASProOps opens the selected project shell first, then writes the built-in command exactly once after the shell starts producing output, with a short fallback timer. When the CLI exits, the shell remains usable.
+Both stores use Electron `userData`, versioned JSON, atomic temp-write + rename, and corrupt-file quarantine.
 
-There is no arbitrary configurable command API in L1.
+## Security boundary
+
+Renderer never sends a launch-time executable or arbitrary startup command.
+
+Launch flow:
+
+```text
+Renderer
+  -> { projectId, profileId, cliProfileId }
+  -> preload
+  -> IPC
+  -> Electron main
+      -> resolve Local Project
+      -> resolve CLI Registry profile
+      -> validate project folder + enabled CLI
+      -> detect CLI on Windows PATH
+      -> open PTY
+      -> send authoritative registry command once
+```
+
+The CLI Registry deliberately accepts an executable/command name plus simple argument tokens. It rejects shell expressions. Arbitrary project commands belong to L2B Quick Commands.
+
+## CLI Registry UX
+
+Local Workspace provides:
+
+- global CLI list
+- Add CLI
+- Edit
+- Enable / Disable
+- Delete custom CLI
+- Available / Not found / Disabled status
+- project preferred CLI selection
+- per-project CLI selector + Run
+
+Built-in profiles cannot be deleted, but may be edited or disabled.
+
+## Project-aware terminal
+
+Normal shell entries still start in the user home directory.
+
+Project launches use the authoritative saved project path as cwd.
+
+CLI launch opens the selected project shell first and writes the registry command exactly once after shell startup. Exiting the CLI returns to the shell.
 
 ## Default shell resolution
 
-For a project:
-
-1. saved `defaultTerminalProfileId`, if still available
+1. saved project default terminal profile, if available
 2. PowerShell 7
 3. Windows PowerShell
 4. Command Prompt
-5. first available local terminal profile
-
-The application does not assume `pwsh.exe` exists.
+5. first available profile
 
 ## WSL boundary
 
-L1 does not implement speculative Windows-to-WSL path translation.
+Windows PATH availability does not imply the same executable exists inside a WSL distribution. L2A intentionally does not perform Windows-to-WSL path translation or WSL-specific CLI discovery.
 
-A WSL profile may be used as a project default shell, but Windows PATH launcher detection does not prove the same CLI exists inside that distro. Per-environment launcher detection is a future enhancement.
+## Next
 
-## UI
+L2B: project Quick Commands.
 
-Local workspace sidebar contains:
+Quick Commands are intentionally separate from CLI Registry:
 
-- Saved Projects
-- Add/Edit/Remove
-- Terminal / OMP / Codex / Claude
-- Open Folder
-- missing-folder state
-- Shells list
-
-Project-aware tabs use project identity, for example:
-
-- `Resort · Terminal`
-- `Resort · OMP`
-- `Resort · Codex`
-- `Resort · Claude`
-
-The full `cwd` is available as tab tooltip/context.
-
-## Out of scope for L1
-
-- configurable Quick Commands
-- command chains
-- workspace restore after app restart
-- process/service manager
-- Docker local
-- local Git UI
-- environment profiles
-- notes
-- AI context generator
-- file manager or source editor
-- VS Code integration
-- recursive project auto-detection
-- OMP compatibility hacks
-- remote/local ProjectProfile merge
-
-## Verification gate
-
-Run:
-
-```powershell
-npm run typecheck
-npm run build
-```
-
-Manual smoke:
-
-1. existing PowerShell terminal works
-2. existing CMD works
-3. WSL list has no regression
-4. create Local Project
-5. select folder
-6. close/reopen app and confirm persistence
-7. edit project
-8. remove project
-9. missing folder is safe and clearly marked
-10. project Terminal opens in correct cwd
-11. OMP opens in correct cwd when installed
-12. Codex opens in correct cwd when installed
-13. Claude opens in correct cwd when installed
-14. unavailable CLI is disabled or clearly unavailable
-15. multiple projects can run concurrently
-16. tab shows project + launcher identity
-17. tab switching does not terminate PTY/CLI
-18. non-project terminal still starts in home
-19. SSH/server build and core behavior do not regress
-20. Open Folder works
-
-Only after both automated gates and the relevant manual smoke checks pass should L1 be marked COMPLETE.
+- CLI Registry = trusted executable/tool identity
+- Quick Commands = user-defined project command/workflow

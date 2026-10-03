@@ -127,7 +127,7 @@ export interface TransferProgress {
 
 
 export type LocalTerminalKind = 'powershell' | 'cmd' | 'wsl';
-export type LocalCliLauncher = 'omp' | 'codex' | 'claude';
+export type LocalCliSource = 'builtin' | 'custom';
 
 export interface LocalTerminalProfile {
   id: string;
@@ -138,31 +138,47 @@ export interface LocalTerminalProfile {
   detail?: string;
 }
 
-export interface LocalCliAvailability {
-  id: LocalCliLauncher;
-  label: string;
+export interface LocalCliProfile {
+  id: string;
+  name: string;
   command: string;
-  available: boolean;
+  args: string[];
+  source: LocalCliSource;
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
 }
+
+export interface LocalCliAvailability extends LocalCliProfile {
+  available: boolean;
+  status: 'available' | 'not_found' | 'disabled';
+}
+
+export type LocalCliCreateInput = Pick<LocalCliProfile, 'name' | 'command'> &
+  Partial<Pick<LocalCliProfile, 'args' | 'enabled'>>;
+
+export type LocalCliUpdatePatch = Partial<
+  Pick<LocalCliProfile, 'name' | 'command' | 'args' | 'enabled'>
+>;
 
 export interface LocalProjectProfile {
   id: string;
   name: string;
   path: string;
   defaultTerminalProfileId?: string;
-  preferredCli?: LocalCliLauncher;
+  preferredCliProfileId?: string;
   createdAt: number;
   updatedAt: number;
   lastOpenedAt?: number;
 }
 
 export type LocalProjectCreateInput = Pick<LocalProjectProfile, 'name' | 'path'> &
-  Partial<Pick<LocalProjectProfile, 'defaultTerminalProfileId' | 'preferredCli'>>;
+  Partial<Pick<LocalProjectProfile, 'defaultTerminalProfileId' | 'preferredCliProfileId'>>;
 
 export type LocalProjectUpdatePatch = Partial<
   Pick<LocalProjectProfile, 'name' | 'path'> & {
     defaultTerminalProfileId: string | null;
-    preferredCli: LocalCliLauncher | null;
+    preferredCliProfileId: string | null;
   }
 >;
 
@@ -176,7 +192,7 @@ export interface LocalTerminalOpenOptions {
   rows: number;
   cwd?: string;
   projectId?: string;
-  launcher?: LocalCliLauncher;
+  cliProfileId?: string;
 }
 
 export interface LocalTerminalWorkspace {
@@ -185,7 +201,8 @@ export interface LocalTerminalWorkspace {
   projectId?: string;
   projectName?: string;
   cwd?: string;
-  launcher?: LocalCliLauncher;
+  cliProfileId?: string;
+  cliName?: string;
   createdAt: number;
 }
 

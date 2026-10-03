@@ -5,10 +5,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 
-import type {
-  LocalCliLauncher,
-  LocalTerminalProfile,
-} from '../shared/types';
+import type { LocalTerminalProfile } from '../shared/types';
 import { useTerminalPrefs } from '../terminalPrefs';
 import { ContextMenu, ContextMenuItem, type ContextMenuPosition } from './ContextMenu';
 import { useI18n } from '../i18n';
@@ -25,7 +22,7 @@ interface LocalTerminalViewProps {
   profile: LocalTerminalProfile;
   projectId?: string;
   cwd?: string;
-  launcher?: LocalCliLauncher;
+  cliProfileId?: string;
   active: boolean;
   onExit?: () => void;
 }
@@ -59,7 +56,7 @@ export function LocalTerminalView({
   profile,
   projectId,
   cwd,
-  launcher,
+  cliProfileId,
   active,
   onExit,
 }: LocalTerminalViewProps) {
@@ -184,7 +181,7 @@ export function LocalTerminalView({
               rows: term.rows,
               projectId,
               cwd,
-              launcher,
+              cliProfileId,
             });
             if (disposed) {
               window.ssh.local.close(terminalId);
@@ -259,7 +256,7 @@ export function LocalTerminalView({
     };
   // initialized hanya berubah false -> true sekali. Setelah terminal dibuat,
   // pindah tab tidak membongkar PTY.
-  }, [initialized, workspaceId, profile.id, projectId, cwd, launcher]);
+  }, [initialized, workspaceId, profile.id, projectId, cwd, cliProfileId]);
 
   // Terapkan perubahan preferensi ke terminal yang sudah terbuka, tanpa
   // menutup PTY-nya (beda effect dari effect mount di atas).

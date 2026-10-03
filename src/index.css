@@ -1889,3 +1889,114 @@ button:disabled {
 .aspro-local-project-tools button:disabled {
   opacity: .3;
 }
+
+
+/* L2A extensible CLI registry */
+.aspro-local-section-heading.cli {
+  margin-top: 12px;
+}
+.aspro-local-project-actions.registry {
+  grid-template-columns: minmax(64px, .65fr) minmax(0, 1.5fr) minmax(54px, .55fr);
+}
+.aspro-local-project-actions.registry select {
+  min-width: 0;
+  min-height: 25px;
+  border: 1px solid rgba(122, 48, 147, .24);
+  border-radius: 5px;
+  outline: none;
+  background: rgba(4, 2, 7, .65);
+  color: #ad9bb5;
+  font-size: 8px;
+}
+.aspro-local-cli-form small {
+  display: block;
+  margin-top: 3px;
+  color: #665c6d;
+  font-size: 8px;
+}
+.aspro-local-check {
+  display: flex !important;
+  align-items: center;
+  gap: 7px;
+}
+.aspro-local-check input {
+  width: auto !important;
+  min-height: 0 !important;
+}
+.aspro-local-check > span {
+  margin: 0 !important;
+}
+.aspro-local-cli-list {
+  display: flex;
+  max-height: 28%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 5px;
+  overflow-y: auto;
+}
+.aspro-local-cli-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 8px;
+  padding: 7px 8px;
+  border: 1px solid rgba(105, 43, 130, .2);
+  border-radius: 7px;
+  background: rgba(13, 6, 19, .46);
+}
+.aspro-local-cli-row strong,
+.aspro-local-cli-row small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.aspro-local-cli-row strong {
+  color: #dfd5e4;
+  font-size: 10px;
+}
+.aspro-local-cli-row small {
+  margin-top: 2px;
+  color: #6d6273;
+  font: 8px var(--font-mono);
+}
+.aspro-local-cli-status {
+  align-self: start;
+  padding: 2px 5px;
+  border-radius: 99px;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: .35px;
+}
+.aspro-local-cli-status.available {
+  background: rgba(33, 113, 63, .2);
+  color: #78dc96;
+}
+.aspro-local-cli-status.not_found {
+  background: rgba(126, 71, 15, .18);
+  color: #e2a75d;
+}
+.aspro-local-cli-status.disabled {
+  background: rgba(77, 69, 81, .22);
+  color: #8b808f;
+}
+.aspro-local-cli-tools {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+.aspro-local-cli-tools button {
+  color: #776b7d;
+  font-size: 8px;
+}
+.aspro-local-cli-tools button:hover {
+  color: #c9b9cf;
+}
+.aspro-local-cli-tools button.danger:hover {
+  color: #ff7e8a;
+}
+.aspro-local-cli-tools > span {
+  color: #6c5f73;
+  font-size: 7px;
+}

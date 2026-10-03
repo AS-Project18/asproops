@@ -31,6 +31,7 @@ import { AppLock } from './app-lock';
 import { preferences, sftpPreferences } from './store/preferences';
 import { projects } from './store/projects';
 import { localProjects } from './store/local-projects';
+import { localCliProfiles } from './store/local-cli-profiles';
 import { portForwardRules } from './store/port-forwards';
 import { deployHistory } from './store/deploy-history';
 import { provisionTemplates } from './store/provision-templates';
@@ -39,6 +40,8 @@ import type {
   DeployStep,
   DeployTemplate,
   GitAction,
+  LocalCliCreateInput,
+  LocalCliUpdatePatch,
   LocalProjectCreateInput,
   LocalProjectUpdatePatch,
   LocalTerminalOpenOptions,
@@ -486,7 +489,6 @@ export function registerIpc(window: BrowserWindow): void {
 
   // --- Terminal lokal Windows / WSL --------------------------------------
   ipcMain.handle('local:list', () => localTerminals.listProfiles());
-  ipcMain.handle('local:listLaunchers', () => localTerminals.listLaunchers());
 
   ipcMain.handle('local:open', (_e, options: LocalTerminalOpenOptions) => {
     const safeOptions = { ...options };
@@ -500,7 +502,11 @@ export function registerIpc(window: BrowserWindow): void {
       localProjects.touch(project.id);
     }
 
-    return localTerminals.open(safeOptions);
+    const cliProfile = options.cliProfileId
+      ? localCliProfiles.requireEnabled(options.cliProfileId)
+      : undefined;
+
+    return localTerminals.open(safeOptions, cliProfile);
   });
 
   ipcMain.on('local:write', (_e, terminalId: string, data: string) => {
@@ -513,6 +519,22 @@ export function registerIpc(window: BrowserWindow): void {
 
   ipcMain.on('local:close', (_e, terminalId: string) => {
     localTerminals.close(terminalId);
+  });
+
+  // --- Local CLI Registry --------------------------------------------------
+  ipcMain.handle('localCli:list', () =>
+    localCliProfiles.listWithAvailability((command) => localTerminals.commandAvailable(command)),
+  );
+  ipcMain.handle('localCli:create', (_e, input: LocalCliCreateInput) =>
+    localCliProfiles.create(input),
+  );
+  ipcMain.handle(
+    'localCli:update',
+    (_e, id: string, patch: LocalCliUpdatePatch) => localCliProfiles.update(id, patch),
+  );
+  ipcMain.handle('localCli:remove', (_e, id: string) => {
+    localCliProfiles.remove(id);
+    localProjects.clearPreferredCliProfile(id);
   });
 
   // --- Saved Local Projects -----------------------------------------------

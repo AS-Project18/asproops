@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 
 import type {
   LocalCliAvailability,
-  LocalCliLauncher,
+  LocalCliCreateInput,
+  LocalCliProfile,
   LocalProjectCreateInput,
   LocalProjectSummary,
   LocalTerminalProfile,
@@ -16,7 +17,7 @@ interface LocalTerminalPanelProps {
   onOpenProject: (
     project: LocalProjectSummary,
     profile: LocalTerminalProfile,
-    launcher?: LocalCliLauncher,
+    cli?: LocalCliProfile,
   ) => void;
   onRefresh: () => void | Promise<void>;
 }
@@ -26,17 +27,31 @@ interface ProjectDraft {
   name: string;
   path: string;
   defaultTerminalProfileId: string;
-  preferredCli: '' | LocalCliLauncher;
+  preferredCliProfileId: string;
 }
 
-const EMPTY_DRAFT: ProjectDraft = {
+interface CliDraft {
+  id?: string;
+  source?: LocalCliProfile['source'];
+  name: string;
+  command: string;
+  argsText: string;
+  enabled: boolean;
+}
+
+const EMPTY_PROJECT_DRAFT: ProjectDraft = {
   name: '',
   path: '',
   defaultTerminalProfileId: '',
-  preferredCli: '',
+  preferredCliProfileId: '',
 };
 
-const LAUNCHER_IDS: LocalCliLauncher[] = ['omp', 'codex', 'claude'];
+const EMPTY_CLI_DRAFT: CliDraft = {
+  name: '',
+  command: '',
+  argsText: '',
+  enabled: true,
+};
 
 function iconFor(profile: LocalTerminalProfile): string {
   if (profile.kind === 'wsl') return '⌁';
@@ -65,6 +80,14 @@ function resolveProjectShell(
   );
 }
 
+function parseArgs(value: string): string[] {
+  return value
+    .trim()
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export function LocalTerminalPanel({
   profiles,
   loading,
@@ -74,15 +97,17 @@ export function LocalTerminalPanel({
 }: LocalTerminalPanelProps) {
   const { t } = useI18n();
   const [projects, setProjects] = useState<LocalProjectSummary[]>([]);
-  const [launchers, setLaunchers] = useState<LocalCliAvailability[]>([]);
+  const [cliProfiles, setCliProfiles] = useState<LocalCliAvailability[]>([]);
   const [projectLoading, setProjectLoading] = useState(true);
-  const [draft, setDraft] = useState<ProjectDraft | null>(null);
+  const [projectDraft, setProjectDraft] = useState<ProjectDraft | null>(null);
+  const [cliDraft, setCliDraft] = useState<CliDraft | null>(null);
+  const [cliSelection, setCliSelection] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const launcherMap = useMemo(
-    () => new Map(launchers.map((launcher) => [launcher.id, launcher])),
-    [launchers],
+  const cliMap = useMemo(
+    () => new Map(cliProfiles.map((profile) => [profile.id, profile])),
+    [cliProfiles],
   );
 
   const refreshWorkspace = async () => {
@@ -90,10 +115,10 @@ export function LocalTerminalPanel({
     try {
       const [savedProjects, cli] = await Promise.all([
         window.ssh.localProjects.list(),
-        window.ssh.local.listLaunchers(),
+        window.ssh.localCli.list(),
       ]);
       setProjects(savedProjects);
-      setLaunchers(cli);
+      setCliProfiles(cli);
       setError(null);
     } catch (err) {
       setError((err as Error).message);
@@ -114,8 +139,8 @@ export function LocalTerminalPanel({
   const browseFolder = async () => {
     const path = await window.ssh.dialog.pickProjectFolder();
     if (!path) return;
-    setDraft((current) => ({
-      ...(current ?? EMPTY_DRAFT),
+    setProjectDraft((current) => ({
+      ...(current ?? EMPTY_PROJECT_DRAFT),
       path,
       name: current?.name || basename(path),
     }));
@@ -123,40 +148,40 @@ export function LocalTerminalPanel({
 
   const editProject = (project: LocalProjectSummary) => {
     setError(null);
-    setDraft({
+    setProjectDraft({
       id: project.id,
       name: project.name,
       path: project.path,
       defaultTerminalProfileId: project.defaultTerminalProfileId ?? '',
-      preferredCli: project.preferredCli ?? '',
+      preferredCliProfileId: project.preferredCliProfileId ?? '',
     });
   };
 
   const saveProject = async (event: FormEvent) => {
     event.preventDefault();
-    if (!draft) return;
+    if (!projectDraft) return;
 
     setSaving(true);
     setError(null);
     try {
-      if (draft.id) {
-        await window.ssh.localProjects.update(draft.id, {
-          name: draft.name,
-          path: draft.path,
-          defaultTerminalProfileId: draft.defaultTerminalProfileId || null,
-          preferredCli: draft.preferredCli || null,
+      if (projectDraft.id) {
+        await window.ssh.localProjects.update(projectDraft.id, {
+          name: projectDraft.name,
+          path: projectDraft.path,
+          defaultTerminalProfileId: projectDraft.defaultTerminalProfileId || null,
+          preferredCliProfileId: projectDraft.preferredCliProfileId || null,
         });
       } else {
         const input: LocalProjectCreateInput = {
-          name: draft.name,
-          path: draft.path,
-          defaultTerminalProfileId: draft.defaultTerminalProfileId || undefined,
-          preferredCli: draft.preferredCli || undefined,
+          name: projectDraft.name,
+          path: projectDraft.path,
+          defaultTerminalProfileId: projectDraft.defaultTerminalProfileId || undefined,
+          preferredCliProfileId: projectDraft.preferredCliProfileId || undefined,
         };
         await window.ssh.localProjects.create(input);
       }
 
-      setDraft(null);
+      setProjectDraft(null);
       await refreshWorkspace();
     } catch (err) {
       setError((err as Error).message);
@@ -184,13 +209,79 @@ export function LocalTerminalPanel({
     }
   };
 
-  const openProject = (project: LocalProjectSummary, launcher?: LocalCliLauncher) => {
+  const openProject = (project: LocalProjectSummary, cli?: LocalCliProfile) => {
     const profile = resolveProjectShell(project, profiles);
     if (!profile) {
       setError(t('local.noShellForProject'));
       return;
     }
-    onOpenProject(project, profile, launcher);
+    onOpenProject(project, profile, cli);
+  };
+
+  const editCli = (cli: LocalCliProfile) => {
+    setError(null);
+    setCliDraft({
+      id: cli.id,
+      source: cli.source,
+      name: cli.name,
+      command: cli.command,
+      argsText: cli.args.join(' '),
+      enabled: cli.enabled,
+    });
+  };
+
+  const saveCli = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!cliDraft) return;
+
+    setSaving(true);
+    setError(null);
+    try {
+      const input: LocalCliCreateInput = {
+        name: cliDraft.name,
+        command: cliDraft.command,
+        args: parseArgs(cliDraft.argsText),
+        enabled: cliDraft.enabled,
+      };
+
+      if (cliDraft.id) {
+        await window.ssh.localCli.update(cliDraft.id, input);
+      } else {
+        await window.ssh.localCli.create(input);
+      }
+
+      setCliDraft(null);
+      await refreshWorkspace();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleCli = async (cli: LocalCliProfile) => {
+    try {
+      await window.ssh.localCli.update(cli.id, { enabled: !cli.enabled });
+      await refreshWorkspace();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const removeCli = async (cli: LocalCliProfile) => {
+    if (!window.confirm(t('local.deleteCliConfirm', { name: cli.name }))) return;
+    try {
+      await window.ssh.localCli.remove(cli.id);
+      await refreshWorkspace();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const statusLabel = (cli: LocalCliAvailability) => {
+    if (cli.status === 'disabled') return t('local.cliDisabled');
+    if (cli.status === 'available') return t('local.cliAvailable');
+    return t('local.cliNotFound');
   };
 
   return (
@@ -211,21 +302,21 @@ export function LocalTerminalPanel({
           className="aspro-local-add"
           onClick={() => {
             setError(null);
-            setDraft({ ...EMPTY_DRAFT });
+            setProjectDraft({ ...EMPTY_PROJECT_DRAFT });
           }}
         >
           + {t('local.addProject')}
         </button>
       </div>
 
-      {draft ? (
+      {projectDraft ? (
         <form className="aspro-local-project-form" onSubmit={saveProject}>
           <label>
             <span>{t('local.projectName')}</span>
             <input
               autoFocus
-              value={draft.name}
-              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+              value={projectDraft.name}
+              onChange={(event) => setProjectDraft({ ...projectDraft, name: event.target.value })}
               placeholder={t('local.projectNamePlaceholder')}
             />
           </label>
@@ -233,7 +324,7 @@ export function LocalTerminalPanel({
           <label>
             <span>{t('local.projectPath')}</span>
             <div className="aspro-local-path-picker">
-              <input value={draft.path} readOnly placeholder="E:\Project\MyApp" />
+              <input value={projectDraft.path} readOnly placeholder="E:\Project\MyApp" />
               <button type="button" onClick={() => void browseFolder()}>
                 {t('local.browse')}
               </button>
@@ -243,9 +334,9 @@ export function LocalTerminalPanel({
           <label>
             <span>{t('local.defaultShell')}</span>
             <select
-              value={draft.defaultTerminalProfileId}
+              value={projectDraft.defaultTerminalProfileId}
               onChange={(event) =>
-                setDraft({ ...draft, defaultTerminalProfileId: event.target.value })
+                setProjectDraft({ ...projectDraft, defaultTerminalProfileId: event.target.value })
               }
             >
               <option value="">{t('local.autoShell')}</option>
@@ -260,26 +351,29 @@ export function LocalTerminalPanel({
           <label>
             <span>{t('local.preferredCli')}</span>
             <select
-              value={draft.preferredCli}
+              value={projectDraft.preferredCliProfileId}
               onChange={(event) =>
-                setDraft({
-                  ...draft,
-                  preferredCli: event.target.value as '' | LocalCliLauncher,
-                })
+                setProjectDraft({ ...projectDraft, preferredCliProfileId: event.target.value })
               }
             >
               <option value="">{t('local.noPreferredCli')}</option>
-              <option value="omp">OMP</option>
-              <option value="codex">Codex</option>
-              <option value="claude">Claude</option>
+              {cliProfiles.map((cli) => (
+                <option key={cli.id} value={cli.id}>
+                  {cli.name} · {statusLabel(cli)}
+                </option>
+              ))}
             </select>
           </label>
 
           <div className="aspro-local-form-actions">
-            <button type="button" onClick={() => setDraft(null)} disabled={saving}>
+            <button type="button" onClick={() => setProjectDraft(null)} disabled={saving}>
               {t('local.cancel')}
             </button>
-            <button type="submit" className="primary" disabled={saving || !draft.name || !draft.path}>
+            <button
+              type="submit"
+              className="primary"
+              disabled={saving || !projectDraft.name || !projectDraft.path}
+            >
               {saving ? t('local.saving') : t('local.saveProject')}
             </button>
           </div>
@@ -294,6 +388,14 @@ export function LocalTerminalPanel({
         ) : (
           projects.map((project) => {
             const profile = resolveProjectShell(project, profiles);
+            const selectedId =
+              cliSelection[project.id] ??
+              project.preferredCliProfileId ??
+              cliProfiles.find((cli) => cli.enabled && cli.available)?.id ??
+              cliProfiles.find((cli) => cli.enabled)?.id ??
+              '';
+            const selectedCli = selectedId ? cliMap.get(selectedId) : undefined;
+
             return (
               <article
                 key={project.id}
@@ -309,29 +411,52 @@ export function LocalTerminalPanel({
                   ) : null}
                 </div>
 
-                <div className="aspro-local-project-actions">
+                <div className="aspro-local-project-actions registry">
                   <button
                     disabled={!project.pathExists || !profile}
                     onClick={() => openProject(project)}
                   >
                     {t('local.terminal')}
                   </button>
-
-                  {LAUNCHER_IDS.map((launcherId) => {
-                    const launcher = launcherMap.get(launcherId);
-                    const available = Boolean(launcher?.available);
-                    return (
-                      <button
-                        key={launcherId}
-                        className={project.preferredCli === launcherId ? 'preferred' : ''}
-                        disabled={!project.pathExists || !profile || !available}
-                        title={available ? launcher?.command : t('local.cliUnavailable')}
-                        onClick={() => openProject(project, launcherId)}
-                      >
-                        {launcher?.label ?? launcherId}
-                      </button>
-                    );
-                  })}
+                  <select
+                    value={selectedId}
+                    onChange={(event) =>
+                      setCliSelection((current) => ({
+                        ...current,
+                        [project.id]: event.target.value,
+                      }))
+                    }
+                    title={t('local.cliSelect')}
+                  >
+                    <option value="">{t('local.cliSelect')}</option>
+                    {cliProfiles.map((cli) => (
+                      <option key={cli.id} value={cli.id} disabled={!cli.enabled}>
+                        {cli.name} · {statusLabel(cli)}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className={
+                      selectedCli && project.preferredCliProfileId === selectedCli.id
+                        ? 'preferred'
+                        : ''
+                    }
+                    disabled={
+                      !project.pathExists ||
+                      !profile ||
+                      !selectedCli ||
+                      !selectedCli.enabled ||
+                      !selectedCli.available
+                    }
+                    title={
+                      selectedCli?.available
+                        ? selectedCli.command
+                        : t('local.cliUnavailable')
+                    }
+                    onClick={() => selectedCli && openProject(project, selectedCli)}
+                  >
+                    {t('local.run')}
+                  </button>
                 </div>
 
                 <div className="aspro-local-project-tools">
@@ -362,6 +487,99 @@ export function LocalTerminalPanel({
             );
           })
         )}
+      </div>
+
+      <div className="aspro-local-section-heading cli">
+        <span>{t('local.cliTools')}</span>
+        <button
+          className="aspro-local-add"
+          onClick={() => {
+            setError(null);
+            setCliDraft({ ...EMPTY_CLI_DRAFT });
+          }}
+        >
+          + {t('local.addCli')}
+        </button>
+      </div>
+
+      {cliDraft ? (
+        <form className="aspro-local-project-form aspro-local-cli-form" onSubmit={saveCli}>
+          <label>
+            <span>{t('local.cliName')}</span>
+            <input
+              autoFocus
+              value={cliDraft.name}
+              onChange={(event) => setCliDraft({ ...cliDraft, name: event.target.value })}
+              placeholder={t('local.cliNamePlaceholder')}
+            />
+          </label>
+          <label>
+            <span>{t('local.cliCommand')}</span>
+            <input
+              value={cliDraft.command}
+              onChange={(event) => setCliDraft({ ...cliDraft, command: event.target.value })}
+              placeholder={t('local.cliCommandPlaceholder')}
+            />
+            <small>{t('local.cliCommandHelp')}</small>
+          </label>
+          <label>
+            <span>{t('local.cliArgs')}</span>
+            <input
+              value={cliDraft.argsText}
+              onChange={(event) => setCliDraft({ ...cliDraft, argsText: event.target.value })}
+              placeholder={t('local.cliArgsPlaceholder')}
+            />
+          </label>
+          <label className="aspro-local-check">
+            <input
+              type="checkbox"
+              checked={cliDraft.enabled}
+              onChange={(event) => setCliDraft({ ...cliDraft, enabled: event.target.checked })}
+            />
+            <span>{t('local.cliEnabled')}</span>
+          </label>
+          <div className="aspro-local-form-actions">
+            <button type="button" onClick={() => setCliDraft(null)} disabled={saving}>
+              {t('local.cancel')}
+            </button>
+            <button
+              type="submit"
+              className="primary"
+              disabled={saving || !cliDraft.name || !cliDraft.command}
+            >
+              {saving ? t('local.saving') : t('local.saveCli')}
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      <div className="aspro-local-cli-list">
+        {cliProfiles.map((cli) => (
+          <div key={cli.id} className="aspro-local-cli-row">
+            <div className="min-w-0">
+              <strong>{cli.name}</strong>
+              <small title={[cli.command, ...cli.args].join(' ')}>
+                {[cli.command, ...cli.args].join(' ')}
+              </small>
+            </div>
+            <span className={`aspro-local-cli-status ${cli.status}`}>
+              {statusLabel(cli)}
+            </span>
+            <div className="aspro-local-cli-tools">
+              <button onClick={() => editCli(cli)}>{t('local.edit')}</button>
+              <button onClick={() => void toggleCli(cli)}>
+                {cli.enabled ? t('local.disableCli') : t('local.enableCli')}
+              </button>
+              {cli.source === 'custom' ? (
+                <button className="danger" onClick={() => void removeCli(cli)}>
+                  {t('local.deleteCli')}
+                </button>
+              ) : (
+                <span title={t('local.cliBuiltin')}>●</span>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="aspro-local-section-heading shells">
