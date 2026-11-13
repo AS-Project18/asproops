@@ -4,6 +4,7 @@ import App from './App';
 import { AppLockGate } from './components/AppLockGate';
 import { I18nProvider } from './i18n';
 import { TerminalPrefsProvider } from './terminalPrefs';
+import { WorkspacePrefsProvider } from './workspacePrefs';
 import './index.css';
 
 const container = document.getElementById('root');
@@ -13,9 +14,11 @@ createRoot(container).render(
   <StrictMode>
     <I18nProvider>
       <TerminalPrefsProvider>
-        <AppLockGate>
-          <App />
-        </AppLockGate>
+        <WorkspacePrefsProvider>
+          <AppLockGate>
+            <App />
+          </AppLockGate>
+        </WorkspacePrefsProvider>
       </TerminalPrefsProvider>
     </I18nProvider>
   </StrictMode>,

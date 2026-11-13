@@ -6,10 +6,11 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 
 import type { LocalTerminalProfile } from '../shared/types';
-import { useTerminalPrefs } from '../terminalPrefs';
+import { useTerminalPrefs, resolveTerminalTheme } from '../terminalPrefs';
 import { useTerminalFontWheelZoom } from '../hooks/useTerminalFontWheelZoom';
 import { ContextMenu, ContextMenuItem, type ContextMenuPosition } from './ContextMenu';
 import { useI18n } from '../i18n';
+import { extractTerminalTranscript, formatTranscriptFilename } from '../lib/transcript';
 
 function defaultFontFamily(): string {
   return (
@@ -22,42 +23,22 @@ interface LocalTerminalViewProps {
   workspaceId: string;
   profile: LocalTerminalProfile;
   projectId?: string;
+  projectName?: string;
   cwd?: string;
   cliProfileId?: string;
+  elevated?: boolean;
   active: boolean;
   onExit?: () => void;
 }
-
-const THEME = {
-  background: '#020307',
-  foreground: '#d9d1de',
-  cursor: '#ff9700',
-  cursorAccent: '#020307',
-  selectionBackground: '#7b2aa955',
-  black: '#08050b',
-  red: '#ff5a68',
-  green: '#58e879',
-  yellow: '#ffb52e',
-  blue: '#8f83ff',
-  magenta: '#c05cff',
-  cyan: '#6bd8e8',
-  white: '#e9e2ed',
-  brightBlack: '#716878',
-  brightRed: '#ff7b86',
-  brightGreen: '#7cf197',
-  brightYellow: '#ffc85f',
-  brightBlue: '#aaa2ff',
-  brightMagenta: '#d783ff',
-  brightCyan: '#8be7f3',
-  brightWhite: '#ffffff',
-};
 
 export function LocalTerminalView({
   workspaceId,
   profile,
   projectId,
+  projectName,
   cwd,
   cliProfileId,
+  elevated,
   active,
   onExit,
 }: LocalTerminalViewProps) {
@@ -117,12 +98,12 @@ export function LocalTerminalView({
       const term = new Terminal({
         fontFamily: prefsRef.current.fontFamily || defaultFontFamily(),
         fontSize: prefsRef.current.fontSize,
-        lineHeight: 1.25,
+        lineHeight: prefsRef.current.lineHeight || 1.25,
         cursorBlink: prefsRef.current.cursorBlink,
         cursorStyle: prefsRef.current.cursorStyle,
         scrollback: prefsRef.current.scrollback,
         allowProposedApi: true,
-        theme: THEME,
+        theme: resolveTerminalTheme(prefsRef.current.themeId),
       });
 
       const fit = new FitAddon();
@@ -201,6 +182,7 @@ export function LocalTerminalView({
               projectId,
               cwd,
               cliProfileId,
+              elevated,
             });
             if (disposed) {
               window.ssh.local.close(terminalId);
@@ -284,9 +266,11 @@ export function LocalTerminalView({
     if (!term) return;
     term.options.fontFamily = prefs.fontFamily || defaultFontFamily();
     term.options.fontSize = prefs.fontSize;
+    term.options.lineHeight = prefs.lineHeight || 1.25;
     term.options.cursorBlink = prefs.cursorBlink;
     term.options.cursorStyle = prefs.cursorStyle;
     term.options.scrollback = prefs.scrollback;
+    term.options.theme = resolveTerminalTheme(prefs.themeId);
     try {
       fitRef.current?.fit();
       if (terminalIdRef.current && fitRef.current) {
@@ -296,6 +280,18 @@ export function LocalTerminalView({
       /* container mungkin belum terlihat; ResizeObserver akan menyusul */
     }
   }, [prefs]);
+
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term || !prefs.copyOnSelect) return;
+    const disposable = term.onSelectionChange(() => {
+      const selection = term.getSelection();
+      if (selection) {
+        void window.ssh.clipboard.writeText(selection).catch(() => undefined);
+      }
+    });
+    return () => disposable.dispose();
+  }, [prefs.copyOnSelect]);
 
   useEffect(() => {
     if (!active) return;
@@ -346,7 +342,7 @@ export function LocalTerminalView({
 
       event.preventDefault();
       event.stopPropagation();
-      if (!event.shiftKey) {
+      if (!event.shiftKey && prefsRef.current.pasteOnRightClick) {
         if (term?.hasSelection()) {
           const selection = term.getSelection();
           if (selection) {
@@ -371,6 +367,21 @@ export function LocalTerminalView({
     return () => container.removeEventListener('contextmenu', handleContextMenu, true);
   }, []);
 
+  useEffect(() => {
+    if (!active) return;
+    const handleTerminalExec = (event: Event) => {
+      const custom = event as CustomEvent<{ text: string; enter?: boolean }>;
+      const text = custom.detail?.text;
+      if (!text || !terminalIdRef.current || !termRef.current) return;
+      const payload = custom.detail.enter !== false ? `${text}\n` : text;
+      window.ssh.local.write(terminalIdRef.current, payload);
+      termRef.current.focus();
+    };
+
+    window.addEventListener('asproops:terminal-exec', handleTerminalExec);
+    return () => window.removeEventListener('asproops:terminal-exec', handleTerminalExec);
+  }, [active]);
+
   if (error) {
     return (
       <div className="flex h-full items-center justify-center bg-abyss p-8 text-center">
@@ -393,6 +404,20 @@ export function LocalTerminalView({
     termRef.current?.focus();
   };
 
+  const copyAll = () => {
+    const term = termRef.current;
+    if (!term) return;
+    const allText = extractTerminalTranscript(term);
+    if (allText) {
+      void window.ssh.clipboard.writeText(allText).catch(() => undefined);
+      window.dispatchEvent(
+        new CustomEvent('asproops:toast', { detail: t('terminal.allCopied') }),
+      );
+    }
+    setContextMenu(null);
+    term.focus();
+  };
+
   const pasteClipboard = () => {
     setContextMenu(null);
     termRef.current?.focus();
@@ -402,6 +427,35 @@ export function LocalTerminalView({
         if (text && terminalIdRef.current) termRef.current?.paste(text);
       })
       .catch(() => undefined);
+  };
+
+  const exportTranscript = async () => {
+    const term = termRef.current;
+    if (!term) return;
+    const content = extractTerminalTranscript(term);
+    setContextMenu(null);
+    term.focus();
+
+    const prefix = projectName || profile.name || 'local-terminal';
+    const filename = formatTranscriptFilename(prefix);
+    try {
+      const res = await window.ssh.terminal.exportTranscript(filename, content);
+      if (res.success && res.filePath) {
+        window.dispatchEvent(
+          new CustomEvent('asproops:toast', {
+            detail: t('terminal.transcriptSaved', { name: res.filePath.split(/[\\/]/).pop() ?? '' }),
+          }),
+        );
+      }
+    } catch (err) {
+      console.error('Failed to export transcript:', err);
+    }
+  };
+
+  const clearTerminal = () => {
+    termRef.current?.clear();
+    setContextMenu(null);
+    termRef.current?.focus();
   };
 
   const closeContextMenu = () => {
@@ -455,7 +509,30 @@ export function LocalTerminalView({
           <ContextMenuItem onClick={copySelection} disabled={!termRef.current?.hasSelection()}>
             {t('menu.copy')}
           </ContextMenuItem>
+          <ContextMenuItem onClick={copyAll}>
+            {t('menu.copyAll')}
+          </ContextMenuItem>
           <ContextMenuItem onClick={pasteClipboard}>{t('menu.paste')}</ContextMenuItem>
+          <div className="my-1 border-t border-line/40" />
+          <ContextMenuItem onClick={() => void exportTranscript()}>
+            {t('menu.exportTranscript')}
+          </ContextMenuItem>
+          <ContextMenuItem onClick={clearTerminal}>
+            {t('menu.clearTerminal')}
+          </ContextMenuItem>
+          <div className="my-1 border-t border-line/40" />
+          <ContextMenuItem
+            onClick={() => {
+              closeContextMenu();
+              void window.ssh.local.launchElevated({
+                profileId: profile.id,
+                projectId,
+                cwd,
+              });
+            }}
+          >
+            🛡️ {t('local.openElevated')}
+          </ContextMenuItem>
         </ContextMenu>
       )}
     </>

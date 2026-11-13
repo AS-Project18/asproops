@@ -1,11 +1,10 @@
 import type {
-  CSSProperties,
   DragEvent,
   PointerEvent as ReactPointerEvent,
   MouseEvent as ReactMouseEvent,
   ReactNode,
 } from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RemoteFile, TransferProgress } from '../shared/types';
 import type { EditStatus } from '../../electron/ssh/remote-edit';
 import { useVirtualRows } from '../hooks/useVirtualRows';
@@ -21,7 +20,7 @@ import { formatBytes, formatDate } from '../lib/format';
  */
 
 type SortKey = 'name' | 'size' | 'modified';
-type ColumnId = 'size' | 'modified' | 'permissions' | 'owner' | 'group';
+type ColumnId = 'name' | 'size' | 'modified' | 'permissions' | 'owner' | 'group';
 type TFunc = ReturnType<typeof useI18n>['t'];
 
 interface ColumnState {
@@ -38,23 +37,22 @@ const CROWDED_THRESHOLD = 2000;
 // tak bisa dipegang lagi) — tidak ada batas atas, dan resize satu kolom tidak
 // pernah mengubah ukuran kolom lain.
 const MIN_COL_WIDTH = 32;
-const NAME_MIN_WIDTH = 32;
-const NAME_DEFAULT_WIDTH = 220;
 const CHECKBOX_COL_WIDTH = 24;
 
 const NAME_WIDTH_STORAGE_KEY = 'asproops.sftpNameWidth';
 
 function loadNameWidth(): number {
   const raw = Number(localStorage.getItem(NAME_WIDTH_STORAGE_KEY));
-  if (!Number.isFinite(raw) || raw <= 0) return NAME_DEFAULT_WIDTH;
-  return Math.max(NAME_MIN_WIDTH, raw);
+  if (!Number.isFinite(raw) || raw <= 0) return 240;
+  return Math.max(MIN_COL_WIDTH, raw);
 }
 
 const COLUMN_STORAGE_KEY = 'asproops.sftpColumns';
 const DEFAULT_COLUMNS: ColumnState[] = [
-  { id: 'size', width: 76, visible: true },
-  { id: 'modified', width: 132, visible: true },
-  { id: 'permissions', width: 60, visible: true },
+  { id: 'name', width: 240, visible: true },
+  { id: 'size', width: 85, visible: true },
+  { id: 'modified', width: 140, visible: true },
+  { id: 'permissions', width: 68, visible: true },
   { id: 'owner', width: 64, visible: false },
   { id: 'group', width: 64, visible: false },
 ];
@@ -65,12 +63,18 @@ function loadColumns(): ColumnState[] {
     if (!raw) return DEFAULT_COLUMNS;
     const saved = JSON.parse(raw) as ColumnState[];
     const validIds = new Set(DEFAULT_COLUMNS.map((c) => c.id));
-    const savedValid = saved.filter((c) => validIds.has(c.id));
+    let savedValid = saved.filter((c) => validIds.has(c.id));
+    // Jika config tersimpan lama belum menyertakan 'name', sisipkan di awal
+    if (!savedValid.some((c) => c.id === 'name')) {
+      const oldNameWidth = loadNameWidth();
+      savedValid = [{ id: 'name', width: oldNameWidth, visible: true }, ...savedValid];
+    }
     // Kolom baru dari update aplikasi (belum ada di config tersimpan)
     // ditambahkan di akhir supaya tetap muncul.
     const missing = DEFAULT_COLUMNS.filter((def) => !savedValid.some((c) => c.id === def.id));
     return [...savedValid, ...missing].map((c) => ({
       ...c,
+      visible: c.id === 'name' ? true : c.visible,
       width: Math.max(MIN_COL_WIDTH, c.width),
     }));
   } catch {
@@ -78,8 +82,33 @@ function loadColumns(): ColumnState[] {
   }
 }
 
+export interface SftpBookmark {
+  id: string;
+  name: string;
+  path: string;
+  sessionId?: string;
+}
+
+const BOOKMARKS_STORAGE_KEY = 'asproops.sftpBookmarks.v1';
+
+function loadBookmarks(): SftpBookmark[] {
+  try {
+    const raw = localStorage.getItem(BOOKMARKS_STORAGE_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as SftpBookmark[];
+  } catch {
+    return [];
+  }
+}
+
+function saveBookmarks(bookmarks: SftpBookmark[]): void {
+  localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify(bookmarks));
+}
+
 function columnLabelKey(id: ColumnId) {
   switch (id) {
+    case 'name':
+      return 'sftp.columnName' as const;
     case 'size':
       return 'sftp.columnSize' as const;
     case 'modified':
@@ -95,6 +124,8 @@ function columnLabelKey(id: ColumnId) {
 
 function columnValue(id: ColumnId, file: RemoteFile): string {
   switch (id) {
+    case 'name':
+      return file.name;
     case 'size':
       return file.isDirectory ? '—' : formatBytes(file.sizeBytes);
     case 'modified':
@@ -160,9 +191,14 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
   const [infoFile, setInfoFile] = useState<RemoteFile | null>(null);
 
   const [columns, setColumns] = useState<ColumnState[]>(loadColumns);
-  const [nameWidth, setNameWidth] = useState<number>(loadNameWidth);
   const [draggingCol, setDraggingCol] = useState<ColumnId | null>(null);
   const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
+  const [createModal, setCreateModal] = useState<{
+    type: 'folder' | 'file';
+    name: string;
+    error?: string;
+  } | null>(null);
+  const [isPathEditing, setIsPathEditing] = useState(false);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
@@ -178,13 +214,60 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
   } | null>(null);
   const [applyConflictToAll, setApplyConflictToAll] = useState(false);
 
+  const [bookmarks, setBookmarks] = useState<SftpBookmark[]>(loadBookmarks);
+  const [bookmarkMenuOpen, setBookmarkMenuOpen] = useState(false);
+
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  const activeBookmarks = useMemo(() => {
+    return bookmarks.filter((b) => !b.sessionId || b.sessionId === sessionId);
+  }, [bookmarks, sessionId]);
+
+  const isCurrentPathBookmarked = useMemo(() => {
+    return activeBookmarks.some((b) => b.path === path);
+  }, [activeBookmarks, path]);
+
+  const handleAddBookmark = (name: string, targetPath: string, isSessionSpecific: boolean) => {
+    const newBm: SftpBookmark = {
+      id: crypto.randomUUID(),
+      name: name.trim() || targetPath,
+      path: targetPath,
+      sessionId: isSessionSpecific ? sessionId : undefined,
+    };
+    setBookmarks((prev) => {
+      const next = [
+        ...prev.filter(
+          (b) => !(b.path === targetPath && b.sessionId === (isSessionSpecific ? sessionId : undefined)),
+        ),
+        newBm,
+      ];
+      saveBookmarks(next);
+      return next;
+    });
+    window.dispatchEvent(
+      new CustomEvent('asproops:toast', {
+        detail: t('sftp.bookmarkSaved', { name: newBm.name }),
+      }),
+    );
+  };
+
+  const handleRemoveBookmark = (id: string) => {
+    setBookmarks((prev) => {
+      const next = prev.filter((b) => b.id !== id);
+      saveBookmarks(next);
+      return next;
+    });
+    window.dispatchEvent(
+      new CustomEvent('asproops:toast', {
+        detail: t('sftp.bookmarkRemoved'),
+      }),
+    );
+  };
+
   useEffect(() => {
     localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(columns));
   }, [columns]);
-
-  useEffect(() => {
-    localStorage.setItem(NAME_WIDTH_STORAGE_KEY, String(nameWidth));
-  }, [nameWidth]);
 
   const load = useCallback(
     async (target: string) => {
@@ -342,8 +425,8 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
   // kolom Nama saat panel menyempit (mis. sidebar di-resize) — begitu lebar
   // panel kurang dari ini, tabel digulir horizontal, bukan diperas.
   const totalMinWidth = useMemo(
-    () => CHECKBOX_COL_WIDTH + nameWidth + visibleColumns.reduce((sum, c) => sum + c.width, 0),
-    [visibleColumns, nameWidth],
+    () => CHECKBOX_COL_WIDTH + visibleColumns.reduce((sum, c) => sum + c.width, 0),
+    [visibleColumns],
   );
   const selectedFiles = useMemo(
     () => entries.filter((f) => selected.has(f.path)),
@@ -363,21 +446,27 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
   };
 
   const toggleColumnVisibility = (id: ColumnId) => {
-    setColumns((prev) => prev.map((c) => (c.id === id ? { ...c, visible: !c.visible } : c)));
+    setColumns((prev) =>
+      prev.map((c) => {
+        // Jangan biarkan kolom nama disembunyikan supaya tidak bingung
+        if (c.id === 'name') return c;
+        return c.id === id ? { ...c, visible: !c.visible } : c;
+      }),
+    );
   };
 
-  const startColumnResize = (event: ReactPointerEvent, colId: ColumnId | 'name') => {
+  const startColumnResize = (event: ReactPointerEvent, colId: ColumnId) => {
     event.preventDefault();
     event.stopPropagation();
     const startX = event.clientX;
-    const min = colId === 'name' ? NAME_MIN_WIDTH : MIN_COL_WIDTH;
-    const startWidth = colId === 'name' ? nameWidth : columns.find((c) => c.id === colId)?.width;
-    if (startWidth === undefined) return;
+    const min = MIN_COL_WIDTH;
+    const col = columns.find((c) => c.id === colId);
+    if (!col) return;
+    const startWidth = col.width;
 
     const onMove = (moveEvent: PointerEvent) => {
       const next = Math.max(min, startWidth + (moveEvent.clientX - startX));
-      if (colId === 'name') setNameWidth(next);
-      else setColumns((prev) => prev.map((c) => (c.id === colId ? { ...c, width: next } : c)));
+      setColumns((prev) => prev.map((c) => (c.id === colId ? { ...c, width: next } : c)));
     };
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
@@ -387,11 +476,7 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
     window.addEventListener('pointerup', onUp);
   };
 
-  const resetColumnWidth = (colId: ColumnId | 'name') => {
-    if (colId === 'name') {
-      setNameWidth(NAME_DEFAULT_WIDTH);
-      return;
-    }
+  const resetColumnWidth = (colId: ColumnId) => {
     const def = DEFAULT_COLUMNS.find((c) => c.id === colId);
     if (def) setColumns((prev) => prev.map((c) => (c.id === colId ? { ...c, width: def.width } : c)));
   };
@@ -406,6 +491,104 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
       const [moved] = next.splice(from, 1);
       next.splice(to, 0, moved);
       return next;
+    });
+  };
+
+  const handleMoveColumn = (id: ColumnId, direction: 'up' | 'down') => {
+    setColumns((prev) => {
+      const index = prev.findIndex((c) => c.id === id);
+      if (index === -1) return prev;
+      const targetIndex = direction === 'up' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(index, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+  };
+
+  const handleSetPreset = (preset: 'standard' | 'compact' | 'full') => {
+    if (preset === 'standard') {
+      setColumns([
+        { id: 'name', width: 240, visible: true },
+        { id: 'size', width: 85, visible: true },
+        { id: 'modified', width: 140, visible: true },
+        { id: 'permissions', width: 68, visible: true },
+        { id: 'owner', width: 64, visible: false },
+        { id: 'group', width: 64, visible: false },
+      ]);
+    } else if (preset === 'compact') {
+      setColumns([
+        { id: 'name', width: 280, visible: true },
+        { id: 'size', width: 90, visible: true },
+        { id: 'modified', width: 140, visible: false },
+        { id: 'permissions', width: 68, visible: false },
+        { id: 'owner', width: 64, visible: false },
+        { id: 'group', width: 64, visible: false },
+      ]);
+    } else if (preset === 'full') {
+      setColumns([
+        { id: 'name', width: 220, visible: true },
+        { id: 'size', width: 85, visible: true },
+        { id: 'modified', width: 130, visible: true },
+        { id: 'permissions', width: 68, visible: true },
+        { id: 'owner', width: 64, visible: true },
+        { id: 'group', width: 64, visible: true },
+      ]);
+    }
+  };
+
+  const handleResetColumns = () => {
+    setColumns(DEFAULT_COLUMNS);
+  };
+
+  const handleOpenCreateModal = (type: 'folder' | 'file') => {
+    setCreateModal({ type, name: '', error: undefined });
+  };
+
+  const handleConfirmCreate = async (name: string) => {
+    if (!createModal) return;
+    const trimmed = name.trim();
+    if (!trimmed || trimmed.includes('/') || trimmed.includes('\\')) {
+      setCreateModal((prev) => (prev ? { ...prev, error: t('sftp.invalidName') } : null));
+      return;
+    }
+    if (entries.some((e) => e.name.toLowerCase() === trimmed.toLowerCase())) {
+      setCreateModal((prev) => (prev ? { ...prev, error: t('sftp.nameAlreadyExists') } : null));
+      return;
+    }
+
+    const targetPath = joinPath(path, trimmed);
+    try {
+      if (createModal.type === 'folder') {
+        await window.ssh.sftp.mkdir(sessionId, targetPath);
+        window.dispatchEvent(
+          new CustomEvent('asproops:toast', {
+            detail: t('sftp.folderCreated', { name: trimmed }),
+          }),
+        );
+      } else {
+        await window.ssh.sftp.createFile(sessionId, targetPath);
+        window.dispatchEvent(
+          new CustomEvent('asproops:toast', {
+            detail: t('sftp.fileCreated', { name: trimmed }),
+          }),
+        );
+      }
+      setCreateModal(null);
+      await load(path);
+    } catch (err) {
+      setCreateModal((prev) => (prev ? { ...prev, error: (err as Error).message } : null));
+    }
+  };
+
+  const handleCopyPath = () => {
+    void navigator.clipboard.writeText(path).then(() => {
+      window.dispatchEvent(
+        new CustomEvent('asproops:toast', {
+          detail: t('sftp.pathCopied'),
+        }),
+      );
     });
   };
 
@@ -438,6 +621,7 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
 
   const handleContextMenu = (event: ReactMouseEvent, file: RemoteFile) => {
     event.preventDefault();
+    event.stopPropagation();
     let files: RemoteFile[];
     if (selected.has(file.path) && selected.size > 1) {
       files = selectedFiles;
@@ -447,6 +631,13 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
       files = [file];
     }
     setContextMenu({ x: event.clientX, y: event.clientY, files });
+  };
+
+  const handleBackgroundContextMenu = (event: ReactMouseEvent) => {
+    event.preventDefault();
+    setSelected(new Set());
+    setSelectionAnchor(null);
+    setContextMenu({ x: event.clientX, y: event.clientY, files: [] });
   };
 
   const handleDownload = async (file: RemoteFile) => {
@@ -472,15 +663,12 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
     });
   };
 
-  const handleUpload = async () => {
-    const localPaths = await window.ssh.dialog.pickUpload();
+  const uploadFilesBatch = async (localPaths: string[]) => {
     if (localPaths.length === 0) return;
 
     try {
       const sftpPrefs = await window.ssh.settings.sftpGet();
       const existingNames = new Set(entries.map((e) => e.name));
-      // Kalau user pilih "terapkan untuk sisanya" di dialog konflik, ini
-      // menimpa kebijakan pengaturan untuk sisa berkas di batch ini saja.
       let batchPolicy: 'overwrite' | 'skip' | 'rename' | null = null;
       let uploaded = 0;
 
@@ -506,9 +694,65 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
         uploaded += 1;
       }
 
-      if (uploaded > 0) await load(path);
+      if (uploaded > 0) {
+        await load(path);
+        window.dispatchEvent(
+          new CustomEvent('asproops:toast', {
+            detail: t('sftp.uploadSuccess', { count: uploaded, path }),
+          }),
+        );
+      }
     } catch (err) {
       setError((err as Error).message);
+    }
+  };
+
+  const handleUpload = async () => {
+    const localPaths = await window.ssh.dialog.pickUpload();
+    if (localPaths.length > 0) {
+      await uploadFilesBatch(localPaths);
+    }
+  };
+
+  const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+      dragCounterRef.current += 1;
+      setIsDraggingOver(true);
+    }
+  };
+
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault();
+      dragCounterRef.current -= 1;
+      if (dragCounterRef.current <= 0) {
+        dragCounterRef.current = 0;
+        setIsDraggingOver(false);
+      }
+    }
+  };
+
+  const handleDrop = async (e: DragEvent<HTMLDivElement>) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDraggingOver(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    const localPaths = files
+      .map((file) => window.ssh.file.getPathForFile(file))
+      .filter(Boolean) as string[];
+
+    if (localPaths.length > 0) {
+      await uploadFilesBatch(localPaths);
     }
   };
 
@@ -575,23 +819,55 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
             ⌂
           </button>
 
-          <form
-            className="aspro-path-box min-w-0 flex-1"
-            onSubmit={(event) => {
-              event.preventDefault();
+          <div className="relative">
+            <button
+              onClick={() => setBookmarkMenuOpen((v) => !v)}
+              title={t('sftp.bookmarks')}
+              className={`aspro-file-icon ${
+                isCurrentPathBookmarked ? 'border-amber/40 bg-amber/10 text-amber' : ''
+              }`}
+            >
+              {isCurrentPathBookmarked ? '★' : '☆'}
+            </button>
+            {bookmarkMenuOpen && (
+              <BookmarkMenu
+                currentPath={path}
+                homePath={homePath}
+                bookmarks={activeBookmarks}
+                isCurrentBookmarked={isCurrentPathBookmarked}
+                onNavigate={(target) => {
+                  setBookmarkMenuOpen(false);
+                  void load(target);
+                }}
+                onAddBookmark={handleAddBookmark}
+                onRemoveBookmark={handleRemoveBookmark}
+                onClose={() => setBookmarkMenuOpen(false)}
+                t={t}
+              />
+            )}
+          </div>
+
+          <BreadcrumbBar
+            path={path}
+            isEditing={isPathEditing}
+            pathInput={pathInput}
+            onStartEdit={() => {
+              setIsPathEditing(true);
+              setFollowTerminal(false);
+            }}
+            onCancelEdit={() => {
+              setIsPathEditing(false);
+              setPathInput(path);
+            }}
+            onChangeInput={(val) => setPathInput(val)}
+            onSubmit={() => {
+              setIsPathEditing(false);
               goToPath();
             }}
-          >
-            <span className="text-orange">▱</span>
-            <input
-              value={pathInput}
-              onChange={(event) => setPathInput(event.target.value)}
-              onFocus={() => setFollowTerminal(false)}
-              aria-label={t('sftp.pathLabel')}
-              spellCheck={false}
-            />
-            <button type="submit" title={t('sftp.goPath')}>↵</button>
-          </form>
+            onNavigate={(targetPath) => void load(targetPath)}
+            onCopyPath={handleCopyPath}
+            t={t}
+          />
 
           <button onClick={() => void load(path)} title={t('sftp.reload')} className="aspro-file-icon">
             ⟳
@@ -619,7 +895,7 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
           <div className="relative">
             <button
               onClick={() => setColumnsMenuOpen((v) => !v)}
-              title={t('sftp.columns')}
+              title={t('sftp.columnsConfig')}
               className="aspro-file-icon"
             >
               ▤
@@ -628,6 +904,9 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
               <ColumnMenu
                 columns={columns}
                 onToggle={toggleColumnVisibility}
+                onMove={handleMoveColumn}
+                onSetPreset={handleSetPreset}
+                onReset={handleResetColumns}
                 onClose={() => setColumnsMenuOpen(false)}
                 t={t}
               />
@@ -642,6 +921,19 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
 
       <div className="aspro-file-subbar">
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <ActionButton
+            icon="newFolder"
+            label={t('sftp.newFolder')}
+            onClick={() => handleOpenCreateModal('folder')}
+          />
+          <ActionButton
+            icon="newFile"
+            label={t('sftp.newFile')}
+            onClick={() => handleOpenCreateModal('file')}
+          />
+
+          <div className="mx-1 h-3.5 w-px bg-line/60" />
+
           {selected.size > 0 && (
             <span
               title={t('sftp.selected', { count: selected.size })}
@@ -718,33 +1010,38 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
         </p>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-x-auto">
+      <div
+        className="relative flex min-h-0 flex-1 flex-col overflow-x-auto"
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={(e) => void handleDrop(e)}
+      >
         <div
           className="aspro-file-head flex shrink-0 items-stretch gap-3 border-b border-line bg-panel px-3 py-1.5 text-[10px] text-faint"
           style={{ minWidth: totalMinWidth }}
         >
-          <span className="flex w-6 shrink-0 items-center justify-center" />
-          <div className="group relative flex shrink-0 items-center" style={{ width: nameWidth }}>
-            <SortHeader
-              active={sortKey === 'name'}
-              ascending={ascending}
-              onClick={() => handleSort('name')}
-            >
-              {t('sftp.columnName')}
-            </SortHeader>
-            <span
-              onPointerDown={(e) => startColumnResize(e, 'name')}
-              onDoubleClick={() => resetColumnWidth('name')}
-              title={t('sftp.resetWidth')}
-              className="absolute right-0 top-0 h-full w-2 cursor-col-resize bg-white/[0.04] opacity-0 group-hover:opacity-100 hover:bg-azure/50"
+          <span className="flex w-6 shrink-0 items-center justify-center">
+            <input
+              type="checkbox"
+              checked={visible.length > 0 && selected.size === visible.length}
+              onChange={() => {
+                if (selected.size === visible.length) {
+                  setSelected(new Set());
+                } else {
+                  setSelected(new Set(visible.map((f) => f.path)));
+                }
+              }}
+              title={selected.size === visible.length ? t('sftp.clearSelection') : t('sftp.selectAll')}
+              className="accent-azure"
             />
-          </div>
+          </span>
           {visibleColumns.map((col) => (
             <ColumnHeaderCell
               key={col.id}
               col={col}
               label={t(columnLabelKey(col.id))}
-              sortable={col.id === 'size' || col.id === 'modified'}
+              sortable={col.id === 'name' || col.id === 'size' || col.id === 'modified'}
               active={sortKey === col.id}
               ascending={ascending}
               onSort={() => handleSort(col.id as SortKey)}
@@ -770,6 +1067,7 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
         <div
           ref={rows.scrollRef}
           onScroll={rows.onScroll}
+          onContextMenu={handleBackgroundContextMenu}
           className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden text-[11px]"
           style={{ minWidth: totalMinWidth }}
           role="grid"
@@ -813,44 +1111,50 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
                         />
                       </span>
 
-                      <div className="shrink-0 overflow-hidden" style={{ width: nameWidth }}>
-                        {renaming?.file.path === file.path ? (
-                          <input
-                            value={renaming.value}
-                            autoFocus
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => setRenaming({ file, value: e.target.value })}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') void handleRename();
-                              if (e.key === 'Escape') setRenaming(null);
-                            }}
-                            onBlur={() => setRenaming(null)}
-                            className="w-full rounded border border-azure bg-abyss px-2 py-0.5 font-mono text-xs text-fg focus:outline-none"
-                          />
-                        ) : (
-                          <button
-                            onDoubleClick={() => file.isDirectory && void load(file.path)}
-                            className="flex w-full items-center gap-2 truncate text-left font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
-                          >
-                            <FileTypeIcon file={file} />
-                            <span className={`truncate ${file.isDirectory ? 'text-azure' : 'text-dim'}`}>
-                              {file.name}
-                            </span>
-                          </button>
-                        )}
-                      </div>
+                      {visibleColumns.map((col) => {
+                        if (col.id === 'name') {
+                          return (
+                            <div key="name" className="shrink-0 overflow-hidden" style={{ width: col.width }}>
+                              {renaming?.file.path === file.path ? (
+                                <input
+                                  value={renaming.value}
+                                  autoFocus
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => setRenaming({ file, value: e.target.value })}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') void handleRename();
+                                    if (e.key === 'Escape') setRenaming(null);
+                                  }}
+                                  onBlur={() => setRenaming(null)}
+                                  className="w-full rounded border border-azure bg-abyss px-2 py-0.5 font-mono text-xs text-fg focus:outline-none"
+                                />
+                              ) : (
+                                <button
+                                  onDoubleClick={() => file.isDirectory && void load(file.path)}
+                                  className="flex w-full items-center gap-2 truncate text-left font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
+                                >
+                                  <FileTypeIcon file={file} />
+                                  <span className={`truncate ${file.isDirectory ? 'font-medium text-azure hover:underline' : 'text-dim'}`}>
+                                    {file.name}
+                                  </span>
+                                </button>
+                              )}
+                            </div>
+                          );
+                        }
 
-                      {visibleColumns.map((col) => (
-                        <span
-                          key={col.id}
-                          style={{ width: col.width }}
-                          className={`shrink-0 truncate font-mono text-faint ${
-                            col.id === 'size' ? 'text-right' : ''
-                          }`}
-                        >
-                          {columnValue(col.id, file)}
-                        </span>
-                      ))}
+                        return (
+                          <span
+                            key={col.id}
+                            style={{ width: col.width }}
+                            className={`shrink-0 truncate font-mono text-faint ${
+                              col.id === 'size' ? 'text-right' : ''
+                            }`}
+                          >
+                            {columnValue(col.id, file)}
+                          </span>
+                        );
+                      })}
                     </div>
                   );
                 })}
@@ -858,6 +1162,23 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
             </div>
           )}
         </div>
+
+        {isDraggingOver && (
+          <div className="pointer-events-none absolute inset-0 z-30 flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-azure bg-abyss/90 p-6 backdrop-blur-sm animate-pulse">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-azure/20 text-3xl text-azure">
+              📥
+            </div>
+            <div className="mt-3 text-sm font-semibold text-fg">
+              {t('sftp.dropTitle')}
+            </div>
+            <div className="mt-1 font-mono text-xs text-mint">
+              {path}
+            </div>
+            <div className="mt-2 text-[11px] text-muted">
+              {t('sftp.dropSubtitle')}
+            </div>
+          </div>
+        )}
       </div>
 
       {activeEdits.length > 0 && (
@@ -1019,6 +1340,15 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
         <FileInfoDialog file={infoFile} onClose={() => setInfoFile(null)} t={t} locale={locale} />
       )}
 
+      {createModal && (
+        <CreateItemModal
+          modal={createModal}
+          onConfirm={handleConfirmCreate}
+          onClose={() => setCreateModal(null)}
+          t={t}
+        />
+      )}
+
       {contextMenu && (
         <FileContextMenu
           state={contextMenu}
@@ -1028,6 +1358,10 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
           onRename={(file) => setRenaming({ file, value: file.name })}
           onDelete={(files) => setPendingDelete(files)}
           onInfo={(file) => setInfoFile(file)}
+          onNewFolder={() => handleOpenCreateModal('folder')}
+          onNewFile={() => handleOpenCreateModal('file')}
+          onReload={() => void load(path)}
+          onCopyPath={handleCopyPath}
           t={t}
         />
       )}
@@ -1133,34 +1467,6 @@ function editLabel(edit: EditStatus, t: TFunc, locale: string): string {
   }
 }
 
-function SortHeader({
-  active,
-  ascending,
-  onClick,
-  className,
-  style,
-  children,
-}: {
-  active: boolean;
-  ascending: boolean;
-  onClick: () => void;
-  className?: string;
-  style?: CSSProperties;
-  children: ReactNode;
-}) {
-  return (
-    <span className={className} style={style}>
-      <button
-        onClick={onClick}
-        className="hover:text-dim focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
-      >
-        {children}
-        {active && <span className="ml-1">{ascending ? '↑' : '↓'}</span>}
-      </button>
-    </span>
-  );
-}
-
 function ColumnHeaderCell({
   col,
   label,
@@ -1193,38 +1499,44 @@ function ColumnHeaderCell({
       onDragOver={(e) => e.preventDefault()}
       onDrop={onDrop}
       style={{ width: col.width }}
-      className="group relative flex shrink-0 items-center"
+      className="group relative flex shrink-0 items-center select-none"
     >
-      {/* Grip ini satu-satunya area untuk drag-urutkan kolom, ditumpuk di
-          atas label (posisi absolute) supaya tidak menggeser posisi teksnya
-          — label harus sejajar persis dengan nilai di baris data di
-          bawahnya. Dipisah juga dari tepi kanan (drag = resize) supaya
-          ketiga gestur (sort/reorder/resize) tidak saling rebutan. */}
       <span
         draggable
         onDragStart={onDragStart}
-        className="absolute inset-y-0 left-0 z-10 flex w-3 -translate-x-3 cursor-grab items-center justify-center text-faint/15 opacity-0 group-hover:opacity-100 hover:text-dim active:cursor-grabbing"
+        className="absolute inset-y-0 left-0 z-10 flex w-3.5 -translate-x-3 cursor-grab items-center justify-center text-faint/30 opacity-0 group-hover:opacity-100 hover:text-dim active:cursor-grabbing"
+        title="Geser urutan kolom"
       >
         ⠿
       </span>
       {sortable ? (
         <button
           onClick={onSort}
-          className={`flex min-w-0 flex-1 items-center gap-1 truncate hover:text-dim focus:outline-none focus-visible:ring-2 focus-visible:ring-azure ${justify}`}
+          className={`flex min-w-0 flex-1 items-center gap-1 truncate text-[11px] font-medium transition-colors hover:text-fg focus:outline-none ${
+            active ? 'text-azure font-semibold' : 'text-faint'
+          } ${justify}`}
         >
           <span className="truncate">{label}</span>
-          {active && <span>{ascending ? '↑' : '↓'}</span>}
+          {active && (
+            <span className="text-[10px] text-azure">
+              {ascending ? '▲' : '▼'}
+            </span>
+          )}
         </button>
       ) : (
-        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className={`min-w-0 flex-1 truncate text-[11px] font-medium text-faint ${justify}`}>
+          {label}
+        </span>
       )}
       <span
         draggable={false}
         onPointerDown={onResizeStart}
         onDoubleClick={onResetWidth}
         title={resetLabel}
-        className="absolute right-0 top-0 h-full w-2 cursor-col-resize bg-white/[0.04] opacity-0 group-hover:opacity-100 hover:bg-azure/50"
-      />
+        className="absolute -right-1.5 top-0 h-full w-3 cursor-col-resize z-20 flex items-center justify-center group/handle"
+      >
+        <span className="h-3/4 w-[1.5px] rounded bg-white/[0.08] transition-all group-hover/handle:bg-azure group-hover/handle:w-[2px] group-hover/handle:shadow-[0_0_8px_rgba(0,229,255,0.8)]" />
+      </span>
     </div>
   );
 }
@@ -1232,41 +1544,552 @@ function ColumnHeaderCell({
 function ColumnMenu({
   columns,
   onToggle,
+  onMove,
+  onSetPreset,
+  onReset,
   onClose,
   t,
 }: {
   columns: ColumnState[];
   onToggle: (id: ColumnId) => void;
+  onMove: (id: ColumnId, direction: 'up' | 'down') => void;
+  onSetPreset: (preset: 'standard' | 'compact' | 'full') => void;
+  onReset: () => void;
   onClose: () => void;
   t: TFunc;
 }) {
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="absolute right-0 top-full z-50 mt-1 min-w-[170px] rounded border border-line bg-raised p-2 text-xs shadow-lg">
-        {columns.map((col) => (
-          <label
-            key={col.id}
-            className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-hover"
+      <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-line bg-raised p-2 text-xs shadow-2xl backdrop-blur-md">
+        <div className="mb-2 flex items-center justify-between border-b border-line/60 pb-1.5 px-1 font-mono text-[10px] uppercase tracking-wider text-faint">
+          <span>{t('sftp.columnsConfig')}</span>
+          <button
+            type="button"
+            onClick={onReset}
+            className="text-[10px] text-azure hover:underline capitalize"
+            title={t('sftp.resetColumns')}
           >
-            <input
-              type="checkbox"
-              checked={col.visible}
-              onChange={() => onToggle(col.id)}
-              className="accent-azure"
-            />
-            <span className="text-dim">{t(columnLabelKey(col.id))}</span>
-          </label>
-        ))}
+            Reset
+          </button>
+        </div>
+
+        {/* Quick Presets */}
+        <div className="mb-2 flex items-center gap-1 border-b border-line/40 pb-2 px-1">
+          <button
+            type="button"
+            onClick={() => onSetPreset('standard')}
+            className="flex-1 rounded bg-active/40 px-1.5 py-1 text-center text-[10px] text-dim hover:bg-hover hover:text-fg"
+          >
+            {t('sftp.presetStandard').split(' ')[0]}
+          </button>
+          <button
+            type="button"
+            onClick={() => onSetPreset('compact')}
+            className="flex-1 rounded bg-active/40 px-1.5 py-1 text-center text-[10px] text-dim hover:bg-hover hover:text-fg"
+          >
+            {t('sftp.presetCompact').split(' ')[0]}
+          </button>
+          <button
+            type="button"
+            onClick={() => onSetPreset('full')}
+            className="flex-1 rounded bg-active/40 px-1.5 py-1 text-center text-[10px] text-dim hover:bg-hover hover:text-fg"
+          >
+            {t('sftp.presetFull').split(' ')[0]}
+          </button>
+        </div>
+
+        {/* Column items with toggle & reorder arrows */}
+        <div className="space-y-0.5">
+          {columns.map((col, index) => {
+            const isFirst = index === 0;
+            const isLast = index === columns.length - 1;
+            return (
+              <div
+                key={col.id}
+                className="group flex items-center justify-between rounded px-2 py-1 transition-colors hover:bg-hover"
+              >
+                <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={col.visible}
+                    disabled={col.id === 'name'}
+                    onChange={() => onToggle(col.id)}
+                    className="accent-azure disabled:opacity-50"
+                  />
+                  <span className={`truncate text-xs ${col.visible ? 'text-fg font-medium' : 'text-faint'}`}>
+                    {t(columnLabelKey(col.id))}
+                  </span>
+                </label>
+
+                {/* Move buttons */}
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    disabled={isFirst}
+                    onClick={() => onMove(col.id, 'up')}
+                    title={t('sftp.moveLeft')}
+                    className="h-5 w-5 rounded text-[10px] text-faint hover:bg-line hover:text-azure disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-faint"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isLast}
+                    onClick={() => onMove(col.id, 'down')}
+                    title={t('sftp.moveRight')}
+                    className="h-5 w-5 rounded text-[10px] text-faint hover:bg-line hover:text-azure disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-faint"
+                  >
+                    ▼
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </>
   );
 }
 
-type ActionIconKind = 'edit' | 'download' | 'rename' | 'info' | 'delete';
+function BreadcrumbBar({
+  path,
+  isEditing,
+  pathInput,
+  onStartEdit,
+  onCancelEdit,
+  onChangeInput,
+  onSubmit,
+  onNavigate,
+  onCopyPath,
+  t,
+}: {
+  path: string;
+  isEditing: boolean;
+  pathInput: string;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onChangeInput: (val: string) => void;
+  onSubmit: () => void;
+  onNavigate: (p: string) => void;
+  onCopyPath: () => void;
+  t: TFunc;
+}) {
+  const segments = useMemo(() => {
+    const parts = path.split('/').filter(Boolean);
+    let accum = '';
+    return parts.map((name) => {
+      accum += `/${name}`;
+      return { name, path: accum };
+    });
+  }, [path]);
+
+  if (isEditing) {
+    return (
+      <form
+        className="aspro-path-box min-w-0 flex-1 ring-1 ring-azure"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmit();
+        }}
+      >
+        <span className="text-orange">▱</span>
+        <input
+          autoFocus
+          value={pathInput}
+          onChange={(e) => onChangeInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') onCancelEdit();
+          }}
+          aria-label={t('sftp.pathLabel')}
+          spellCheck={false}
+          className="min-w-0 flex-1 border-0 bg-transparent font-mono text-xs text-fg focus:outline-none"
+        />
+        <button
+          type="button"
+          onClick={onCancelEdit}
+          title={t('sftp.cancel')}
+          className="text-xs text-faint hover:text-dim"
+        >
+          ✕
+        </button>
+        <button type="submit" title={t('sftp.goPath')} className="text-xs text-azure hover:text-fg">
+          ↵
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <div
+      onClick={onStartEdit}
+      className="aspro-path-box min-w-0 flex-1 cursor-text hover:border-azure/40 transition-colors group flex items-center justify-between"
+      title="Klik untuk ketik path manual"
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onNavigate('/');
+          }}
+          title="Root (/)"
+          className="flex shrink-0 items-center gap-1 rounded px-1 py-0.5 font-mono text-xs text-dim hover:bg-hover hover:text-azure"
+        >
+          <span className="text-orange">▱</span>
+          <span>/</span>
+        </button>
+
+        {segments.map((seg, idx) => {
+          const isLast = idx === segments.length - 1;
+          return (
+            <div key={seg.path} className="flex shrink-0 items-center gap-1">
+              <span className="text-[10px] text-faint/40">›</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNavigate(seg.path);
+                }}
+                className={`truncate rounded px-1.5 py-0.5 font-mono text-xs transition-colors hover:bg-hover ${
+                  isLast ? 'font-semibold text-fg' : 'text-dim hover:text-azure'
+                }`}
+              >
+                {seg.name}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1 pl-1">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onCopyPath();
+          }}
+          title={t('sftp.copyPath')}
+          className="rounded p-1 text-faint hover:bg-hover hover:text-fg"
+        >
+          <svg viewBox="0 0 18 18" aria-hidden className="h-3 w-3 stroke-current fill-none" strokeWidth="1.5">
+            <rect x="5.5" y="5.5" width="9" height="9" rx="1.5" />
+            <path d="M3.5 11.5v-7A1.5 1.5 0 0 1 5 3h7" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onStartEdit();
+          }}
+          title="Edit path"
+          className="rounded p-1 text-faint hover:bg-hover hover:text-fg"
+        >
+          <svg viewBox="0 0 18 18" aria-hidden className="h-3 w-3 stroke-current fill-none" strokeWidth="1.5">
+            <path d="M12.6 2.6a1.7 1.7 0 0 1 2.4 2.4L6.4 13.6l-3.4.9.9-3.4z" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CreateItemModal({
+  modal,
+  onConfirm,
+  onClose,
+  t,
+}: {
+  modal: { type: 'folder' | 'file'; name: string; error?: string };
+  onConfirm: (name: string) => Promise<void>;
+  onClose: () => void;
+  t: TFunc;
+}) {
+  const [name, setName] = useState(modal.name);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+    await onConfirm(name);
+    setSubmitting(false);
+  };
+
+  const isFolder = modal.type === 'folder';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-lg border border-line bg-raised p-5 shadow-2xl">
+        <div className="flex items-center gap-2">
+          <span className="text-base">{isFolder ? '📁' : '📄'}</span>
+          <h2 className="text-sm font-semibold text-fg">
+            {isFolder ? t('sftp.newFolderTitle') : t('sftp.newFileTitle')}
+          </h2>
+        </div>
+
+        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+          <div>
+            <input
+              type="text"
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={
+                isFolder
+                  ? t('sftp.folderNamePlaceholder')
+                  : t('sftp.fileNamePlaceholder')
+              }
+              className="w-full rounded border border-line bg-abyss px-3 py-1.5 font-mono text-xs text-fg placeholder:text-muted focus:border-azure focus:outline-none focus:ring-1 focus:ring-azure"
+            />
+            {modal.error && (
+              <p className="mt-1.5 text-xs text-coral">{modal.error}</p>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+              className="rounded px-3 py-1.5 text-xs text-dim hover:text-fg hover:bg-hover focus:outline-none"
+            >
+              {t('sftp.cancel')}
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || !name.trim()}
+              className="rounded bg-azure px-3.5 py-1.5 text-xs font-medium text-abyss hover:bg-azure-bright disabled:opacity-40 focus:outline-none"
+            >
+              {submitting ? '...' : t('sftp.create')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function BookmarkMenu({
+  currentPath,
+  homePath,
+  bookmarks,
+  isCurrentBookmarked,
+  onNavigate,
+  onAddBookmark,
+  onRemoveBookmark,
+  onClose,
+  t,
+}: {
+  currentPath: string;
+  homePath: string;
+  bookmarks: SftpBookmark[];
+  isCurrentBookmarked: boolean;
+  onNavigate: (path: string) => void;
+  onAddBookmark: (name: string, path: string, isSessionSpecific: boolean) => void;
+  onRemoveBookmark: (id: string) => void;
+  onClose: () => void;
+  t: TFunc;
+}) {
+  const [adding, setAdding] = useState(false);
+  const defaultName =
+    currentPath === homePath
+      ? 'Home'
+      : currentPath.split('/').filter(Boolean).pop() || currentPath;
+  const [nameInput, setNameInput] = useState(defaultName);
+  const [thisServerOnly, setThisServerOnly] = useState(true);
+
+  const standardLocations = [
+    { name: 'Home (~)', path: homePath, icon: '⌂' },
+    { name: 'Root (/)', path: '/', icon: '▱' },
+    { name: '/var/log', path: '/var/log', icon: '📁' },
+    { name: '/etc', path: '/etc', icon: '⚙️' },
+    { name: '/tmp', path: '/tmp', icon: '💾' },
+    { name: '/var/www', path: '/var/www', icon: '🌐' },
+  ];
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    onAddBookmark(nameInput, currentPath, thisServerOnly);
+    setAdding(false);
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-lg border border-line bg-raised p-2 text-xs shadow-2xl backdrop-blur-md">
+        {/* Header / Pin Current Button */}
+        {!adding ? (
+          <div className="mb-2 border-b border-line/40 pb-2">
+            {isCurrentBookmarked ? (
+              <div className="flex items-center justify-between rounded bg-amber/10 px-2.5 py-1.5 text-[11px] text-amber">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <span>★</span>
+                  <span>{t('sftp.isPinned')}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const existing = bookmarks.find((b) => b.path === currentPath);
+                    if (existing) onRemoveBookmark(existing.id);
+                  }}
+                  className="text-xs text-faint hover:text-coral"
+                  title={t('sftp.bookmarkRemoved')}
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAdding(true)}
+                className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left font-medium text-dim transition-colors hover:bg-hover hover:text-fg"
+              >
+                <span className="text-amber">☆</span>
+                <span className="truncate">{t('sftp.pinCurrent')}</span>
+              </button>
+            )}
+          </div>
+        ) : (
+          <form onSubmit={handleSave} className="mb-2 space-y-2 border-b border-line/40 pb-2">
+            <div>
+              <span className="font-mono text-[10px] uppercase tracking-wider text-faint">
+                {t('sftp.pinCurrent')}
+              </span>
+              <div className="truncate font-mono text-[10px] text-azure">
+                {currentPath}
+              </div>
+            </div>
+            <input
+              type="text"
+              autoFocus
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              placeholder={t('sftp.bookmarkNamePlaceholder')}
+              className="aspro-input w-full px-2 py-1 text-xs"
+              required
+            />
+            <label className="flex cursor-pointer items-center gap-2 text-[11px] text-dim">
+              <input
+                type="checkbox"
+                checked={thisServerOnly}
+                onChange={(e) => setThisServerOnly(e.target.checked)}
+                className="accent-azure"
+              />
+              <span>{t('sftp.bookmarkThisServerOnly')}</span>
+            </label>
+            <div className="flex items-center justify-end gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setAdding(false)}
+                className="aspro-button aspro-button-secondary compact px-2 py-0.5 text-[10px]"
+              >
+                {t('settings.close')}
+              </button>
+              <button
+                type="submit"
+                className="aspro-button aspro-button-primary compact px-2 py-0.5 text-[10px]"
+              >
+                {t('sftp.addBookmark')}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Custom Bookmarks Section */}
+        <div className="mb-2">
+          <div className="px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-faint">
+            {t('sftp.savedBookmarks')}
+          </div>
+          {bookmarks.length === 0 ? (
+            <div className="px-2 py-1.5 text-[11px] italic text-muted">
+              {t('sftp.noBookmarks')}
+            </div>
+          ) : (
+            <div className="max-h-36 space-y-0.5 overflow-y-auto">
+              {bookmarks.map((bm) => (
+                <div
+                  key={bm.id}
+                  className="group flex items-center justify-between rounded px-2 py-1 transition-colors hover:bg-hover"
+                >
+                  <button
+                    type="button"
+                    onClick={() => onNavigate(bm.path)}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                    title={bm.path}
+                  >
+                    <span className="text-xs text-amber">★</span>
+                    <div className="min-w-0 flex-1 truncate">
+                      <div className="truncate text-xs font-medium text-dim group-hover:text-fg">
+                        {bm.name}
+                      </div>
+                      <div className="truncate font-mono text-[10px] text-faint">
+                        {bm.path}
+                      </div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveBookmark(bm.id);
+                    }}
+                    className="ml-1.5 text-xs text-faint opacity-0 transition-opacity hover:text-coral group-hover:opacity-100"
+                    title="Hapus bookmark"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Standard Locations Section */}
+        <div className="border-t border-line/40 pt-1.5">
+          <div className="px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-faint">
+            {t('sftp.standardLocations')}
+          </div>
+          <div className="grid grid-cols-2 gap-1">
+            {standardLocations.map((loc) => (
+              <button
+                key={loc.path}
+                type="button"
+                onClick={() => onNavigate(loc.path)}
+                className="flex items-center gap-1.5 truncate rounded px-2 py-1 text-left text-[11px] text-dim transition-colors hover:bg-hover hover:text-fg"
+                title={loc.path}
+              >
+                <span className="text-xs">{loc.icon}</span>
+                <span className="truncate">{loc.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+type ActionIconKind = 'edit' | 'download' | 'rename' | 'info' | 'delete' | 'newFolder' | 'newFile';
 
 function ActionIcon({ kind }: { kind: ActionIconKind }) {
   switch (kind) {
+    case 'newFolder':
+      return (
+        <svg viewBox="0 0 18 18" aria-hidden className="aspro-action-icon">
+          <path d="M2.2 4.2c0-.7.6-1.2 1.2-1.2h3.5l1.4 1.6h6.5c.7 0 1.2.5 1.2 1.2v6.4c0 .7-.5 1.2-1.2 1.2H3.4c-.7 0-1.2-.5-1.2-1.2z" />
+          <path d="M12.5 9v4m-2-2h4" strokeWidth="1.6" />
+        </svg>
+      );
+    case 'newFile':
+      return (
+        <svg viewBox="0 0 18 18" aria-hidden className="aspro-action-icon">
+          <path d="M4 2.5h6l4 4V15a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 15V4A1.5 1.5 0 0 1 4 2.5z" />
+          <path d="M10 2.5V7h4.5" />
+          <path d="M8.5 9.5v4m-2-2h4" strokeWidth="1.6" />
+        </svg>
+      );
     case 'edit':
       return (
         <svg viewBox="0 0 18 18" aria-hidden className="aspro-action-icon">
@@ -1345,6 +2168,10 @@ function FileContextMenu({
   onRename,
   onDelete,
   onInfo,
+  onNewFolder,
+  onNewFile,
+  onReload,
+  onCopyPath,
   t,
 }: {
   state: { x: number; y: number; files: RemoteFile[] };
@@ -1354,11 +2181,15 @@ function FileContextMenu({
   onRename: (file: RemoteFile) => void;
   onDelete: (files: RemoteFile[]) => void;
   onInfo: (file: RemoteFile) => void;
+  onNewFolder: () => void;
+  onNewFile: () => void;
+  onReload: () => void;
+  onCopyPath: () => void;
   t: TFunc;
 }) {
   const single = state.files.length === 1 ? state.files[0] : null;
-  const left = Math.min(state.x, window.innerWidth - 180);
-  const top = Math.min(state.y, window.innerHeight - 220);
+  const left = Math.min(state.x, window.innerWidth - 190);
+  const top = Math.min(state.y, window.innerHeight - 280);
 
   return (
     <>
@@ -1371,7 +2202,7 @@ function FileContextMenu({
         }}
       />
       <div
-        className="fixed z-50 min-w-[160px] rounded border border-line bg-raised py-1 text-xs shadow-lg"
+        className="fixed z-50 min-w-[170px] rounded-lg border border-line bg-raised py-1 text-xs shadow-2xl backdrop-blur-md"
         style={{ left, top }}
       >
         {single && !single.isDirectory && (
@@ -1381,6 +2212,7 @@ function FileContextMenu({
               onClose();
             }}
           >
+            <span className="mr-2 text-faint">✎</span>
             {t('sftp.actionEdit')}
           </MenuItem>
         )}
@@ -1391,6 +2223,7 @@ function FileContextMenu({
               onClose();
             }}
           >
+            <span className="mr-2 text-faint">↓</span>
             {t('sftp.actionDownload')}
           </MenuItem>
         )}
@@ -1401,31 +2234,75 @@ function FileContextMenu({
               onClose();
             }}
           >
+            <span className="mr-2 text-faint">✏</span>
             {t('sftp.actionRename')}
           </MenuItem>
         )}
+        {state.files.length > 0 && (
+          <MenuItem
+            danger
+            onClick={() => {
+              onDelete(state.files);
+              onClose();
+            }}
+          >
+            <span className="mr-2">🗑</span>
+            {t('sftp.actionDelete')}
+          </MenuItem>
+        )}
+        {single && (
+          <MenuItem
+            onClick={() => {
+              onInfo(single);
+              onClose();
+            }}
+          >
+            <span className="mr-2 text-faint">ⓘ</span>
+            {t('sftp.actionInfo')}
+          </MenuItem>
+        )}
+
+        {state.files.length > 0 && <div className="my-1 border-t border-line/60" />}
+
         <MenuItem
-          danger
           onClick={() => {
-            onDelete(state.files);
             onClose();
+            onNewFolder();
           }}
         >
-          {t('sftp.actionDelete')}
+          <span className="mr-2 text-amber">📁+</span>
+          {t('sftp.newFolder')}
         </MenuItem>
-        {single && (
-          <>
-            <div className="my-1 border-t border-line" />
-            <MenuItem
-              onClick={() => {
-                onInfo(single);
-                onClose();
-              }}
-            >
-              {t('sftp.actionInfo')}
-            </MenuItem>
-          </>
-        )}
+        <MenuItem
+          onClick={() => {
+            onClose();
+            onNewFile();
+          }}
+        >
+          <span className="mr-2 text-mint">📄+</span>
+          {t('sftp.newFile')}
+        </MenuItem>
+
+        <div className="my-1 border-t border-line/60" />
+
+        <MenuItem
+          onClick={() => {
+            onClose();
+            onCopyPath();
+          }}
+        >
+          <span className="mr-2 text-faint">📋</span>
+          {t('sftp.copyPath')}
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            onClose();
+            onReload();
+          }}
+        >
+          <span className="mr-2 text-faint">⟳</span>
+          {t('sftp.reload')}
+        </MenuItem>
       </div>
     </>
   );

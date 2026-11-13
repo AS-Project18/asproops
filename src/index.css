@@ -367,8 +367,8 @@ button:disabled {
 .aspro-center {
   min-width: 0;
   min-height: 0;
-  display: grid;
-  grid-template-rows: 34px 48px minmax(0, 1fr) 38px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(126, 50, 156, .36);
   border-radius: 10px;
@@ -379,6 +379,9 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 9px;
+  height: 48px;
+  flex-shrink: 0;
+  box-sizing: border-box;
   padding: 0 12px;
   border-bottom: 1px solid rgba(100, 38, 126, .25);
   background: linear-gradient(90deg, rgba(34, 11, 46, .58), rgba(9, 5, 13, .82));
@@ -420,6 +423,7 @@ button:disabled {
 .aspro-terminal-card {
   position: relative;
   min-height: 0;
+  flex: 1 1 0%;
   overflow: hidden;
   background: #020307;
 }
@@ -434,6 +438,9 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 18px;
+  height: 38px;
+  flex-shrink: 0;
+  box-sizing: border-box;
   padding: 0 12px;
   border-top: 1px solid rgba(103, 42, 128, .25);
   background: #0a050e;
@@ -761,6 +768,13 @@ button:disabled {
   border: 0;
   background: transparent;
   color: #807586;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 .aspro-follow-button,
 .aspro-file-upload {
@@ -1158,6 +1172,20 @@ button:disabled {
   border-color: rgba(173, 70, 214, .35);
   background: linear-gradient(90deg, rgba(94, 35, 119, .15), rgba(43, 16, 54, .06));
 }
+.aspro-local-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  text-align: left;
+}
+.aspro-local-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 .aspro-local-row strong {
   display: block;
   overflow: hidden;
@@ -1224,6 +1252,9 @@ button:disabled {
 /* v0.5.5 — unified SSH / local workspace tabs */
 .aspro-workspace-tabs {
   min-width: 0;
+  height: 34px;
+  flex-shrink: 0;
+  box-sizing: border-box;
   display: flex;
   align-items: end;
   gap: 3px;
@@ -1278,6 +1309,10 @@ button:disabled {
   background: #ff9700;
   box-shadow: 0 0 6px rgba(255, 151, 0, .38);
 }
+.aspro-workspace-tab-dot.elevated {
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, .55);
+}
 .aspro-workspace-tab-dot.log {
   background: #ffd23b;
   box-shadow: 0 0 6px rgba(255, 210, 59, .40);
@@ -1315,6 +1350,13 @@ button:disabled {
 }
 .aspro-workspace-tab.active .aspro-workspace-tab-kind {
   color: #a79dac;
+}
+.aspro-workspace-tab-kind.elevated {
+  color: #f59e0b;
+  font-weight: 900;
+}
+.aspro-workspace-tab.active .aspro-workspace-tab-kind.elevated {
+  color: #fbbf24;
 }
 .aspro-workspace-tab-close {
   width: 15px;
@@ -1400,6 +1442,29 @@ button:disabled {
   font-size: 12px;
 }
 
+.aspro-group-icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(182, 78, 227, 0.25);
+  background: rgba(182, 78, 227, 0.12);
+  font-size: 12px;
+  flex-shrink: 0;
+  transition: all .15s ease;
+}
+
+.aspro-group-color-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  flex-shrink: 0;
+  margin-right: 3px;
+  transition: all .15s ease;
+}
+
 .aspro-group-name {
   min-width: 0;
   flex: 1;
@@ -1441,6 +1506,28 @@ button:disabled {
   color: #ffad31;
   text-align: center;
   font-size: 10px;
+}
+
+.aspro-group-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 2px;
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+
+.aspro-group-heading:hover .aspro-group-actions,
+.aspro-server-group:hover .aspro-group-actions {
+  opacity: 1;
+}
+
+.aspro-group-empty-hint {
+  margin: 2px 8px 6px 24px;
+  padding: 4px 8px;
+  font-size: 10px;
+  color: #7d7285;
+  font-style: italic;
 }
 
 .aspro-server-row {
@@ -1494,8 +1581,8 @@ button:disabled {
 }
 
 .aspro-settings-dialog {
-  width: min(880px, 96vw);
-  max-height: min(780px, 92vh);
+  width: min(940px, 96vw);
+  height: min(720px, 92vh);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1505,6 +1592,91 @@ button:disabled {
     radial-gradient(circle at 85% 0%, rgba(116, 38, 146, .15), transparent 34%),
     #0c0710;
   box-shadow: 0 28px 90px rgba(0, 0, 0, .62);
+}
+
+.aspro-settings-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.aspro-settings-nav {
+  width: 200px;
+  flex-shrink: 0;
+  border-right: 1px solid rgba(116, 48, 140, .20);
+  background: rgba(14, 7, 19, .45);
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+}
+
+.aspro-settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #a499ab;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  transition: all .15s ease;
+  cursor: pointer;
+}
+
+.aspro-settings-nav-item:hover {
+  background: rgba(116, 48, 140, .14);
+  color: #ded4e2;
+}
+
+.aspro-settings-nav-item.active {
+  background: linear-gradient(90deg, rgba(162, 60, 224, 0.22) 0%, rgba(93, 29, 133, 0.12) 100%);
+  color: #f5edfa;
+  border-color: rgba(182, 78, 227, 0.35);
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.aspro-settings-nav-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  font-size: 13px;
+}
+
+.aspro-settings-content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 18px 22px;
+}
+
+.aspro-settings-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(5, 3, 8, .6);
+  border: 1px solid rgba(104, 43, 130, .25);
+  border-radius: 7px;
+  padding: 4px 10px;
+  width: 220px;
+}
+
+.aspro-settings-search input {
+  background: transparent;
+  border: 0;
+  outline: none;
+  font-size: 12px;
+  color: #ded4e2;
+  width: 100%;
 }
 
 .aspro-settings-header {
@@ -1589,6 +1761,35 @@ button:disabled {
   color: #706675;
   font-size: 11px;
   line-height: 1.45;
+}
+
+.aspro-density-compact .aspro-server-row {
+  min-height: 36px;
+}
+.aspro-density-compact .aspro-server-avatar {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+}
+.aspro-density-compact .aspro-group-heading {
+  min-height: 28px;
+}
+.aspro-density-compact .aspro-server-group {
+  margin: 3px 0 5px;
+  padding: 3px;
+}
+.aspro-density-compact .aspro-workspace-tab {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+.aspro-density-compact .aspro-local-row {
+  min-height: 36px;
+  padding: 4px 8px;
+}
+.aspro-density-compact .aspro-project-card {
+  padding: 8px 10px;
+  margin-bottom: 6px;
 }
 
 .aspro-setting-row {
@@ -2210,6 +2411,17 @@ button:disabled {
 .aspro-local-icon-action.danger:hover:not(:disabled) {
   background: rgba(123, 31, 43, .2);
   color: #ff7e8a;
+}
+
+.aspro-local-icon-action.uac {
+  color: #f59e0b;
+  opacity: .75;
+}
+
+.aspro-local-icon-action.uac:hover:not(:disabled) {
+  background: rgba(245, 158, 11, .2);
+  color: #fbbf24;
+  opacity: 1;
 }
 
 .aspro-local-icon-action:disabled {

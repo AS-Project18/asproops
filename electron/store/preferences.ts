@@ -17,6 +17,10 @@ export interface SshPreferences {
   keepaliveCountMax: number;
   /** Coba sambung ulang otomatis kalau koneksi terputus tanpa diminta pengguna. */
   autoReconnect: boolean;
+  /** Port default untuk sesi SSH baru. */
+  defaultPort: number;
+  /** Username default untuk sesi SSH baru. */
+  defaultUsername: string;
 }
 
 export const DEFAULT_SSH_PREFERENCES: SshPreferences = {
@@ -24,6 +28,8 @@ export const DEFAULT_SSH_PREFERENCES: SshPreferences = {
   keepaliveIntervalMs: 15_000,
   keepaliveCountMax: 3,
   autoReconnect: true,
+  defaultPort: 22,
+  defaultUsername: '',
 };
 
 const MIN_TIMEOUT_MS = 3_000;
@@ -74,6 +80,14 @@ export class PreferencesStore {
         clamp(patch.keepaliveCountMax ?? this.data.keepaliveCountMax, 1, 10),
       ),
       autoReconnect: patch.autoReconnect ?? this.data.autoReconnect,
+      defaultPort:
+        typeof patch.defaultPort === 'number'
+          ? clamp(patch.defaultPort, 1, 65535)
+          : (this.data.defaultPort ?? 22),
+      defaultUsername:
+        typeof patch.defaultUsername === 'string'
+          ? patch.defaultUsername.trim()
+          : (this.data.defaultUsername ?? ''),
     };
     this.flush();
     return this.get();

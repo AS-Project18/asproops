@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { AuthMethod, SessionConfig, Secret } from '../shared/types';
 
 /**
@@ -47,6 +47,14 @@ export function SessionForm({ existing, candidates, onSave, onCancel }: SessionF
   const [jumpHostId, setJumpHostId] = useState(existing?.jumpHostId ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const availableGroups = useMemo(() => {
+    const set = new Set<string>();
+    (candidates ?? []).forEach((s) => {
+      if (s.group?.trim()) set.add(s.group.trim());
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [candidates]);
 
   const portNumber = Number(port);
   const portValid = Number.isInteger(portNumber) && portNumber > 0 && portNumber < 65536;
@@ -165,7 +173,36 @@ export function SessionForm({ existing, candidates, onSave, onCancel }: SessionF
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Grup">
-              <Input value={group} onChange={setGroup} placeholder="Produksi" />
+              <input
+                list="asproops-groups-list"
+                value={group}
+                onChange={(e) => setGroup(e.target.value)}
+                placeholder="mis. Produksi atau Produksi/Web"
+                className="w-full rounded border border-line bg-abyss px-3 py-2 text-sm text-fg placeholder:text-muted focus:border-azure focus:outline-none"
+              />
+              <datalist id="asproops-groups-list">
+                {availableGroups.map((g) => (
+                  <option key={g} value={g} />
+                ))}
+              </datalist>
+              {availableGroups.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {availableGroups.slice(0, 6).map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setGroup(g)}
+                      className={`rounded px-1.5 py-0.5 text-[10px] transition ${
+                        group === g
+                          ? 'border border-azure/40 bg-azure/20 text-azure'
+                          : 'bg-surface text-faint hover:bg-surface-hover hover:text-dim'
+                      }`}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              )}
             </Field>
             <Field label="Warna label">
               <select

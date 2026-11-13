@@ -5,8 +5,9 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
-import { useTerminalPrefs } from '../terminalPrefs';
+import { useTerminalPrefs, resolveTerminalTheme } from '../terminalPrefs';
 import { useTerminalFontWheelZoom } from '../hooks/useTerminalFontWheelZoom';
+import { extractTerminalTranscript, formatTranscriptFilename } from '../lib/transcript';
 import { stripAnsi } from '../lib/ansi';
 import { ContextMenu, ContextMenuItem, type ContextMenuPosition } from './ContextMenu';
 import { useI18n } from '../i18n';
@@ -20,6 +21,7 @@ function defaultFontFamily(): string {
 
 interface TerminalViewProps {
   sessionId: string;
+  sessionName?: string;
   /**
    * Terminal yang tidak aktif tetap terpasang, hanya disembunyikan — kalau
    * dilepas, channel SSH ikut tertutup dan proses yang sedang berjalan mati.
@@ -28,32 +30,13 @@ interface TerminalViewProps {
   active: boolean;
   onRequestNewTab?: () => void;
   onRequestCloseTab?: () => void;
+  onRequestSplitVertical?: () => void;
+  onRequestSplitHorizontal?: () => void;
+  onRequestCloseSplit?: () => void;
+  isSplit?: boolean;
+  onFocusChange?: (focused: boolean) => void;
   onExit?: () => void;
 }
-
-const THEME = {
-  background: '#020307',
-  foreground: '#d9d1de',
-  cursor: '#ff9700',
-  cursorAccent: '#020307',
-  selectionBackground: '#7b2aa955',
-  black: '#08050b',
-  red: '#ff5a68',
-  green: '#58e879',
-  yellow: '#ffb52e',
-  blue: '#8f83ff',
-  magenta: '#c05cff',
-  cyan: '#6bd8e8',
-  white: '#e9e2ed',
-  brightBlack: '#716878',
-  brightRed: '#ff7b86',
-  brightGreen: '#7cf197',
-  brightYellow: '#ffc85f',
-  brightBlue: '#aaa2ff',
-  brightMagenta: '#d783ff',
-  brightCyan: '#8be7f3',
-  brightWhite: '#ffffff',
-};
 
 /**
  * Deteksi direktori kerja dari prompt Linux umum:
@@ -77,9 +60,15 @@ function detectPromptCwd(buffer: string): string | null {
 
 export function TerminalView({
   sessionId,
+  sessionName,
   active,
   onRequestNewTab,
   onRequestCloseTab,
+  onRequestSplitVertical,
+  onRequestSplitHorizontal,
+  onRequestCloseSplit,
+  isSplit,
+  onFocusChange,
   onExit,
 }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -98,6 +87,11 @@ export function TerminalView({
   // ulang setiap kali induk render.
   const newTabRef = useRef(onRequestNewTab);
   const closeTabRef = useRef(onRequestCloseTab);
+  const splitVerticalRef = useRef(onRequestSplitVertical);
+  const splitHorizontalRef = useRef(onRequestSplitHorizontal);
+  const closeSplitRef = useRef(onRequestCloseSplit);
+  const isSplitRef = useRef(isSplit);
+  const focusChangeRef = useRef(onFocusChange);
   const exitRef = useRef(onExit);
   // Dibaca sekali saat mount (lihat komentar effect utama di bawah) — nilai
   // TERKINI dipakai lewat effect terpisah supaya tidak perlu buka-tutup
@@ -106,6 +100,11 @@ export function TerminalView({
 
   newTabRef.current = onRequestNewTab;
   closeTabRef.current = onRequestCloseTab;
+  splitVerticalRef.current = onRequestSplitVertical;
+  splitHorizontalRef.current = onRequestSplitHorizontal;
+  closeSplitRef.current = onRequestCloseSplit;
+  isSplitRef.current = isSplit;
+  focusChangeRef.current = onFocusChange;
   exitRef.current = onExit;
   prefsRef.current = prefs;
 
@@ -128,12 +127,12 @@ export function TerminalView({
     const term = new Terminal({
       fontFamily: prefsRef.current.fontFamily || defaultFontFamily(),
       fontSize: prefsRef.current.fontSize,
-      lineHeight: 1.25,
+      lineHeight: prefsRef.current.lineHeight || 1.25,
       cursorBlink: prefsRef.current.cursorBlink,
       cursorStyle: prefsRef.current.cursorStyle,
       scrollback: prefsRef.current.scrollback,
       allowProposedApi: true,
-      theme: THEME,
+      theme: resolveTerminalTheme(prefsRef.current.themeId),
     });
 
     const fit = new FitAddon();
@@ -159,7 +158,19 @@ export function TerminalView({
         return false;
       }
       if (key === 'w') {
-        closeTabRef.current?.();
+        if (isSplitRef.current) {
+          closeSplitRef.current?.();
+        } else {
+          closeTabRef.current?.();
+        }
+        return false;
+      }
+      if (key === 'e') {
+        splitVerticalRef.current?.();
+        return false;
+      }
+      if (key === 'o') {
+        splitHorizontalRef.current?.();
         return false;
       }
       // Ctrl+Shift+C (bukan Ctrl+C polos, yang dipakai shell untuk SIGINT).
@@ -217,6 +228,16 @@ export function TerminalView({
 
       opened = true;
       term.open(container);
+
+      const handleFocus = () => {
+        focusChangeRef.current?.(true);
+      };
+      container.addEventListener('focusin', handleFocus);
+      container.addEventListener('mousedown', handleFocus);
+      unsubscribers.push(() => {
+        container.removeEventListener('focusin', handleFocus);
+        container.removeEventListener('mousedown', handleFocus);
+      });
 
       // Tunggu satu frame lagi setelah open agar renderer xterm selesai
       // mengukur font/canvas sebelum FitAddon dipanggil. Shell baru dibuka
@@ -324,9 +345,11 @@ export function TerminalView({
     if (!term) return;
     term.options.fontFamily = prefs.fontFamily || defaultFontFamily();
     term.options.fontSize = prefs.fontSize;
+    term.options.lineHeight = prefs.lineHeight || 1.25;
     term.options.cursorBlink = prefs.cursorBlink;
     term.options.cursorStyle = prefs.cursorStyle;
     term.options.scrollback = prefs.scrollback;
+    term.options.theme = resolveTerminalTheme(prefs.themeId);
     try {
       fitRef.current?.fit();
       if (terminalIdRef.current && fitRef.current) {
@@ -336,6 +359,18 @@ export function TerminalView({
       /* container mungkin belum terlihat; ResizeObserver akan menyusul */
     }
   }, [prefs]);
+
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term || !prefs.copyOnSelect) return;
+    const disposable = term.onSelectionChange(() => {
+      const selection = term.getSelection();
+      if (selection) {
+        void window.ssh.clipboard.writeText(selection).catch(() => undefined);
+      }
+    });
+    return () => disposable.dispose();
+  }, [prefs.copyOnSelect]);
 
   useEffect(() => {
     if (!active) return;
@@ -378,7 +413,7 @@ export function TerminalView({
 
       event.preventDefault();
       event.stopPropagation();
-      if (!event.shiftKey) {
+      if (!event.shiftKey && prefsRef.current.pasteOnRightClick) {
         if (term?.hasSelection()) {
           const selection = term.getSelection();
           if (selection) {
@@ -403,6 +438,21 @@ export function TerminalView({
     return () => container.removeEventListener('contextmenu', handleContextMenu, true);
   }, []);
 
+  useEffect(() => {
+    if (!active) return;
+    const handleTerminalExec = (event: Event) => {
+      const custom = event as CustomEvent<{ text: string; enter?: boolean }>;
+      const text = custom.detail?.text;
+      if (!text || !terminalIdRef.current || !termRef.current) return;
+      const payload = custom.detail.enter !== false ? `${text}\n` : text;
+      window.ssh.shell.write(terminalIdRef.current, payload);
+      termRef.current.focus();
+    };
+
+    window.addEventListener('asproops:terminal-exec', handleTerminalExec);
+    return () => window.removeEventListener('asproops:terminal-exec', handleTerminalExec);
+  }, [active]);
+
   if (error) {
     return (
       <div className="flex h-full items-center justify-center bg-abyss p-8 text-center">
@@ -425,6 +475,20 @@ export function TerminalView({
     termRef.current?.focus();
   };
 
+  const copyAll = () => {
+    const term = termRef.current;
+    if (!term) return;
+    const allText = extractTerminalTranscript(term);
+    if (allText) {
+      void window.ssh.clipboard.writeText(allText).catch(() => undefined);
+      window.dispatchEvent(
+        new CustomEvent('asproops:toast', { detail: t('terminal.allCopied') }),
+      );
+    }
+    setContextMenu(null);
+    term.focus();
+  };
+
   const pasteClipboard = () => {
     setContextMenu(null);
     termRef.current?.focus();
@@ -434,6 +498,34 @@ export function TerminalView({
         if (text && terminalIdRef.current) termRef.current?.paste(text);
       })
       .catch(() => undefined);
+  };
+
+  const exportTranscript = async () => {
+    const term = termRef.current;
+    if (!term) return;
+    const content = extractTerminalTranscript(term);
+    setContextMenu(null);
+    term.focus();
+
+    const filename = formatTranscriptFilename(sessionName || 'ssh-session');
+    try {
+      const res = await window.ssh.terminal.exportTranscript(filename, content);
+      if (res.success && res.filePath) {
+        window.dispatchEvent(
+          new CustomEvent('asproops:toast', {
+            detail: t('terminal.transcriptSaved', { name: res.filePath.split(/[\\/]/).pop() ?? '' }),
+          }),
+        );
+      }
+    } catch (err) {
+      console.error('Failed to export transcript:', err);
+    }
+  };
+
+  const clearTerminal = () => {
+    termRef.current?.clear();
+    setContextMenu(null);
+    termRef.current?.focus();
   };
 
   const closeContextMenu = () => {
@@ -457,7 +549,38 @@ export function TerminalView({
           <ContextMenuItem onClick={copySelection} disabled={!termRef.current?.hasSelection()}>
             {t('menu.copy')}
           </ContextMenuItem>
+          <ContextMenuItem onClick={copyAll}>
+            {t('menu.copyAll')}
+          </ContextMenuItem>
           <ContextMenuItem onClick={pasteClipboard}>{t('menu.paste')}</ContextMenuItem>
+          <div className="my-1 border-t border-line/40" />
+          <ContextMenuItem onClick={() => void exportTranscript()}>
+            {t('menu.exportTranscript')}
+          </ContextMenuItem>
+          <ContextMenuItem onClick={clearTerminal}>
+            {t('menu.clearTerminal')}
+          </ContextMenuItem>
+          <div className="my-1 border-t border-line/40" />
+          <ContextMenuItem onClick={() => { setContextMenu(null); onRequestSplitVertical?.(); }}>
+            <span className="flex items-center justify-between w-full">
+              <span>{t('terminal.splitVertical')}</span>
+              <span className="ml-3 text-[10px] text-faint">Ctrl+Shift+E</span>
+            </span>
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => { setContextMenu(null); onRequestSplitHorizontal?.(); }}>
+            <span className="flex items-center justify-between w-full">
+              <span>{t('terminal.splitHorizontal')}</span>
+              <span className="ml-3 text-[10px] text-faint">Ctrl+Shift+O</span>
+            </span>
+          </ContextMenuItem>
+          {isSplit && (
+            <ContextMenuItem onClick={() => { setContextMenu(null); onRequestCloseSplit?.(); }}>
+              <span className="flex items-center justify-between w-full text-coral">
+                <span>{t('terminal.closeSplit')}</span>
+                <span className="ml-3 text-[10px] text-faint">Ctrl+Shift+W</span>
+              </span>
+            </ContextMenuItem>
+          )}
         </ContextMenu>
       )}
     </>

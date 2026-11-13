@@ -18,6 +18,7 @@ import type {
   LocalTerminalProfile,
 } from '../shared/types';
 import { useI18n } from '../i18n';
+import { useWorkspacePrefs } from '../workspacePrefs';
 import { ProjectContextDialog } from './ProjectContextDialog';
 
 
@@ -60,11 +61,12 @@ function loadSectionLayout(): LocalSectionLayout {
 interface LocalTerminalPanelProps {
   profiles: LocalTerminalProfile[];
   loading: boolean;
-  onOpen: (profile: LocalTerminalProfile) => void;
+  onOpen: (profile: LocalTerminalProfile, elevated?: boolean) => void;
   onOpenProject: (
     project: LocalProjectSummary,
     profile: LocalTerminalProfile,
     cli?: LocalCliProfile,
+    elevated?: boolean,
   ) => void;
   onRefresh: () => void | Promise<void>;
 }
@@ -113,10 +115,16 @@ function basename(path: string): string {
 function resolveProjectShell(
   project: LocalProjectSummary,
   profiles: LocalTerminalProfile[],
+  userDefaultShell?: string,
 ): LocalTerminalProfile | undefined {
   if (project.defaultTerminalProfileId) {
     const preferred = profiles.find((profile) => profile.id === project.defaultTerminalProfileId);
     if (preferred) return preferred;
+  }
+
+  if (userDefaultShell && userDefaultShell !== 'auto') {
+    const userChoice = profiles.find((profile) => profile.id === userDefaultShell);
+    if (userChoice) return userChoice;
   }
 
   return (
@@ -169,6 +177,7 @@ export function LocalTerminalPanel({
   onRefresh,
 }: LocalTerminalPanelProps) {
   const { t, language } = useI18n();
+  const { prefs: workspacePrefs } = useWorkspacePrefs();
   const [projects, setProjects] = useState<LocalProjectSummary[]>([]);
   const [cliProfiles, setCliProfiles] = useState<LocalCliAvailability[]>([]);
   const [projectLoading, setProjectLoading] = useState(true);
@@ -447,12 +456,35 @@ export function LocalTerminalPanel({
   };
 
   const openProject = (project: LocalProjectSummary, cli?: LocalCliProfile) => {
-    const profile = resolveProjectShell(project, profiles);
+    const profile = resolveProjectShell(project, profiles, workspacePrefs.defaultShell);
     if (!profile) {
       setError(t('local.noShellForProject'));
       return;
     }
     onOpenProject(project, profile, cli);
+  };
+
+  const handleOpenElevated = (profile: LocalTerminalProfile) => {
+    if (workspacePrefs.confirmElevatedLaunch) {
+      const confirmed = window.confirm(
+        `Luncurkan "${profile.name}" sebagai Administrator?\n\nSesi ini akan memiliki hak istimewa sistem tinggi (Elevated/UAC).`,
+      );
+      if (!confirmed) return;
+    }
+    onOpen(profile, true);
+  };
+
+  const handleOpenElevatedProject = (
+    project: LocalProjectSummary,
+    profile: LocalTerminalProfile,
+  ) => {
+    if (workspacePrefs.confirmElevatedLaunch) {
+      const confirmed = window.confirm(
+        `Luncurkan project "${project.name}" sebagai Administrator?\n\nSesi ini akan memiliki hak istimewa sistem tinggi (Elevated/UAC).`,
+      );
+      if (!confirmed) return;
+    }
+    onOpenProject(project, profile, undefined, true);
   };
 
   const editCli = (cli: LocalCliProfile) => {
@@ -555,7 +587,12 @@ export function LocalTerminalPanel({
                 event.stopPropagation();
                 setError(null);
                 expandSection('projects');
-                setProjectDraft({ ...EMPTY_PROJECT_DRAFT });
+                setProjectDraft({
+                  ...EMPTY_PROJECT_DRAFT,
+                  path: workspacePrefs.defaultProjectFolder || '',
+                  defaultTerminalProfileId:
+                    workspacePrefs.defaultShell !== 'auto' ? workspacePrefs.defaultShell : '',
+                });
               }}
             >
               + {t('local.addProject')}
@@ -667,7 +704,11 @@ export function LocalTerminalPanel({
                   </div>
                 ) : (
                   visibleProjects.map((project) => {
-                    const profile = resolveProjectShell(project, profiles);
+                    const profile = resolveProjectShell(
+                      project,
+                      profiles,
+                      workspacePrefs.defaultShell,
+                    );
                     const selectedId =
                       cliSelection[project.id] ??
                       project.preferredCliProfileId ??
@@ -755,6 +796,22 @@ export function LocalTerminalPanel({
                               disabled={!project.pathExists}
                             >
                               ↗
+                            </button>
+                            <button
+                              type="button"
+                              className="aspro-local-icon-action uac"
+                              title={
+                                profile
+                                  ? `${t('local.openElevatedProject')} (${profile.name})`
+                                  : t('local.noShellForProject')
+                              }
+                              aria-label={t('local.openElevatedProject')}
+                              onClick={() =>
+                                profile && handleOpenElevatedProject(project, profile)
+                              }
+                              disabled={!project.pathExists || !profile}
+                            >
+                              🛡️
                             </button>
                             <button
                               type="button"
@@ -1036,18 +1093,47 @@ export function LocalTerminalPanel({
               ) : (
                 <div className="aspro-local-list">
                   {profiles.map((profile) => (
-                    <button
-                      key={profile.id}
-                      className="aspro-local-row"
-                      onClick={() => onOpen(profile)}
-                    >
-                      <span className={`aspro-local-icon ${profile.kind}`}>{iconFor(profile)}</span>
-                      <span className="min-w-0 flex-1 text-left">
-                        <strong>{profile.kind === 'wsl' ? `WSL · ${profile.name}` : profile.name}</strong>
-                        <small>{profile.detail}</small>
-                      </span>
-                      <span className="aspro-local-open">＋</span>
-                    </button>
+                    <div key={profile.id} className="aspro-local-row">
+                      <div
+                        className="aspro-local-row-main"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onOpen(profile)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            onOpen(profile);
+                          }
+                        }}
+                        title={`${t('local.terminal')} · ${profile.name}`}
+                      >
+                        <span className={`aspro-local-icon ${profile.kind}`}>{iconFor(profile)}</span>
+                        <span className="min-w-0 flex-1 text-left">
+                          <strong>{profile.kind === 'wsl' ? `WSL · ${profile.name}` : profile.name}</strong>
+                          <small>{profile.detail}</small>
+                        </span>
+                      </div>
+                      <div className="aspro-local-row-actions">
+                        <button
+                          type="button"
+                          className="aspro-local-icon-action uac"
+                          title={`${t('local.openElevated')} (${profile.name})`}
+                          aria-label={`${t('local.openElevated')} (${profile.name})`}
+                          onClick={() => handleOpenElevated(profile)}
+                        >
+                          🛡️
+                        </button>
+                        <button
+                          type="button"
+                          className="aspro-local-icon-action"
+                          title={`${t('local.terminal')} · ${profile.name}`}
+                          aria-label={`${t('local.terminal')} · ${profile.name}`}
+                          onClick={() => onOpen(profile)}
+                        >
+                          ＋
+                        </button>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}

@@ -22,6 +22,14 @@ export interface SessionConfig {
   lastUsedAt?: number;
 }
 
+export interface ServerGroupMetadata {
+  id: string;
+  name?: string;
+  color?: string;
+  icon?: string;
+  order?: number;
+}
+
 /** Password dan passphrase TIDAK PERNAH ikut di SessionConfig. */
 export interface Secret {
   password?: string;
@@ -226,7 +234,18 @@ export interface LocalTerminalOpenOptions {
   cwd?: string;
   projectId?: string;
   cliProfileId?: string;
+  elevated?: boolean;
 }
+
+export interface LocalTerminalElevatedOptions {
+  profileId: string;
+  cwd?: string;
+  projectId?: string;
+}
+
+export type LocalTerminalElevatedResult =
+  | { ok: true }
+  | { ok: false; error: string; canceled?: boolean };
 
 export interface LocalTerminalWorkspace {
   id: string;
@@ -236,6 +255,7 @@ export interface LocalTerminalWorkspace {
   cwd?: string;
   cliProfileId?: string;
   cliName?: string;
+  elevated?: boolean;
   createdAt: number;
 }
 
@@ -489,3 +509,45 @@ export interface DeployHistoryEntry {
   /** id DeployHistoryEntry asal, terisi kalau entri ini adalah hasil rollback. */
   rollbackOfEntryId?: string;
 }
+
+export interface BackupExportResult {
+  success: boolean;
+  canceled?: boolean;
+  filePath?: string;
+  count?: number;
+  error?: string;
+}
+
+export interface BackupImportResult {
+  success: boolean;
+  canceled?: boolean;
+  importedSessions?: number;
+  importedGroups?: number;
+  error?: string;
+}
+
+export interface TerminalExportResult {
+  success: boolean;
+  filePath?: string;
+  error?: string;
+}
+
+export type SnippetPlatform = 'all' | 'linux' | 'windows';
+
+export interface CommandSnippet {
+  id: string;
+  name: string;
+  command: string;
+  category: string;
+  platform?: SnippetPlatform;
+  description?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type CommandSnippetCreateInput = Pick<CommandSnippet, 'name' | 'command' | 'category'> &
+  Partial<Pick<CommandSnippet, 'description' | 'platform'>>;
+
+export type CommandSnippetUpdatePatch = Partial<
+  Pick<CommandSnippet, 'name' | 'command' | 'category' | 'description' | 'platform'>
+>;

@@ -5,6 +5,11 @@ import type { SshPreferences, SftpPreferences } from './store/preferences';
 import type {
   AuthLogOpenResult,
   AuthLogQueryResult,
+  BackupExportResult,
+  BackupImportResult,
+  CommandSnippet,
+  CommandSnippetCreateInput,
+  CommandSnippetUpdatePatch,
   ConnectionStatus,
   ContainerAction,
   CronJob,
@@ -24,6 +29,8 @@ import type {
   LocalProjectProfile,
   LocalProjectSummary,
   LocalProjectUpdatePatch,
+  LocalTerminalElevatedOptions,
+  LocalTerminalElevatedResult,
   LocalTerminalOpenOptions,
   LocalTerminalProfile,
   MonitorSnapshot,
@@ -33,10 +40,12 @@ import type {
   ProvisionRunEvent,
   ProvisionTemplate,
   RemoteFile,
+  ServerGroupMetadata,
   ServiceAction,
   ServiceInfo,
   SessionConfig,
   Secret,
+  TerminalExportResult,
   TransferProgress,
   UpdateCheckResult,
 } from '../src/shared/types';
@@ -139,6 +148,19 @@ const api = {
     remove: (id: string) => ipcRenderer.invoke('sessions:remove', id),
   },
 
+  serverGroups: {
+    list: (): Promise<Record<string, ServerGroupMetadata>> =>
+      ipcRenderer.invoke('serverGroups:list'),
+    save: (id: string, metadata: Partial<ServerGroupMetadata>): Promise<void> =>
+      ipcRenderer.invoke('serverGroups:save', id, metadata),
+    rename: (oldName: string, newName: string): Promise<void> =>
+      ipcRenderer.invoke('serverGroups:rename', oldName, newName),
+    delete: (name: string): Promise<void> =>
+      ipcRenderer.invoke('serverGroups:delete', name),
+    reorder: (order: string[]): Promise<void> =>
+      ipcRenderer.invoke('serverGroups:reorder', order),
+  },
+
   ssh: {
     connect: (sessionId: string): Promise<string> =>
       ipcRenderer.invoke('ssh:connect', sessionId),
@@ -195,6 +217,10 @@ const api = {
     list: (): Promise<LocalTerminalProfile[]> => ipcRenderer.invoke('local:list'),
     open: (options: LocalTerminalOpenOptions): Promise<string> =>
       ipcRenderer.invoke('local:open', options),
+    launchElevated: (
+      options: LocalTerminalElevatedOptions,
+    ): Promise<LocalTerminalElevatedResult> =>
+      ipcRenderer.invoke('local:launchElevated', options),
     write: (terminalId: string, data: string) =>
       ipcRenderer.send('local:write', terminalId, data),
     resize: (terminalId: string, cols: number, rows: number) =>
@@ -244,6 +270,10 @@ const api = {
       ipcRenderer.invoke('sftp:remove', sessionId, path, isDir),
     rename: (sessionId: string, from: string, to: string) =>
       ipcRenderer.invoke('sftp:rename', sessionId, from, to),
+    mkdir: (sessionId: string, path: string): Promise<void> =>
+      ipcRenderer.invoke('sftp:mkdir', sessionId, path),
+    createFile: (sessionId: string, path: string): Promise<void> =>
+      ipcRenderer.invoke('sftp:createFile', sessionId, path),
     onProgress: (handler: (p: TransferProgress) => void) => subscribe('sftp:progress', handler),
   },
 
@@ -382,6 +412,25 @@ const api = {
       ipcRenderer.invoke('provision:run', sessionId, templateId),
     cancel: (runId: string) => ipcRenderer.send('provision:cancel', runId),
     onEvent: (handler: (event: ProvisionRunEvent) => void) => subscribe('provision:event', handler),
+  },
+
+  backup: {
+    export: (): Promise<BackupExportResult> => ipcRenderer.invoke('backup:export'),
+    import: (): Promise<BackupImportResult> => ipcRenderer.invoke('backup:import'),
+  },
+
+  terminal: {
+    exportTranscript: (defaultFilename: string, content: string): Promise<TerminalExportResult> =>
+      ipcRenderer.invoke('terminal:exportTranscript', defaultFilename, content),
+  },
+
+  snippets: {
+    list: (): Promise<CommandSnippet[]> => ipcRenderer.invoke('snippets:list'),
+    create: (input: CommandSnippetCreateInput): Promise<CommandSnippet> =>
+      ipcRenderer.invoke('snippets:create', input),
+    update: (id: string, patch: CommandSnippetUpdatePatch): Promise<CommandSnippet | undefined> =>
+      ipcRenderer.invoke('snippets:update', id, patch),
+    remove: (id: string): Promise<void> => ipcRenderer.invoke('snippets:remove', id),
   },
 };
 

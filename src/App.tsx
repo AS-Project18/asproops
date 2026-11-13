@@ -20,9 +20,11 @@ import { PortForwardPanel } from './components/PortForwardPanel';
 import { GitPanel } from './components/GitPanel';
 import { AuthLogPanel } from './components/AuthLogPanel';
 import { SettingsDialog } from './components/SettingsDialog';
-import { QuickConnectPalette } from './components/QuickConnectPalette';
+import { CommandPalette } from './components/CommandPalette';
+import { QuickSnippetsBar } from './components/QuickSnippetsBar';
 import { Dashboard } from './components/Dashboard';
 import { useI18n } from './i18n';
+import { useWorkspacePrefs } from './workspacePrefs';
 import { useSessions } from './hooks/useSessions';
 import { formatBytes, formatRate } from './lib/format';
 import {
@@ -57,6 +59,7 @@ type LeftMode = WorkspaceLeftMode;
 
 export default function App() {
   const { t } = useI18n();
+  const { prefs: workspacePrefs, setPrefs: setWorkspacePrefs } = useWorkspacePrefs();
   const { sessions, statuses, errors, loading, connect, disconnect, save, remove, refresh } =
     useSessions();
   const { prompt, respond } = useHostKeyPrompts();
@@ -114,12 +117,25 @@ export default function App() {
   const [quickConnectOpen, setQuickConnectOpen] = useState(false);
   /** Cuma dipakai buat tahu apakah tombol "Kunci sekarang" di header perlu ditampilkan. */
   const [appLockEnabled, setAppLockEnabled] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [workspaceRestoreReady, setWorkspaceRestoreReady] = useState(false);
   const workspaceRestoreAttemptedRef = useRef(false);
 
   useEffect(() => {
     void window.ssh.appLock.status().then((status) => setAppLockEnabled(status.enabled));
     return window.ssh.appLock.onChanged((status) => setAppLockEnabled(status.enabled));
+  }, []);
+
+  useEffect(() => {
+    const handleToast = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      if (customEvent.detail) {
+        setToastMessage(customEvent.detail);
+        setTimeout(() => setToastMessage(null), 4000);
+      }
+    };
+    window.addEventListener('asproops:toast', handleToast);
+    return () => window.removeEventListener('asproops:toast', handleToast);
   }, []);
 
   useEffect(() => {
@@ -277,6 +293,17 @@ export default function App() {
     [statuses],
   );
 
+  const activePlatform: 'linux' | 'windows' | 'all' = useMemo(() => {
+    if (activeLocal) {
+      if (activeLocal.profile.kind === 'wsl') return 'linux';
+      return 'windows';
+    }
+    if (activeSession && !showDashboard) {
+      return 'linux';
+    }
+    return 'all';
+  }, [activeLocal, activeSession, showDashboard]);
+
   // Ctrl+K = Quick Connect, dari mana saja. Ctrl+Shift+T (terminal baru)
   // sudah ditangani lokal oleh TerminalView saat xterm sedang fokus — ini
   // cuma fallback untuk saat fokus ada di tempat lain (mis. abis klik
@@ -299,6 +326,24 @@ export default function App() {
         event.preventDefault();
         window.dispatchEvent(
           new CustomEvent('asproops:new-terminal', { detail: { sessionId: activeSession.id } }),
+        );
+      }
+
+      if (event.ctrlKey && event.shiftKey && key === 'e') {
+        if ((event.target as HTMLElement | null)?.closest('.xterm')) return;
+        if (!activeSession) return;
+        event.preventDefault();
+        window.dispatchEvent(
+          new CustomEvent('asproops:split-vertical', { detail: { sessionId: activeSession.id } }),
+        );
+      }
+
+      if (event.ctrlKey && event.shiftKey && key === 'o') {
+        if ((event.target as HTMLElement | null)?.closest('.xterm')) return;
+        if (!activeSession) return;
+        event.preventDefault();
+        window.dispatchEvent(
+          new CustomEvent('asproops:split-horizontal', { detail: { sessionId: activeSession.id } }),
         );
       }
     };
@@ -421,10 +466,11 @@ export default function App() {
     setLeftMode('local');
   };
 
-  const openLocalTerminal = (profile: LocalTerminalProfile) => {
+  const openLocalTerminal = (profile: LocalTerminalProfile, elevated = false) => {
     activateNewLocalWorkspace({
       id: crypto.randomUUID(),
       profile,
+      elevated,
       createdAt: Date.now(),
     });
   };
@@ -433,6 +479,7 @@ export default function App() {
     project: LocalProjectSummary,
     profile: LocalTerminalProfile,
     cli?: LocalCliProfile,
+    elevated = false,
   ) => {
     activateNewLocalWorkspace({
       id: crypto.randomUUID(),
@@ -442,6 +489,7 @@ export default function App() {
       cwd: project.path,
       cliProfileId: cli?.id,
       cliName: cli?.name,
+      elevated,
       createdAt: Date.now(),
     });
   };
@@ -826,7 +874,11 @@ export default function App() {
 
 
   return (
-    <div className="aspro-app h-screen overflow-hidden bg-abyss text-fg">
+    <div
+      className={`aspro-app h-screen overflow-hidden bg-abyss text-fg ${
+        workspacePrefs.uiDensity === 'compact' ? 'aspro-density-compact' : ''
+      }`}
+    >
       <header className="aspro-topbar">
         <div className="aspro-brand">
           <img src={asproIcon} alt="" className="aspro-brand-icon" />
@@ -977,6 +1029,7 @@ export default function App() {
                 onMoveGroup={moveServerToGroup}
                 onCreate={() => setForm({ open: true, editing: null })}
                 onImport={() => setImporting(true)}
+                onRefresh={() => void refresh()}
               />
             </div>
 
@@ -1182,7 +1235,11 @@ export default function App() {
                           : ''
                     }`}
                   />
-                  <span className="truncate">{session.name}</span>
+                  <span className="truncate">
+                    {workspacePrefs.tabTitleFormat === 'name-host'
+                      ? `${session.name} · ${session.host}`
+                      : session.name}
+                  </span>
                   <span className="aspro-workspace-tab-kind">SSH</span>
                   <span
                     role="button"
@@ -1219,19 +1276,31 @@ export default function App() {
                 >
                   <span
                     className={`aspro-workspace-tab-dot ${
-                      workspace.profile.kind === 'wsl' ? 'wsl' : 'local'
+                      workspace.elevated
+                        ? 'elevated'
+                        : workspace.profile.kind === 'wsl'
+                          ? 'wsl'
+                          : 'local'
                     }`}
                   />
                   <span className="truncate">
+                    {workspace.elevated ? '🛡️ ' : ''}
                     {workspace.projectName
                       ? `${workspace.projectName} · ${workspace.cliName ?? 'Terminal'}`
                       : workspace.profile.kind === 'wsl'
                         ? `WSL · ${workspace.profile.name}`
                         : workspace.profile.name}
+                    {workspace.elevated ? ' (Admin)' : ''}
                   </span>
-                  <span className="aspro-workspace-tab-kind">
-                    {workspace.cliName ??
-                      (workspace.profile.kind === 'wsl' ? 'WSL' : 'LOCAL')}
+                  <span
+                    className={`aspro-workspace-tab-kind ${
+                      workspace.elevated ? 'elevated' : ''
+                    }`}
+                  >
+                    {workspace.elevated
+                      ? 'ADMIN'
+                      : (workspace.cliName ??
+                        (workspace.profile.kind === 'wsl' ? 'WSL' : 'LOCAL'))}
                   </span>
                   <span
                     role="button"
@@ -1522,12 +1591,27 @@ export default function App() {
                 </span>
                 <span className="aspro-status-chip connected">{t('workspace.active')}</span>
 
-                <div className="ml-auto">
+                <div className="ml-auto flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setWorkspacePrefs({ showSnippetsBar: !workspacePrefs.showSnippetsBar })
+                    }
+                    className={`aspro-button compact gap-1.5 ${
+                      workspacePrefs.showSnippetsBar
+                        ? 'aspro-button-primary'
+                        : 'aspro-button-secondary'
+                    }`}
+                    title={t('snippets.toggleBarDesc')}
+                  >
+                    <span>⚡</span>
+                    <span>{t('snippets.barTitle')}</span>
+                  </button>
                   <button
                     onClick={() => closeLocalTerminal(activeLocal.id)}
                     className="aspro-button aspro-button-danger"
                   >
-                    Tutup
+                    {t('settings.close')}
                   </button>
                 </div>
               </>
@@ -1573,7 +1657,23 @@ export default function App() {
                           : t('workspace.disconnected')}
                 </span>
 
-                <div className="ml-auto">
+                <div className="ml-auto flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setWorkspacePrefs({ showSnippetsBar: !workspacePrefs.showSnippetsBar })
+                    }
+                    className={`aspro-button compact gap-1.5 ${
+                      workspacePrefs.showSnippetsBar
+                        ? 'aspro-button-primary'
+                        : 'aspro-button-secondary'
+                    }`}
+                    title={t('snippets.toggleBarDesc')}
+                  >
+                    <span>⚡</span>
+                    <span>{t('snippets.barTitle')}</span>
+                  </button>
+
                   {activeStatus === 'connected' || activeStatus === 'reconnecting' ? (
                     <button
                       onClick={() => void disconnect(activeSession.id)}
@@ -1605,7 +1705,11 @@ export default function App() {
                   // aktif (mis. connect selesai saat user lihat tab lain).
                   className={isActive ? 'absolute inset-0' : 'pointer-events-none invisible absolute inset-0'}
                 >
-                  <TerminalTabs sessionId={id} visible={isActive} />
+                  <TerminalTabs
+                    sessionId={id}
+                    sessionName={sessions.find((s) => s.id === id)?.name}
+                    visible={isActive}
+                  />
                 </div>
               );
             })}
@@ -1623,8 +1727,10 @@ export default function App() {
                   workspaceId={workspace.id}
                   profile={workspace.profile}
                   projectId={workspace.projectId}
+                  projectName={workspace.projectName}
                   cwd={workspace.cwd}
                   cliProfileId={workspace.cliProfileId}
+                  elevated={workspace.elevated}
                   active={workspace.id === activeLocalId}
                   onExit={() => closeLocalTerminal(workspace.id)}
                 />
@@ -1709,7 +1815,19 @@ export default function App() {
                 showDashboard ? 'absolute inset-0' : 'pointer-events-none invisible absolute inset-0'
               }
             >
-              <Dashboard sessions={sessions} statuses={statuses} onOpen={handleSelectRemote} />
+              <Dashboard
+                sessions={sessions}
+                statuses={statuses}
+                onOpen={handleSelectRemote}
+                onConnect={handleConnect}
+                onDisconnect={(id) => void disconnect(id)}
+                onSelectMode={(id, mode) => {
+                  handleSelectRemote(id);
+                  selectLeftMode(mode);
+                }}
+                onNewSession={() => setForm({ open: true, editing: null })}
+                onEditSession={(s) => setForm({ open: true, editing: s })}
+              />
             </div>
 
             {showDashboard || activeLog || activeLocal || activeDeploy || activeDockerLog || activeProvision ? null : loading ? (
@@ -1741,7 +1859,29 @@ export default function App() {
             ) : null}
           </div>
 
+          {workspacePrefs.showSnippetsBar && (
+            <QuickSnippetsBar
+              activePlatform={activePlatform}
+              onClose={() => setWorkspacePrefs({ showSnippetsBar: false })}
+            />
+          )}
+
           <div className="aspro-terminal-footer">
+            <button
+              type="button"
+              onClick={() =>
+                setWorkspacePrefs({ showSnippetsBar: !workspacePrefs.showSnippetsBar })
+              }
+              className={`flex items-center gap-1.5 rounded px-2 py-0.5 text-xs transition-colors ${
+                workspacePrefs.showSnippetsBar
+                  ? 'bg-azure text-white font-medium'
+                  : 'text-faint hover:text-fg'
+              }`}
+              title={t('snippets.toggleBarDesc')}
+            >
+              <span>⚡</span>
+              <span>{t('snippets.barTitle')}</span>
+            </button>
             <span className="aspro-footer-active">▣ {t('status.terminal')}</span>
             <span>{t('workspace.newTerminal')}</span>
             <span className="ml-auto">xterm.js · SSH2</span>
@@ -1877,10 +2017,41 @@ export default function App() {
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
 
       {quickConnectOpen && (
-        <QuickConnectPalette
+        <CommandPalette
           sessions={sessions}
           statuses={statuses}
-          onSelect={handleConnect}
+          onSelectSession={handleConnect}
+          onSelectLocalProject={(project) => {
+            const profile =
+              localProfiles.find((p) => p.id === project.defaultTerminalProfileId) || localProfiles[0];
+            if (profile) openLocalProject(project, profile);
+          }}
+          onNewSession={() => setForm({ open: true, editing: null })}
+          onOpenFolderPicker={async () => {
+            const picked = await window.ssh.dialog.pickProjectFolder();
+            if (picked) {
+              const profile = localProfiles[0];
+              if (profile) {
+                activateNewLocalWorkspace({
+                  id: crypto.randomUUID(),
+                  profile,
+                  cwd: picked,
+                  createdAt: Date.now(),
+                });
+              }
+            }
+          }}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onExportBackup={() => setSettingsOpen(true)}
+          onImportBackup={() => setSettingsOpen(true)}
+          onCloseActiveTab={() => {
+            if (activeLocalId) {
+              closeLocalTerminal(activeLocalId);
+            } else if (activeId) {
+              closeRemoteSession(activeId);
+            }
+          }}
+          appLockEnabled={appLockEnabled}
           onClose={() => setQuickConnectOpen(false)}
         />
       )}
@@ -1916,6 +2087,12 @@ export default function App() {
       {importResult && (
         <div role="status" className="aspro-toast">
           {importResult}
+        </div>
+      )}
+
+      {toastMessage && (
+        <div role="status" className="aspro-toast">
+          {toastMessage}
         </div>
       )}
 

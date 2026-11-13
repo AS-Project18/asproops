@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, parse as parsePath } from 'node:path';
 import { app, clipboard, dialog, ipcMain, shell, type BrowserWindow } from 'electron';
 import type { ClientChannel } from 'ssh2';
@@ -36,7 +36,10 @@ import { localCliProfiles } from './store/local-cli-profiles';
 import { portForwardRules } from './store/port-forwards';
 import { deployHistory } from './store/deploy-history';
 import { provisionTemplates } from './store/provision-templates';
+import { snippetStore } from './store/snippets';
 import type {
+  CommandSnippetCreateInput,
+  CommandSnippetUpdatePatch,
   ContainerAction,
   DeployStep,
   DeployTemplate,
@@ -45,12 +48,16 @@ import type {
   LocalCliUpdatePatch,
   LocalProjectCreateInput,
   LocalProjectUpdatePatch,
+  LocalTerminalElevatedOptions,
+  LocalTerminalElevatedResult,
   LocalTerminalOpenOptions,
   ProjectProfile,
   RemoteFile,
+  ServerGroupMetadata,
   ServiceAction,
   SessionConfig,
   Secret,
+  TerminalExportResult,
 } from '../src/shared/types';
 
 /** "foto.jpg" -> "foto (1).jpg" -> "foto (2).jpg" ... sampai ketemu yang belum dipakai. */
@@ -217,6 +224,21 @@ export function registerIpc(window: BrowserWindow): void {
     portForwardRules.removeForSession(id);
     deployHistory.removeForSession(id);
   });
+
+  // --- Server Groups --------------------------------------------------------
+  ipcMain.handle('serverGroups:list', () => store.listGroups());
+  ipcMain.handle('serverGroups:save', (_e, id: string, metadata: Partial<ServerGroupMetadata>) =>
+    store.saveGroup(id, metadata),
+  );
+  ipcMain.handle('serverGroups:rename', (_e, oldName: string, newName: string) =>
+    store.renameGroup(oldName, newName),
+  );
+  ipcMain.handle('serverGroups:delete', (_e, name: string) =>
+    store.deleteGroup(name),
+  );
+  ipcMain.handle('serverGroups:reorder', (_e, order: string[]) =>
+    store.reorderGroups(order),
+  );
 
   // --- Project & deploy template --------------------------------------------
   ipcMain.handle('projects:list', (_e, sessionId: string) => projects.listProjects(sessionId));
@@ -520,6 +542,21 @@ export function registerIpc(window: BrowserWindow): void {
     return localTerminals.open(safeOptions, cliProfile);
   });
 
+  ipcMain.handle(
+    'local:launchElevated',
+    async (_e, options: LocalTerminalElevatedOptions): Promise<LocalTerminalElevatedResult> => {
+      const safeOptions = { ...options };
+
+      if (options.projectId) {
+        const project = localProjects.requireAvailable(options.projectId);
+        safeOptions.cwd = project.path;
+        localProjects.touch(project.id);
+      }
+
+      return localTerminals.launchElevated(safeOptions);
+    },
+  );
+
   ipcMain.on('local:write', (_e, terminalId: string, data: string) => {
     localTerminals.write(terminalId, data);
   });
@@ -673,6 +710,23 @@ export function registerIpc(window: BrowserWindow): void {
     });
   });
 
+  ipcMain.handle('sftp:mkdir', async (_e, sessionId: string, path: string) => {
+    const sftp = await connections.require(sessionId).getSftp();
+    await new Promise<void>((resolve, reject) => {
+      sftp.mkdir(path, (err) => (err ? reject(err) : resolve()));
+    });
+  });
+
+  ipcMain.handle('sftp:createFile', async (_e, sessionId: string, path: string) => {
+    const sftp = await connections.require(sessionId).getSftp();
+    await new Promise<void>((resolve, reject) => {
+      sftp.open(path, 'w', (err, handle) => {
+        if (err) return reject(err);
+        sftp.close(handle, (err2) => (err2 ? reject(err2) : resolve()));
+      });
+    });
+  });
+
   // --- Import ~/.ssh/config ------------------------------------------------
   ipcMain.handle('sshconfig:scan', async () => {
     const parsed = await parseSshConfig();
@@ -770,6 +824,91 @@ export function registerIpc(window: BrowserWindow): void {
         return target;
     }
   });
+
+  // --- Backup & Migrasi ---------------------------------------------------
+  ipcMain.handle('backup:export', async () => {
+    try {
+      const backup = store.exportBackup();
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const result = await dialog.showSaveDialog(window, {
+        title: 'Ekspor Cadangan Sesi & Grup ASProOps',
+        defaultPath: `asproops-backup-${dateStr}.json`,
+        filters: [{ name: 'JSON Backup (*.json)', extensions: ['json'] }],
+      });
+
+      if (result.canceled || !result.filePath) {
+        return { success: false, canceled: true };
+      }
+
+      writeFileSync(result.filePath, JSON.stringify(backup, null, 2), 'utf8');
+      return { success: true, filePath: result.filePath, count: backup.sessions.length };
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  });
+
+  ipcMain.handle('backup:import', async () => {
+    try {
+      const result = await dialog.showOpenDialog(window, {
+        title: 'Pilih Berkas Cadangan ASProOps (*.json)',
+        filters: [{ name: 'JSON Backup (*.json)', extensions: ['json'] }],
+        properties: ['openFile'],
+      });
+
+      if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+        return { success: false, canceled: true };
+      }
+
+      const raw = readFileSync(result.filePaths[0], 'utf8');
+      const parsed = JSON.parse(raw);
+      const res = store.importBackup(parsed);
+      return {
+        success: true,
+        importedSessions: res.importedSessions,
+        importedGroups: res.importedGroups,
+      };
+    } catch (err) {
+      return { success: false, error: (err as Error).message };
+    }
+  });
+
+  ipcMain.handle(
+    'terminal:exportTranscript',
+    async (_event, defaultFilename: string, content: string): Promise<TerminalExportResult> => {
+      try {
+        const result = await dialog.showSaveDialog(window, {
+          title: 'Simpan Transkrip Terminal',
+          defaultPath: defaultFilename,
+          filters: [
+            { name: 'Log File (*.log)', extensions: ['log'] },
+            { name: 'Text File (*.txt)', extensions: ['txt'] },
+            { name: 'All Files (*.*)', extensions: ['*'] },
+          ],
+        });
+
+        if (result.canceled || !result.filePath) {
+          return { success: false };
+        }
+
+        writeFileSync(result.filePath, content, 'utf8');
+        return { success: true, filePath: result.filePath };
+      } catch (err) {
+        return { success: false, error: (err as Error).message };
+      }
+    },
+  );
+
+  // --- Snippet perintah ----------------------------------------------------
+  ipcMain.handle('snippets:list', async () => snippetStore.list());
+  ipcMain.handle('snippets:create', async (_e, input: CommandSnippetCreateInput) =>
+    snippetStore.create(input),
+  );
+  ipcMain.handle(
+    'snippets:update',
+    async (_e, id: string, patch: CommandSnippetUpdatePatch) =>
+      snippetStore.update(id, patch),
+  );
+  ipcMain.handle('snippets:remove', async (_e, id: string) => snippetStore.remove(id));
 
   // --- Edit berkas remote --------------------------------------------------
   ipcMain.handle(

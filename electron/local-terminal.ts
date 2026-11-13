@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { statSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -9,6 +9,8 @@ import type { IPty } from 'node-pty';
 import type {
   LocalCliAvailability,
   LocalCliProfile,
+  LocalTerminalElevatedOptions,
+  LocalTerminalElevatedResult,
   LocalTerminalOpenOptions,
   LocalTerminalProfile,
 } from '../src/shared/types';
@@ -34,6 +36,34 @@ function resolveExecutablePath(name: string): string | undefined {
 
 function executableExists(name: string): boolean {
   return Boolean(resolveExecutablePath(name));
+}
+
+function resolveGsudoPath(): string | undefined {
+  const fromPath = resolveExecutablePath('gsudo.exe') ?? resolveExecutablePath('gsudo');
+  if (fromPath) return fromPath;
+
+  const candidates = [
+    'C:\\Program Files\\gsudo\\Current\\gsudo.exe',
+    'C:\\Program Files\\gsudo\\gsudo.exe',
+    process.env.LOCALAPPDATA
+      ? resolve(process.env.LOCALAPPDATA, 'Programs', 'gsudo', 'Current', 'gsudo.exe')
+      : '',
+    process.env.ProgramFiles
+      ? resolve(process.env.ProgramFiles, 'gsudo', 'Current', 'gsudo.exe')
+      : '',
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      if (statSync(candidate).isFile()) {
+        return candidate;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return undefined;
 }
 
 function stripAnsiForHealth(value: string): string {
@@ -150,65 +180,28 @@ function cliInvocation(profile: LocalCliProfile): string {
   return [profile.command, ...profile.args].join(' ');
 }
 
-const OMP_COMPAT_SSH_CONNECTION = '127.0.0.1 0 127.0.0.1 0';
-
-function isOmpCli(profile: LocalCliProfile): boolean {
-  const command = profile.command.trim().toLowerCase();
-  return command === 'omp' || command === 'omp.exe';
-}
-
-/**
- * OMP 18.4.9+ may enable Windows console win32-input-mode (CSI ? 9001 h)
- * when it sees a native Windows + ConPTY session. ASProOps is actually an
- * xterm.js frontend over ConPTY, so it keeps sending normal VT key sequences;
- * OMP then splits arrows into Escape + literal "[A"/"[B"/etc.
- *
- * OMP deliberately skips that host-local input mode when SSH_* is present.
- * We reproduce the proven workaround only for an OMP registry launch and
- * scope it to the lifetime of that one command. The shell environment is
- * restored after OMP exits.
- */
-function cliStartupCommand(
-  cliProfile: LocalCliProfile,
-  terminalProfile: LocalTerminalProfile,
+function buildElevatedPowerShellScript(
+  profile: LocalTerminalProfile,
+  resolvedExe: string,
+  cwd: string,
 ): string {
-  const invocation = cliInvocation(cliProfile);
+  const escapedCwd = cwd.replace(/'/g, "''");
+  const escapedExe = resolvedExe.replace(/'/g, "''");
 
-  if (
-    process.platform !== 'win32' ||
-    terminalProfile.kind === 'wsl' ||
-    !isOmpCli(cliProfile)
-  ) {
-    return invocation;
+  if (profile.kind === 'powershell') {
+    return `Start-Process -FilePath '${escapedExe}' -ArgumentList @('-NoExit', '-Command', "Set-Location -LiteralPath '${escapedCwd}'") -WorkingDirectory '${escapedCwd}' -Verb RunAs -ErrorAction Stop`;
   }
 
-  if (terminalProfile.kind === 'powershell') {
-    return [
-      '$__asproopsPrevSshConnection=$env:SSH_CONNECTION',
-      `$env:SSH_CONNECTION='${OMP_COMPAT_SSH_CONNECTION}'`,
-      `try { ${invocation} } finally {`,
-      'if ($null -eq $__asproopsPrevSshConnection) {',
-      'Remove-Item Env:SSH_CONNECTION -ErrorAction SilentlyContinue',
-      '} else {',
-      '$env:SSH_CONNECTION=$__asproopsPrevSshConnection',
-      '}',
-      'Remove-Variable __asproopsPrevSshConnection -ErrorAction SilentlyContinue',
-      '}',
-    ].join('; ');
+  if (profile.kind === 'cmd') {
+    return `Start-Process -FilePath '${escapedExe}' -ArgumentList @('/k', 'cd /d "${escapedCwd}"') -WorkingDirectory '${escapedCwd}' -Verb RunAs -ErrorAction Stop`;
   }
 
-  if (terminalProfile.kind === 'cmd') {
-    // SETLOCAL/ENDLOCAL restores an existing SSH_CONNECTION automatically,
-    // including the previously-unset case.
-    return [
-      'setlocal',
-      `set "SSH_CONNECTION=${OMP_COMPAT_SSH_CONNECTION}"`,
-      invocation,
-      'endlocal',
-    ].join(' & ');
+  if (profile.kind === 'wsl') {
+    const wslArgs = profile.args.map((a) => `'${a.replace(/'/g, "''")}'`).join(', ');
+    return `Start-Process -FilePath '${escapedExe}' -ArgumentList @(${wslArgs}) -WorkingDirectory '${escapedCwd}' -Verb RunAs -ErrorAction Stop`;
   }
 
-  return invocation;
+  return `Start-Process -FilePath '${escapedExe}' -WorkingDirectory '${escapedCwd}' -Verb RunAs -ErrorAction Stop`;
 }
 
 export class LocalTerminalManager {
@@ -334,8 +327,33 @@ export class LocalTerminalManager {
     const cols = Math.max(20, Math.floor(Number(options.cols) || 80));
     const rows = Math.max(5, Math.floor(Number(options.rows) || 24));
 
+    let spawnCommand = profile.command;
+    let spawnArgs = profile.args;
+
+    if (options.elevated) {
+      if (process.platform !== 'win32') {
+        throw new Error('Hak Administrator hanya didukung di sistem operasi Windows.');
+      }
+
+      const gsudoPath = resolveGsudoPath();
+      if (gsudoPath) {
+        spawnCommand = gsudoPath;
+        spawnArgs = [profile.command, ...profile.args];
+      } else {
+        const sudoPath = resolveExecutablePath('sudo.exe');
+        if (sudoPath) {
+          spawnCommand = sudoPath;
+          spawnArgs = [profile.command, ...profile.args];
+        } else {
+          throw new Error(
+            'Untuk membuka tab Administrator di dalam workspace, diperlukan utilitas "gsudo". Anda dapat menginstalnya via PowerShell: winget install gerardog.gsudo',
+          );
+        }
+      }
+    }
+
     const terminalId = randomUUID();
-    const terminal = pty.spawn(profile.command, profile.args, {
+    const terminal = pty.spawn(spawnCommand, spawnArgs, {
       name: 'xterm-256color',
       cols,
       rows,
@@ -359,9 +377,7 @@ export class LocalTerminalManager {
 
       // command + args berasal dari registry main-process yang sudah
       // divalidasi, bukan string command yang dikirim renderer saat launch.
-      // OMP mendapat wrapper compatibility terbatas di sini; CLI lain tetap
-      // menerima invocation normal.
-      terminal.write(`${cliStartupCommand(cliProfile, profile)}\r`);
+      terminal.write(`${cliInvocation(cliProfile)}\r`);
     };
 
     if (cliProfile) {
@@ -408,6 +424,81 @@ export class LocalTerminalManager {
     } catch {
       // Sudah keluar.
     }
+  }
+
+  async launchElevated(
+    options: LocalTerminalElevatedOptions,
+  ): Promise<LocalTerminalElevatedResult> {
+    if (process.platform !== 'win32') {
+      return {
+        ok: false,
+        error: 'Elevasi UAC hanya didukung di sistem operasi Windows.',
+      };
+    }
+
+    const profile = this.listProfiles().find((item) => item.id === options.profileId);
+    if (!profile) {
+      return {
+        ok: false,
+        error: `Terminal lokal "${options.profileId}" tidak tersedia.`,
+      };
+    }
+
+    let cwd: string;
+    try {
+      cwd = validatedCwd(options.cwd);
+    } catch (err) {
+      return {
+        ok: false,
+        error: (err as Error).message,
+      };
+    }
+
+    const resolvedExe = resolveExecutablePath(profile.command) ?? profile.command;
+    const innerScript = buildElevatedPowerShellScript(profile, resolvedExe, cwd);
+    // Jalankan dengan script block try/catch. Jika user membatalkan UAC, exit code 1223 (ERROR_CANCELLED).
+    const script = `try { ${innerScript} } catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1223 }`;
+    const encodedCommand = Buffer.from(script, 'utf16le').toString('base64');
+    const powershellExe = resolveExecutablePath('powershell.exe') ?? 'powershell.exe';
+
+    return new Promise((resolveResult) => {
+      const child = spawn(
+        powershellExe,
+        ['-NoProfile', '-NonInteractive', '-EncodedCommand', encodedCommand],
+        {
+          windowsHide: true,
+          stdio: ['ignore', 'ignore', 'pipe'],
+        },
+      );
+
+      let stderr = '';
+      child.stderr?.on('data', (chunk) => {
+        stderr += chunk.toString();
+      });
+
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolveResult({ ok: true });
+        } else {
+          const trimmed = stderr.trim();
+          const isCanceled =
+            code === 1223 ||
+            /canceled|dibatalkan/i.test(trimmed);
+          resolveResult({
+            ok: false,
+            canceled: isCanceled,
+            error: trimmed || (isCanceled ? 'UAC dibatalkan oleh pengguna.' : `Gagal meluncurkan terminal elevated (exit code ${code}).`),
+          });
+        }
+      });
+
+      child.on('error', (err) => {
+        resolveResult({
+          ok: false,
+          error: err.message || 'Gagal mengeksekusi powershell untuk elevasi UAC.',
+        });
+      });
+    });
   }
 
   closeAll(): void {
