@@ -11,6 +11,7 @@ import {
 } from '../terminalPrefs';
 import { useWorkspacePrefs } from '../workspacePrefs';
 import { DeployTemplatesSettings } from './DeployTemplatesSettings';
+import { SshKeyManagerModal } from './SshKeyManagerModal';
 import type { SshPreferences, SftpPreferences, ConflictPolicy } from '../../electron/store/preferences';
 import type { UpdateCheckResult, LocalTerminalProfile } from '../shared/types';
 
@@ -720,6 +721,7 @@ function WorkspaceSettings() {
 function SshSettings() {
   const { t } = useI18n();
   const [prefs, setPrefs] = useState<SshPreferences | null>(null);
+  const [showKeyManager, setShowKeyManager] = useState(false);
 
   useEffect(() => {
     void window.ssh.settings.sshGet().then(setPrefs);
@@ -733,6 +735,20 @@ function SshSettings() {
 
   return (
     <>
+      <div className="aspro-setting-row">
+        <div>
+          <strong>{t('sshKey.title')}</strong>
+          <small>{t('sshKey.subtitle')}</small>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowKeyManager(true)}
+          className="aspro-button aspro-button-secondary compact shrink-0 flex items-center gap-1.5"
+        >
+          <span>🔑</span>
+          <span>{t('sshKey.generate')}</span>
+        </button>
+      </div>
       <div className="aspro-setting-row">
         <div>
           <strong>{t('settings.sshTimeout')}</strong>
@@ -816,6 +832,10 @@ function SshSettings() {
           {t('settings.sshReset')}
         </button>
       </div>
+
+      {showKeyManager && (
+        <SshKeyManagerModal onClose={() => setShowKeyManager(false)} />
+      )}
     </>
   );
 }

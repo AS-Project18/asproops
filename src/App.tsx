@@ -20,6 +20,7 @@ import { PortForwardPanel } from './components/PortForwardPanel';
 import { GitPanel } from './components/GitPanel';
 import { AuthLogPanel } from './components/AuthLogPanel';
 import { SettingsDialog } from './components/SettingsDialog';
+import { SshKeyManagerModal } from './components/SshKeyManagerModal';
 import { CommandPalette } from './components/CommandPalette';
 import { QuickSnippetsBar } from './components/QuickSnippetsBar';
 import { Dashboard } from './components/Dashboard';
@@ -114,6 +115,7 @@ export default function App() {
    */
   const [mountedSessions, setMountedSessions] = useState<string[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sshKeysModalOpen, setSshKeysModalOpen] = useState(false);
   const [quickConnectOpen, setQuickConnectOpen] = useState(false);
   /** Cuma dipakai buat tahu apakah tombol "Kunci sekarang" di header perlu ditampilkan. */
   const [appLockEnabled, setAppLockEnabled] = useState(false);
@@ -135,7 +137,12 @@ export default function App() {
       }
     };
     window.addEventListener('asproops:toast', handleToast);
-    return () => window.removeEventListener('asproops:toast', handleToast);
+    const handleOpenSshKeys = () => setSshKeysModalOpen(true);
+    window.addEventListener('asproops:open-ssh-keys', handleOpenSshKeys);
+    return () => {
+      window.removeEventListener('asproops:toast', handleToast);
+      window.removeEventListener('asproops:open-ssh-keys', handleOpenSshKeys);
+    };
   }, []);
 
   useEffect(() => {
@@ -2015,6 +2022,14 @@ export default function App() {
       </footer>
 
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
+
+      {sshKeysModalOpen && (
+        <SshKeyManagerModal
+          activeSessionId={activeSession?.id}
+          activeSessionHost={activeSession?.host}
+          onClose={() => setSshKeysModalOpen(false)}
+        />
+      )}
 
       {quickConnectOpen && (
         <CommandPalette

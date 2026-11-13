@@ -301,6 +301,19 @@ export function CommandPalette({
     });
 
     list.push({
+      id: 'action-ssh-keys',
+      kind: 'action',
+      title: t('sshKey.title'),
+      subtitle: t('sshKey.subtitle'),
+      badge: t('palette.actions'),
+      icon: '🔑',
+      onSelect: () => {
+        window.dispatchEvent(new CustomEvent('asproops:open-ssh-keys'));
+        onClose();
+      },
+    });
+
+    list.push({
       id: 'action-split-horizontal',
       kind: 'action',
       title: t('terminal.splitHorizontal'),

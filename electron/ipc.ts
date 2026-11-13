@@ -6,7 +6,7 @@ import type { ClientChannel } from 'ssh2';
 
 import { checkForUpdate } from './update-check';
 import { ConnectionManager, type SshConnection } from './ssh/connection-manager';
-import { RemoteMonitor } from './ssh/monitor';
+import { RemoteMonitor, killRemoteProcess } from './ssh/monitor';
 import { listServices, runServiceAction } from './ssh/services';
 import { listContainers, runContainerAction, buildContainerLogsCommand } from './ssh/docker';
 import { listCronJobs, createCronJob, updateCronJob, removeCronJob } from './ssh/cron';
@@ -26,6 +26,11 @@ import { parseSshConfig } from './ssh/ssh-config';
 import { RemoteEditManager } from './ssh/remote-edit';
 import { PortForwardManager } from './ssh/port-forward';
 import { TunnelManager } from './ssh/tunnel-manager';
+import {
+  listLocalSshKeys,
+  generateSshKeyPair,
+  installKeyToRemoteServer,
+} from './ssh/ssh-key-manager';
 import { SessionStore } from './store/sessions';
 import { LocalTerminalManager } from './local-terminal';
 import { buildLocalProjectContext } from './local-project-context';
@@ -59,6 +64,8 @@ import type {
   ServiceAction,
   SessionConfig,
   Secret,
+  SshKeyGenerateInput,
+  SshKeyInfo,
   SshTunnelCreateInput,
   SshTunnelUpdatePatch,
   SshTunnelRuntimeStatus,
@@ -1055,6 +1062,19 @@ export function registerIpc(window: BrowserWindow): void {
   });
 
   ipcMain.handle('monitor:stop', (_e, sessionId: string) => monitor.stop(sessionId));
+  ipcMain.handle(
+    'monitor:killProcess',
+    async (
+      _e,
+      sessionId: string,
+      pid: number,
+      signal: 'TERM' | 'KILL' = 'TERM',
+      sudoPassword?: string,
+    ) => {
+      const connection = connections.require(sessionId);
+      return killRemoteProcess(connection, pid, signal, sudoPassword);
+    },
+  );
 
   // --- Service manager (systemd) ---------------------------------------------
   ipcMain.handle('service:list', (_e, sessionId: string) =>
@@ -1146,6 +1166,25 @@ export function registerIpc(window: BrowserWindow): void {
     await tunnelManager.stop(id);
   });
   ipcMain.handle('tunnel:statuses', () => tunnelManager.getAllStatuses());
+
+  // --- SSH Key Management ----------------------------------------------------
+  ipcMain.handle('sshKey:list', async (): Promise<SshKeyInfo[]> => listLocalSshKeys());
+  ipcMain.handle(
+    'sshKey:generate',
+    async (_e, input: SshKeyGenerateInput): Promise<SshKeyInfo> =>
+      generateSshKeyPair(input),
+  );
+  ipcMain.handle(
+    'sshKey:installToRemote',
+    async (
+      _e,
+      sessionId: string,
+      publicKeyContent: string,
+    ): Promise<{ success: boolean; message?: string }> => {
+      const connection = connections.require(sessionId);
+      return installKeyToRemoteServer(connection, publicKeyContent);
+    },
+  );
 
   // --- Git remote ------------------------------------------------------------
   ipcMain.handle('git:status', (_e, sessionId: string, path: string) =>

@@ -23,7 +23,7 @@ const COLLECT_COMMAND = [
   '__s UPTIME; cat /proc/uptime',
   '__s LOAD; cat /proc/loadavg',
   '__s DISK; df -B1 -P -x tmpfs -x devtmpfs -x squashfs 2>/dev/null',
-  '__s PROC; ps -eo pid,user:20,pcpu,pmem,comm --sort=-pcpu 2>/dev/null | head -n 16',
+  '__s PROC; ps -eo pid,user:20,pcpu,pmem,args --sort=-pcpu 2>/dev/null | head -n 51',
 ].join('; ');
 
 interface CpuTotals {
@@ -224,4 +224,40 @@ export class RemoteMonitor {
     this.timers.delete(sessionId);
     this.previous.delete(sessionId);
   }
+}
+
+export async function killRemoteProcess(
+  connection: SessionChannels,
+  pid: number,
+  signal: 'TERM' | 'KILL' = 'TERM',
+  sudoPassword?: string,
+): Promise<{ success: boolean; message?: string }> {
+  const sigNumber = signal === 'KILL' ? '-9' : '-15';
+
+  if (sudoPassword) {
+    const escapedPw = sudoPassword.replace(/'/g, `'\\''`);
+    const cmd = `printf '%s\\n' '${escapedPw}' | sudo -S -p '' kill ${sigNumber} ${pid}`;
+    const res = await connection.exec(cmd);
+    if (res.code === 0) {
+      return { success: true };
+    }
+    return { success: false, message: res.stderr.trim() || `Exit code ${res.code}` };
+  }
+
+  const cmd = `kill ${sigNumber} ${pid}`;
+  const res = await connection.exec(cmd);
+  if (res.code === 0) {
+    return { success: true };
+  }
+
+  const errLower = res.stderr.toLowerCase();
+  if (
+    errLower.includes('operation not permitted') ||
+    errLower.includes('permission denied') ||
+    res.code === 1
+  ) {
+    return { success: false, message: 'PERMISSION_DENIED' };
+  }
+
+  return { success: false, message: res.stderr.trim() || `Exit code ${res.code}` };
 }

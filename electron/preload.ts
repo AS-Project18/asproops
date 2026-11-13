@@ -45,6 +45,8 @@ import type {
   ServiceInfo,
   SessionConfig,
   Secret,
+  SshKeyGenerateInput,
+  SshKeyInfo,
   SshTunnel,
   SshTunnelCreateInput,
   SshTunnelUpdatePatch,
@@ -332,6 +334,13 @@ const api = {
     start: (sessionId: string, intervalMs?: number) =>
       ipcRenderer.invoke('monitor:start', sessionId, intervalMs),
     stop: (sessionId: string) => ipcRenderer.invoke('monitor:stop', sessionId),
+    killProcess: (
+      sessionId: string,
+      pid: number,
+      signal?: 'TERM' | 'KILL',
+      sudoPassword?: string,
+    ): Promise<{ success: boolean; message?: string }> =>
+      ipcRenderer.invoke('monitor:killProcess', sessionId, pid, signal, sudoPassword),
     onSnapshot: (handler: (p: { sessionId: string; snapshot: MonitorSnapshot }) => void) =>
       subscribe('monitor:snapshot', handler),
     onError: (handler: (p: { sessionId: string; message: string }) => void) =>
@@ -465,6 +474,17 @@ const api = {
       ipcRenderer.invoke('tunnel:statuses'),
     onStatus: (handler: (status: SshTunnelRuntimeStatus) => void) =>
       subscribe('tunnel:status', handler),
+  },
+
+  sshKey: {
+    list: (): Promise<SshKeyInfo[]> => ipcRenderer.invoke('sshKey:list'),
+    generate: (input: SshKeyGenerateInput): Promise<SshKeyInfo> =>
+      ipcRenderer.invoke('sshKey:generate', input),
+    installToRemote: (
+      sessionId: string,
+      publicKeyContent: string,
+    ): Promise<{ success: boolean; message?: string }> =>
+      ipcRenderer.invoke('sshKey:installToRemote', sessionId, publicKeyContent),
   },
 };
 

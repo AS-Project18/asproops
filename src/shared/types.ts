@@ -596,3 +596,23 @@ export interface SshTunnelRuntimeStatus {
   connectionsCount: number;
   bytesTransferred: number;
 }
+
+export type SshKeyAlgorithm = 'ed25519' | 'rsa';
+
+export interface SshKeyInfo {
+  name: string;
+  privateKeyPath: string;
+  publicKeyPath?: string;
+  publicKeyContent?: string;
+  type: string;
+  fingerprint?: string;
+  comment?: string;
+  createdAt?: number;
+}
+
+export interface SshKeyGenerateInput {
+  name: string;
+  algorithm: SshKeyAlgorithm;
+  passphrase?: string;
+  comment?: string;
+}

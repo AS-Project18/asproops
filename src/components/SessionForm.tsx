@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import type { AuthMethod, SessionConfig, Secret } from '../shared/types';
+import { SshKeyManagerModal } from './SshKeyManagerModal';
 
 /**
  * Form tambah/ubah server.
@@ -40,6 +41,7 @@ export function SessionForm({ existing, candidates, onSave, onCancel }: SessionF
   const [username, setUsername] = useState(existing?.username ?? '');
   const [authMethod, setAuthMethod] = useState<AuthMethod>(existing?.authMethod ?? 'privateKey');
   const [privateKeyPath, setPrivateKeyPath] = useState(existing?.privateKeyPath ?? '');
+  const [showKeyManager, setShowKeyManager] = useState(false);
   const [password, setPassword] = useState('');
   const [passphrase, setPassphrase] = useState('');
   const [group, setGroup] = useState(existing?.group ?? '');
@@ -143,12 +145,25 @@ export function SessionForm({ existing, candidates, onSave, onCancel }: SessionF
           {authMethod === 'privateKey' && (
             <>
               <Field label="Path private key">
-                <Input
-                  value={privateKeyPath}
-                  onChange={setPrivateKeyPath}
-                  placeholder="C:\Users\nama\.ssh\id_ed25519"
-                  mono
-                />
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Input
+                      value={privateKeyPath}
+                      onChange={setPrivateKeyPath}
+                      placeholder="C:\Users\nama\.ssh\id_ed25519"
+                      mono
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowKeyManager(true)}
+                    className="flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-raised px-3 py-1.5 text-xs font-semibold text-fg hover:border-azure hover:text-azure transition"
+                    title="Pilih kunci dari ~/.ssh atau buat kunci baru"
+                  >
+                    <span>🔑</span>
+                    <span>Pilih Kunci…</span>
+                  </button>
+                </div>
               </Field>
               <Field label={existing ? 'Passphrase baru (kosongkan jika tetap)' : 'Passphrase'}>
                 <Input value={passphrase} onChange={setPassphrase} type="password" />
@@ -255,6 +270,13 @@ export function SessionForm({ existing, candidates, onSave, onCancel }: SessionF
           </button>
         </div>
       </div>
+
+      {showKeyManager && (
+        <SshKeyManagerModal
+          onSelectKey={(selectedPath) => setPrivateKeyPath(selectedPath)}
+          onClose={() => setShowKeyManager(false)}
+        />
+      )}
     </div>
   );
 }
