@@ -2911,3 +2911,90 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* --- VS Code Dark+ Syntax Theme for SftpQuickEditorModal --- */
+.aspro-editor-pre,
+.aspro-editor-pre code,
+.aspro-code-textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+  font-size: 12px !important;
+  line-height: 20px !important;
+  tab-size: 2 !important;
+  letter-spacing: 0 !important;
+}
+
+.aspro-editor-pre {
+  color: #d4d4d4;
+  background-color: transparent;
+}
+
+.aspro-editor-pre .token.comment,
+.aspro-editor-pre .token.prolog,
+.aspro-editor-pre .token.doctype,
+.aspro-editor-pre .token.cdata {
+  color: #6a9955 !important;
+  font-style: italic;
+}
+
+.aspro-editor-pre .token.punctuation {
+  color: #d4d4d4;
+}
+
+.aspro-editor-pre .token.keyword,
+.aspro-editor-pre .token.tag,
+.aspro-editor-pre .token.delimiter {
+  color: #569cd6 !important;
+}
+
+.aspro-editor-pre .token.type-declaration,
+.aspro-editor-pre .token.class-name,
+.aspro-editor-pre .token.class-name-definition {
+  color: #4ec9b0 !important;
+}
+
+.aspro-editor-pre .token.boolean,
+.aspro-editor-pre .token.number {
+  color: #b5cea8 !important;
+}
+
+.aspro-editor-pre .token.constant {
+  color: #4fc1ff !important;
+}
+
+.aspro-editor-pre .token.string,
+.aspro-editor-pre .token.char,
+.aspro-editor-pre .token.attr-value {
+  color: #ce9178 !important;
+}
+
+.aspro-editor-pre .token.function {
+  color: #dcdcaa !important;
+}
+
+.aspro-editor-pre .token.property,
+.aspro-editor-pre .token.variable,
+.aspro-editor-pre .token.attr-name {
+  color: #9cdcfe !important;
+}
+
+.aspro-editor-pre .token.operator {
+  color: #d4d4d4;
+}
+
+.aspro-editor-pre .token.regex,
+.aspro-editor-pre .token.important {
+  color: #d16969 !important;
+}
+
+.aspro-code-textarea {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  caret-color: #58e879 !important;
+}
+
+.aspro-code-textarea::selection {
+  background: rgba(38, 79, 120, 0.7);
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+}
+

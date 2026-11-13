@@ -486,6 +486,15 @@ const api = {
     ): Promise<{ success: boolean; message?: string }> =>
       ipcRenderer.invoke('sshKey:installToRemote', sessionId, publicKeyContent),
   },
+
+  code: {
+    format: (
+      content: string,
+      filename: string,
+      languageId?: string,
+    ): Promise<{ formatted: string; error?: string }> =>
+      ipcRenderer.invoke('code:format', content, filename, languageId),
+  },
 };
 
 contextBridge.exposeInMainWorld('ssh', api);

@@ -27,6 +27,7 @@
     "dist:win": "npm run build && electron-builder --win --publish=never"
   },
   "dependencies": {
+    "@prettier/plugin-php": "^0.26.0",
     "@tailwindcss/vite": "^4.0.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-search": "^0.15.0",
@@ -34,6 +35,8 @@
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/xterm": "^5.5.0",
     "node-pty": "1.1.0",
+    "prettier": "^3.10.1",
+    "prismjs": "^1.30.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "ssh2": "^1.16.0",
@@ -43,6 +46,7 @@
   "devDependencies": {
     "@electron/rebuild": "^4.2.0",
     "@types/node": "^24.0.0",
+    "@types/prismjs": "^1.26.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/ssh2": "^1.15.5",

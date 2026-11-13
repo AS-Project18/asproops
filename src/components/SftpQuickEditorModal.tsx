@@ -2,6 +2,11 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import type { RemoteFile } from '../shared/types';
 import { formatBytes } from '../lib/format';
 import type { useI18n } from '../i18n';
+import {
+  detectLanguageFromFilename,
+  highlightCode,
+  SUPPORTED_LANGUAGES,
+} from '../lib/syntaxHighlight';
 
 type TFunc = ReturnType<typeof useI18n>['t'];
 
@@ -24,9 +29,14 @@ export function SftpQuickEditorModal({
   const [originalContent, setOriginalContent] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [formatting, setFormatting] = useState(false);
+  const [formatToast, setFormatToast] = useState<{ message: string; isError: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
+
+  // Language state
+  const [language, setLanguage] = useState(() => detectLanguageFromFilename(file.name));
 
   // Cursor & Line tracking
   const [cursorPos, setCursorPos] = useState({ line: 1, col: 1 });
@@ -36,9 +46,15 @@ export function SftpQuickEditorModal({
   const [findQuery, setFindQuery] = useState('');
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const highlightRef = useRef<HTMLPreElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
 
   const isDirty = useMemo(() => content !== originalContent, [content, originalContent]);
+
+  // Highlighted code output with Prism
+  const highlightedHtml = useMemo(() => {
+    return highlightCode(content, language);
+  }, [content, language]);
 
   // Load file content
   useEffect(() => {
@@ -64,6 +80,28 @@ export function SftpQuickEditorModal({
       cancelled = true;
     };
   }, [sessionId, file.path]);
+
+  // Format code handler (Prettier)
+  const handleFormatCode = async () => {
+    if (formatting || isReadOnly || !content) return;
+    setFormatting(true);
+    try {
+      const res = await window.ssh.code.format(content, file.name, language);
+      if (res.error) {
+        setFormatToast({ message: res.error, isError: true });
+      } else if (res.formatted !== content) {
+        setContent(res.formatted);
+        setFormatToast({ message: '✨ Kode berhasil diformat', isError: false });
+      } else {
+        setFormatToast({ message: 'Kode sudah rapi (tidak ada perubahan)', isError: false });
+      }
+    } catch (err) {
+      setFormatToast({ message: (err as Error).message, isError: true });
+    } finally {
+      setFormatting(false);
+      setTimeout(() => setFormatToast(null), 3500);
+    }
+  };
 
   // Save handler
   const handleSave = async () => {
@@ -93,7 +131,7 @@ export function SftpQuickEditorModal({
     onClose();
   };
 
-  // Keyboard shortcuts (Ctrl+S, Ctrl+F, Escape)
+  // Keyboard shortcuts (Ctrl+S, Ctrl+F, Shift+Alt+F, Escape)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
@@ -104,6 +142,16 @@ export function SftpQuickEditorModal({
     if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
       e.preventDefault();
       setShowFind(true);
+      return;
+    }
+
+    // Format document shortcut (Shift+Alt+F or Ctrl+Shift+I)
+    if (
+      (e.shiftKey && e.altKey && (e.key === 'f' || e.key === 'F')) ||
+      (e.ctrlKey && e.shiftKey && (e.key === 'i' || e.key === 'I'))
+    ) {
+      e.preventDefault();
+      void handleFormatCode();
       return;
     }
 
@@ -147,10 +195,18 @@ export function SftpQuickEditorModal({
     setCursorPos({ line: currentLine, col: currentCol });
   };
 
-  // Scroll sync between gutter and textarea
+  // Scroll sync between gutter, highlight pre, and textarea
   const handleScroll = () => {
-    if (textareaRef.current && gutterRef.current) {
-      gutterRef.current.scrollTop = textareaRef.current.scrollTop;
+    if (!textareaRef.current) return;
+    const top = textareaRef.current.scrollTop;
+    const left = textareaRef.current.scrollLeft;
+
+    if (gutterRef.current) {
+      gutterRef.current.scrollTop = top;
+    }
+    if (highlightRef.current) {
+      highlightRef.current.scrollTop = top;
+      highlightRef.current.scrollLeft = left;
     }
   };
 
@@ -206,6 +262,19 @@ export function SftpQuickEditorModal({
               </span>
             )}
 
+            {formatToast && (
+              <span
+                className={`text-xs font-mono animate-fadeIn ${
+                  formatToast.isError ? 'text-coral' : 'text-mint'
+                }`}
+                title={formatToast.message}
+              >
+                {formatToast.message.length > 35
+                  ? `${formatToast.message.slice(0, 35)}…`
+                  : formatToast.message}
+              </span>
+            )}
+
             <button
               type="button"
               onClick={() => setIsReadOnly((v) => !v)}
@@ -221,10 +290,35 @@ export function SftpQuickEditorModal({
 
             <button
               type="button"
+              onClick={() => setShowFind((v) => !v)}
+              className={`rounded px-2.5 py-1 text-xs font-mono transition-colors border ${
+                showFind
+                  ? 'border-azure/50 bg-azure/10 text-azure'
+                  : 'border-line bg-active/40 text-dim hover:text-fg hover:bg-hover'
+              }`}
+              title="Cari Teks (Ctrl+F)"
+            >
+              🔍 Cari
+            </button>
+
+            {/* Autoformat Button */}
+            <button
+              type="button"
+              disabled={isReadOnly || formatting}
+              onClick={() => void handleFormatCode()}
+              className="flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-mono transition-colors border border-line bg-active/40 text-dim hover:text-fg hover:bg-hover disabled:opacity-40"
+              title="Rapikan Kode (Shift+Alt+F)"
+            >
+              <span>✨</span>
+              <span>{formatting ? 'Memformat…' : 'Format'}</span>
+            </button>
+
+            <button
+              type="button"
               disabled={isReadOnly || saving || !isDirty}
               onClick={() => void handleSave()}
-              className="flex items-center gap-1.5 rounded bg-azure px-3 py-1 text-xs font-medium text-abyss hover:bg-azure-bright disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm"
-              title={t('sftp.editorSaveBtn')}
+              className="flex items-center gap-1.5 rounded bg-azure px-3 py-1 text-xs font-semibold text-white hover:bg-azure-hover disabled:opacity-40 transition-colors shadow-sm"
+              title="Simpan Perubahan (Ctrl+S)"
             >
               <span>💾</span>
               <span>{saving ? t('sftp.editorSaving') : t('sftp.editorSaveBtn')}</span>
@@ -292,7 +386,7 @@ export function SftpQuickEditorModal({
               {/* Line Numbers Gutter */}
               <div
                 ref={gutterRef}
-                className="select-none overflow-hidden border-r border-line/60 bg-panel/40 px-3 py-2 text-right font-mono text-[11px] text-faint/40"
+                className="select-none overflow-hidden border-r border-line/60 bg-panel/40 px-3 py-2 text-right font-mono text-[11px] text-faint/40 shrink-0"
                 style={{ width: `${Math.max(42, String(lineCount).length * 10 + 20)}px` }}
               >
                 {Array.from({ length: lineCount }).map((_, idx) => (
@@ -302,24 +396,46 @@ export function SftpQuickEditorModal({
                 ))}
               </div>
 
-              {/* Textarea Code Editor */}
-              <textarea
-                ref={textareaRef}
-                readOnly={isReadOnly}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onKeyUp={updateCursorPosition}
-                onClick={updateCursorPosition}
-                onSelect={updateCursorPosition}
-                onScroll={handleScroll}
-                spellCheck={false}
-                autoCapitalize="off"
-                autoComplete="off"
-                autoCorrect="off"
-                className="h-full flex-1 resize-none border-0 bg-transparent p-2 font-mono text-[12px] leading-5 text-fg outline-none whitespace-pre overflow-auto"
-                style={{ tabSize: 2 }}
-              />
+              {/* Code Area: Syntax Highlighted Layer + Transparent Overlay Textarea */}
+              <div className="relative flex-1 h-full min-w-0 overflow-hidden bg-abyss">
+                {/* Syntax Highlighted View Layer (VS Code Dark+ tokens) */}
+                <pre
+                  ref={highlightRef}
+                  aria-hidden="true"
+                  className="aspro-editor-pre pointer-events-none absolute inset-0 m-0 p-2 font-mono text-[12px] leading-5 whitespace-pre overflow-hidden"
+                  style={{ tabSize: 2 }}
+                >
+                  <code
+                    className={`language-${language}`}
+                    dangerouslySetInnerHTML={{
+                      __html: content.endsWith('\n') ? `${highlightedHtml}\n` : highlightedHtml,
+                    }}
+                  />
+                </pre>
+
+                {/* Editable Textarea Layer */}
+                <textarea
+                  ref={textareaRef}
+                  readOnly={isReadOnly}
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  onKeyUp={updateCursorPosition}
+                  onClick={updateCursorPosition}
+                  onSelect={updateCursorPosition}
+                  onScroll={handleScroll}
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  className="aspro-code-textarea absolute inset-0 h-full w-full resize-none border-0 bg-transparent p-2 font-mono text-[12px] leading-5 outline-none whitespace-pre overflow-auto"
+                  style={{
+                    tabSize: 2,
+                    color: 'transparent',
+                    caretColor: '#58e879',
+                  }}
+                />
+              </div>
             </div>
           )}
         </div>
@@ -333,10 +449,25 @@ export function SftpQuickEditorModal({
             <span>{lineCount} lines</span>
             <span>{content.length} chars</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {/* Language Selector Dropdown */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-dim">Language:</span>
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                className="bg-raised border border-line rounded px-1.5 py-0.5 text-[11px] text-fg focus:outline-none focus:border-azure cursor-pointer"
+              >
+                {SUPPORTED_LANGUAGES.map((lang) => (
+                  <option key={lang.id} value={lang.id}>
+                    {lang.name}
+                  </option>
+                ))}
+              </select>
+            </div>
             <span>UTF-8</span>
             <span>LF</span>
-            <span className="text-muted/60">Ctrl+S untuk Simpan</span>
+            <span className="text-muted/60 hidden sm:inline">Shift+Alt+F: Format | Ctrl+S: Simpan</span>
           </div>
         </div>
       </div>

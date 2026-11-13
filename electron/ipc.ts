@@ -31,6 +31,7 @@ import {
   generateSshKeyPair,
   installKeyToRemoteServer,
 } from './ssh/ssh-key-manager';
+import { formatCode } from './code-formatter';
 import { SessionStore } from './store/sessions';
 import { LocalTerminalManager } from './local-terminal';
 import { buildLocalProjectContext } from './local-project-context';
@@ -1184,6 +1185,13 @@ export function registerIpc(window: BrowserWindow): void {
       const connection = connections.require(sessionId);
       return installKeyToRemoteServer(connection, publicKeyContent);
     },
+  );
+
+  // --- Code Autoformatter ----------------------------------------------------
+  ipcMain.handle(
+    'code:format',
+    async (_e, content: string, filename: string, languageId?: string) =>
+      formatCode(content, filename, languageId),
   );
 
   // --- Git remote ------------------------------------------------------------
