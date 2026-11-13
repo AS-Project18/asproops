@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TerminalView } from './TerminalView';
+import { TunnelManagerModal } from './TunnelManagerModal';
 import { useI18n } from '../i18n';
 
 /**
@@ -309,6 +310,37 @@ export function TerminalTabs({ sessionId, sessionName, visible }: TerminalTabsPr
   ]);
   const [activeId, setActiveId] = useState(1);
   const [nextId, setNextId] = useState(2);
+  const [showTunnelModal, setShowTunnelModal] = useState(false);
+  const [activeTunnelsCount, setActiveTunnelsCount] = useState(0);
+
+  const refreshTunnelCount = useCallback(async () => {
+    try {
+      const [tunnels, statMap] = await Promise.all([
+        window.ssh.tunnel.list(sessionId),
+        window.ssh.tunnel.statuses(),
+      ]);
+      const sessionTunnelIds = new Set(tunnels.map((t) => t.id));
+      const activeCount = Object.values(statMap).filter(
+        (s) => sessionTunnelIds.has(s.id) && s.state === 'active',
+      ).length;
+      setActiveTunnelsCount(activeCount);
+    } catch {
+      // ignore
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    void refreshTunnelCount();
+    const unsub = window.ssh.tunnel.onStatus(() => {
+      void refreshTunnelCount();
+    });
+    const handleOpenTunnels = () => setShowTunnelModal(true);
+    window.addEventListener('asproops:open-tunnels', handleOpenTunnels);
+    return () => {
+      unsub();
+      window.removeEventListener('asproops:open-tunnels', handleOpenTunnels);
+    };
+  }, [sessionId, refreshTunnelCount]);
 
   const addTab = useCallback(() => {
     setTabs((prev) => [
@@ -529,8 +561,29 @@ export function TerminalTabs({ sessionId, sessionName, visible }: TerminalTabsPr
           </button>
         </div>
 
-        {/* Split Controls di sisi kanan tab bar */}
+        {/* Split Controls & Tunnels di sisi kanan tab bar */}
         <div className="flex items-center gap-1 shrink-0 ml-2">
+          {/* SSH Tunnel Manager Button */}
+          <button
+            onClick={() => setShowTunnelModal(true)}
+            title={t('tunnel.title')}
+            className={`flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors ${
+              activeTunnelsCount > 0
+                ? 'border border-emerald-500/40 bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25'
+                : 'text-dim hover:bg-line hover:text-fg'
+            }`}
+          >
+            <span className="font-bold text-[13px]">⇄</span>
+            <span className="hidden sm:inline font-medium">{t('tunnel.toolbarButton')}</span>
+            {activeTunnelsCount > 0 && (
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-abyss">
+                {activeTunnelsCount}
+              </span>
+            )}
+          </button>
+
+          <div className="h-3.5 w-px bg-line/60 mx-0.5" />
+
           {!isCurrentSplit ? (
             <>
               <button
@@ -628,6 +681,14 @@ export function TerminalTabs({ sessionId, sessionName, visible }: TerminalTabsPr
             + Terminal baru
           </button>
         </div>
+      )}
+
+      {showTunnelModal && (
+        <TunnelManagerModal
+          sessionId={sessionId}
+          sessionHost={sessionName}
+          onClose={() => setShowTunnelModal(false)}
+        />
       )}
     </div>
   );

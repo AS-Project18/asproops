@@ -551,3 +551,48 @@ export type CommandSnippetCreateInput = Pick<CommandSnippet, 'name' | 'command' 
 export type CommandSnippetUpdatePatch = Partial<
   Pick<CommandSnippet, 'name' | 'command' | 'category' | 'description' | 'platform'>
 >;
+
+export type TunnelType = 'local' | 'remote' | 'dynamic';
+
+export interface SshTunnel {
+  id: string;
+  sessionId: string;
+  name: string;
+  type: TunnelType;
+  localHost: string;
+  localPort: number;
+  remoteHost: string;
+  remotePort: number;
+  autoStart: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface SshTunnelCreateInput {
+  sessionId: string;
+  name: string;
+  type: TunnelType;
+  localHost?: string;
+  localPort: number;
+  remoteHost?: string;
+  remotePort?: number;
+  autoStart?: boolean;
+}
+
+export interface SshTunnelUpdatePatch {
+  name?: string;
+  type?: TunnelType;
+  localHost?: string;
+  localPort?: number;
+  remoteHost?: string;
+  remotePort?: number;
+  autoStart?: boolean;
+}
+
+export interface SshTunnelRuntimeStatus {
+  id: string;
+  state: 'active' | 'inactive' | 'error';
+  error?: string;
+  connectionsCount: number;
+  bytesTransferred: number;
+}

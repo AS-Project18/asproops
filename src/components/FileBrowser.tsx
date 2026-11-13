@@ -10,6 +10,20 @@ import type { EditStatus } from '../../electron/ssh/remote-edit';
 import { useVirtualRows } from '../hooks/useVirtualRows';
 import { useI18n } from '../i18n';
 import { formatBytes, formatDate } from '../lib/format';
+import { SftpQuickEditorModal } from './SftpQuickEditorModal';
+import { SftpChmodModal } from './SftpChmodModal';
+
+function isArchiveFile(file: RemoteFile): boolean {
+  if (file.isDirectory) return false;
+  const lower = file.name.toLowerCase();
+  return (
+    lower.endsWith('.zip') ||
+    lower.endsWith('.tar.gz') ||
+    lower.endsWith('.tgz') ||
+    lower.endsWith('.tar.bz2') ||
+    lower.endsWith('.tar')
+  );
+}
 
 /**
  * Browser berkas SFTP.
@@ -189,6 +203,8 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
   const [pendingDelete, setPendingDelete] = useState<RemoteFile[] | null>(null);
   const [renaming, setRenaming] = useState<{ file: RemoteFile; value: string } | null>(null);
   const [infoFile, setInfoFile] = useState<RemoteFile | null>(null);
+  const [quickEditorFile, setQuickEditorFile] = useState<RemoteFile | null>(null);
+  const [chmodFile, setChmodFile] = useState<RemoteFile | null>(null);
 
   const [columns, setColumns] = useState<ColumnState[]>(loadColumns);
   const [draggingCol, setDraggingCol] = useState<ColumnId | null>(null);
@@ -592,6 +608,36 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
     });
   };
 
+  const handleArchive = async (
+    action: 'extract' | 'compress',
+    file: RemoteFile,
+    format?: 'zip' | 'tar.gz',
+  ) => {
+    window.dispatchEvent(
+      new CustomEvent('asproops:toast', {
+        detail:
+          action === 'extract'
+            ? t('sftp.extracting', { name: file.name })
+            : t('sftp.compressing', { name: file.name }),
+      }),
+    );
+
+    try {
+      await window.ssh.sftp.archive(sessionId, action, file.path, undefined, format);
+      window.dispatchEvent(
+        new CustomEvent('asproops:toast', {
+          detail:
+            action === 'extract'
+              ? t('sftp.extractSuccess', { name: file.name })
+              : t('sftp.compressSuccess', { name: file.name }),
+        }),
+      );
+      await load(path);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   const toggleFileSelection = (filePath: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -943,6 +989,12 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
             </span>
           )}
           <ActionButton
+            icon="quickEdit"
+            label={t('sftp.actionQuickEdit')}
+            disabled={!(selectedFiles.length === 1 && !selectedFiles[0].isDirectory)}
+            onClick={() => setQuickEditorFile(selectedFiles[0])}
+          />
+          <ActionButton
             icon="edit"
             label={t('sftp.actionEdit')}
             disabled={!(selectedFiles.length === 1 && !selectedFiles[0].isDirectory)}
@@ -959,6 +1011,12 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
             label={t('sftp.actionRename')}
             disabled={selectedFiles.length !== 1}
             onClick={() => setRenaming({ file: selectedFiles[0], value: selectedFiles[0].name })}
+          />
+          <ActionButton
+            icon="chmod"
+            label={t('sftp.actionChmod')}
+            disabled={selectedFiles.length !== 1}
+            onClick={() => setChmodFile(selectedFiles[0])}
           />
           <ActionButton
             icon="info"
@@ -1130,7 +1188,13 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
                                 />
                               ) : (
                                 <button
-                                  onDoubleClick={() => file.isDirectory && void load(file.path)}
+                                  onDoubleClick={() => {
+                                    if (file.isDirectory) {
+                                      void load(file.path);
+                                    } else {
+                                      setQuickEditorFile(file);
+                                    }
+                                  }}
                                   className="flex w-full items-center gap-2 truncate text-left font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-azure"
                                 >
                                   <FileTypeIcon file={file} />
@@ -1349,13 +1413,36 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
         />
       )}
 
+      {quickEditorFile && (
+        <SftpQuickEditorModal
+          sessionId={sessionId}
+          file={quickEditorFile}
+          onClose={() => setQuickEditorFile(null)}
+          onSaved={() => void load(path)}
+          t={t}
+        />
+      )}
+
+      {chmodFile && (
+        <SftpChmodModal
+          sessionId={sessionId}
+          file={chmodFile}
+          onClose={() => setChmodFile(null)}
+          onSaved={() => void load(path)}
+          t={t}
+        />
+      )}
+
       {contextMenu && (
         <FileContextMenu
           state={contextMenu}
           onClose={() => setContextMenu(null)}
-          onDownload={(file) => void handleDownload(file)}
+          onQuickEdit={(file) => setQuickEditorFile(file)}
           onEdit={(file) => void handleEdit(file)}
+          onDownload={(file) => void handleDownload(file)}
           onRename={(file) => setRenaming({ file, value: file.name })}
+          onChmod={(file) => setChmodFile(file)}
+          onArchive={(action, file, format) => void handleArchive(action, file, format)}
           onDelete={(files) => setPendingDelete(files)}
           onInfo={(file) => setInfoFile(file)}
           onNewFolder={() => handleOpenCreateModal('folder')}
@@ -2071,10 +2158,34 @@ function BookmarkMenu({
   );
 }
 
-type ActionIconKind = 'edit' | 'download' | 'rename' | 'info' | 'delete' | 'newFolder' | 'newFile';
+type ActionIconKind =
+  | 'edit'
+  | 'download'
+  | 'rename'
+  | 'info'
+  | 'delete'
+  | 'newFolder'
+  | 'newFile'
+  | 'quickEdit'
+  | 'chmod';
 
 function ActionIcon({ kind }: { kind: ActionIconKind }) {
   switch (kind) {
+    case 'quickEdit':
+      return (
+        <svg viewBox="0 0 18 18" aria-hidden className="aspro-action-icon text-azure">
+          <path d="M2.5 3.5h13a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z" />
+          <path d="M6 7.5l-2 1.5 2 1.5m6-3l2 1.5-2 1.5m-3-3.5l-2 7" strokeWidth="1.3" />
+        </svg>
+      );
+    case 'chmod':
+      return (
+        <svg viewBox="0 0 18 18" aria-hidden className="aspro-action-icon text-amber">
+          <rect x="3.5" y="7.5" width="11" height="8" rx="1.5" />
+          <path d="M6 7.5V5a3 3 0 0 1 6 0v2.5" />
+          <circle cx="9" cy="11.5" r="1" fill="currentColor" />
+        </svg>
+      );
     case 'newFolder':
       return (
         <svg viewBox="0 0 18 18" aria-hidden className="aspro-action-icon">
@@ -2163,9 +2274,12 @@ function ActionButton({
 function FileContextMenu({
   state,
   onClose,
-  onDownload,
+  onQuickEdit,
   onEdit,
+  onDownload,
   onRename,
+  onChmod,
+  onArchive,
   onDelete,
   onInfo,
   onNewFolder,
@@ -2176,9 +2290,12 @@ function FileContextMenu({
 }: {
   state: { x: number; y: number; files: RemoteFile[] };
   onClose: () => void;
-  onDownload: (file: RemoteFile) => void;
+  onQuickEdit: (file: RemoteFile) => void;
   onEdit: (file: RemoteFile) => void;
+  onDownload: (file: RemoteFile) => void;
   onRename: (file: RemoteFile) => void;
+  onChmod: (file: RemoteFile) => void;
+  onArchive: (action: 'extract' | 'compress', file: RemoteFile, format?: 'zip' | 'tar.gz') => void;
   onDelete: (files: RemoteFile[]) => void;
   onInfo: (file: RemoteFile) => void;
   onNewFolder: () => void;
@@ -2188,8 +2305,8 @@ function FileContextMenu({
   t: TFunc;
 }) {
   const single = state.files.length === 1 ? state.files[0] : null;
-  const left = Math.min(state.x, window.innerWidth - 190);
-  const top = Math.min(state.y, window.innerHeight - 280);
+  const left = Math.min(state.x, window.innerWidth - 210);
+  const top = Math.min(state.y, window.innerHeight - 340);
 
   return (
     <>
@@ -2202,9 +2319,20 @@ function FileContextMenu({
         }}
       />
       <div
-        className="fixed z-50 min-w-[170px] rounded-lg border border-line bg-raised py-1 text-xs shadow-2xl backdrop-blur-md"
+        className="fixed z-50 min-w-[190px] rounded-lg border border-line bg-raised py-1 text-xs shadow-2xl backdrop-blur-md"
         style={{ left, top }}
       >
+        {single && !single.isDirectory && (
+          <MenuItem
+            onClick={() => {
+              onQuickEdit(single);
+              onClose();
+            }}
+          >
+            <span className="mr-2 text-azure">⚡</span>
+            {t('sftp.actionQuickEdit')}
+          </MenuItem>
+        )}
         {single && !single.isDirectory && (
           <MenuItem
             onClick={() => {
@@ -2238,6 +2366,55 @@ function FileContextMenu({
             {t('sftp.actionRename')}
           </MenuItem>
         )}
+        {single && (
+          <MenuItem
+            onClick={() => {
+              onChmod(single);
+              onClose();
+            }}
+          >
+            <span className="mr-2 text-amber">🔒</span>
+            {t('sftp.actionChmod')}
+          </MenuItem>
+        )}
+
+        {/* Extraction option for archive files */}
+        {single && isArchiveFile(single) && (
+          <MenuItem
+            onClick={() => {
+              onArchive('extract', single);
+              onClose();
+            }}
+          >
+            <span className="mr-2 text-mint">📦</span>
+            {t('sftp.actionExtract')}
+          </MenuItem>
+        )}
+
+        {/* Compression options */}
+        {single && (
+          <>
+            <MenuItem
+              onClick={() => {
+                onArchive('compress', single, 'zip');
+                onClose();
+              }}
+            >
+              <span className="mr-2 text-amber">🗜️</span>
+              {t('sftp.actionCompressZip')}
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                onArchive('compress', single, 'tar.gz');
+                onClose();
+              }}
+            >
+              <span className="mr-2 text-amber">🗜️</span>
+              {t('sftp.actionCompressTar')}
+            </MenuItem>
+          </>
+        )}
+
         {state.files.length > 0 && (
           <MenuItem
             danger

@@ -45,6 +45,10 @@ import type {
   ServiceInfo,
   SessionConfig,
   Secret,
+  SshTunnel,
+  SshTunnelCreateInput,
+  SshTunnelUpdatePatch,
+  SshTunnelRuntimeStatus,
   TerminalExportResult,
   TransferProgress,
   UpdateCheckResult,
@@ -274,6 +278,20 @@ const api = {
       ipcRenderer.invoke('sftp:mkdir', sessionId, path),
     createFile: (sessionId: string, path: string): Promise<void> =>
       ipcRenderer.invoke('sftp:createFile', sessionId, path),
+    readFile: (sessionId: string, path: string, maxBytes?: number): Promise<string> =>
+      ipcRenderer.invoke('sftp:readFile', sessionId, path, maxBytes),
+    writeFile: (sessionId: string, path: string, content: string): Promise<void> =>
+      ipcRenderer.invoke('sftp:writeFile', sessionId, path, content),
+    chmod: (sessionId: string, path: string, mode: number | string, recursive?: boolean): Promise<void> =>
+      ipcRenderer.invoke('sftp:chmod', sessionId, path, mode, recursive),
+    archive: (
+      sessionId: string,
+      action: 'extract' | 'compress',
+      sourcePath: string,
+      destPath?: string,
+      format?: 'zip' | 'tar.gz',
+    ): Promise<void> =>
+      ipcRenderer.invoke('sftp:archive', sessionId, action, sourcePath, destPath, format),
     onProgress: (handler: (p: TransferProgress) => void) => subscribe('sftp:progress', handler),
   },
 
@@ -431,6 +449,22 @@ const api = {
     update: (id: string, patch: CommandSnippetUpdatePatch): Promise<CommandSnippet | undefined> =>
       ipcRenderer.invoke('snippets:update', id, patch),
     remove: (id: string): Promise<void> => ipcRenderer.invoke('snippets:remove', id),
+  },
+
+  tunnel: {
+    list: (sessionId?: string): Promise<SshTunnel[]> =>
+      ipcRenderer.invoke('tunnel:list', sessionId),
+    create: (input: SshTunnelCreateInput): Promise<SshTunnel> =>
+      ipcRenderer.invoke('tunnel:create', input),
+    update: (id: string, patch: SshTunnelUpdatePatch): Promise<SshTunnel | undefined> =>
+      ipcRenderer.invoke('tunnel:update', id, patch),
+    remove: (id: string): Promise<void> => ipcRenderer.invoke('tunnel:remove', id),
+    start: (id: string): Promise<void> => ipcRenderer.invoke('tunnel:start', id),
+    stop: (id: string): Promise<void> => ipcRenderer.invoke('tunnel:stop', id),
+    statuses: (): Promise<Record<string, SshTunnelRuntimeStatus>> =>
+      ipcRenderer.invoke('tunnel:statuses'),
+    onStatus: (handler: (status: SshTunnelRuntimeStatus) => void) =>
+      subscribe('tunnel:status', handler),
   },
 };
 

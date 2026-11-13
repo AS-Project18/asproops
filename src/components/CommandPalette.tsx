@@ -288,6 +288,19 @@ export function CommandPalette({
     });
 
     list.push({
+      id: 'action-open-tunnels',
+      kind: 'action',
+      title: t('tunnel.title'),
+      subtitle: t('tunnel.subtitle'),
+      badge: t('palette.actions'),
+      icon: '⇄',
+      onSelect: () => {
+        window.dispatchEvent(new CustomEvent('asproops:open-tunnels'));
+        onClose();
+      },
+    });
+
+    list.push({
       id: 'action-split-horizontal',
       kind: 'action',
       title: t('terminal.splitHorizontal'),

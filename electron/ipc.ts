@@ -25,6 +25,7 @@ import { trustHostKey } from './ssh/known-hosts';
 import { parseSshConfig } from './ssh/ssh-config';
 import { RemoteEditManager } from './ssh/remote-edit';
 import { PortForwardManager } from './ssh/port-forward';
+import { TunnelManager } from './ssh/tunnel-manager';
 import { SessionStore } from './store/sessions';
 import { LocalTerminalManager } from './local-terminal';
 import { buildLocalProjectContext } from './local-project-context';
@@ -34,6 +35,7 @@ import { projects } from './store/projects';
 import { localProjects } from './store/local-projects';
 import { localCliProfiles } from './store/local-cli-profiles';
 import { portForwardRules } from './store/port-forwards';
+import { tunnelStore } from './store/tunnels';
 import { deployHistory } from './store/deploy-history';
 import { provisionTemplates } from './store/provision-templates';
 import { snippetStore } from './store/snippets';
@@ -57,6 +59,9 @@ import type {
   ServiceAction,
   SessionConfig,
   Secret,
+  SshTunnelCreateInput,
+  SshTunnelUpdatePatch,
+  SshTunnelRuntimeStatus,
   TerminalExportResult,
 } from '../src/shared/types';
 
@@ -85,6 +90,7 @@ const appLock = new AppLock();
 let edits: RemoteEditManager;
 let localTerminals: LocalTerminalManager;
 let portForwards: PortForwardManager;
+let tunnelManager: TunnelManager;
 
 /** terminalId -> channel shell yang sedang terbuka. */
 const shells = new Map<string, ClientChannel>();
@@ -127,6 +133,10 @@ export function registerIpc(window: BrowserWindow): void {
 
   edits = new RemoteEditManager((status) => send('edit:status', status));
   portForwards = new PortForwardManager((status) => send('portforward:status', status));
+  tunnelManager = new TunnelManager(connections);
+  tunnelManager.on('status', (status: SshTunnelRuntimeStatus) => {
+    send('tunnel:status', status);
+  });
 
   localTerminals = new LocalTerminalManager(
     (terminalId, data) => send('local:data', { terminalId, data }),
@@ -218,10 +228,12 @@ export function registerIpc(window: BrowserWindow): void {
   });
   ipcMain.handle('sessions:create', (_e, config, secret) => store.create(config, secret));
   ipcMain.handle('sessions:update', (_e, id, patch, secret) => store.update(id, patch, secret));
-  ipcMain.handle('sessions:remove', (_e, id) => {
+  ipcMain.handle('sessions:remove', async (_e, id) => {
     store.remove(id);
     projects.removeProjectsForSession(id);
     portForwardRules.removeForSession(id);
+    void tunnelManager?.stopAllForSession(id);
+    tunnelStore.removeBySession(id);
     deployHistory.removeForSession(id);
   });
 
@@ -278,9 +290,12 @@ export function registerIpc(window: BrowserWindow): void {
     const sessionId = connection.sessionId;
     const config = store.get(sessionId);
 
-    connection.on('status', (status, detail) =>
-      send('ssh:status', { sessionId, status, detail }),
-    );
+    connection.on('status', (status, detail) => {
+      if (status === 'disconnected' || status === 'error') {
+        void tunnelManager?.stopAllForSession(sessionId);
+      }
+      send('ssh:status', { sessionId, status, detail });
+    });
 
     connection.on('hostKeyPrompt', (info) => {
       const promptId = randomUUID();
@@ -308,6 +323,7 @@ export function registerIpc(window: BrowserWindow): void {
     const { config, secret } = await resolveSession(sessionId);
     const connection = await connections.open(config, secret, resolveSession, bindConnection);
     store.touch(sessionId);
+    void tunnelManager.startAutoTunnels(sessionId);
     // Nilai balik ini yang dipakai renderer sebagai status akhir, supaya
     // tidak bergantung pada event yang mungkin terjadi lebih dulu.
     return connection.getStatus();
@@ -322,6 +338,7 @@ export function registerIpc(window: BrowserWindow): void {
     monitor.stop(sessionId);
     await edits.closeSession(sessionId);
     portForwards.stopForSession(sessionId);
+    await tunnelManager.stopAllForSession(sessionId);
     connections.close(sessionId);
     pendingAuthLog.delete(sessionId);
     authLogPasswords.delete(sessionId);
@@ -727,6 +744,111 @@ export function registerIpc(window: BrowserWindow): void {
     });
   });
 
+  ipcMain.handle(
+    'sftp:readFile',
+    async (_e, sessionId: string, path: string, maxBytes: number = 3 * 1024 * 1024) => {
+      const sftp = await connections.require(sessionId).getSftp();
+      return new Promise<string>((resolve, reject) => {
+        const stream = sftp.createReadStream(path, { encoding: 'utf8' });
+        let content = '';
+        let bytes = 0;
+        stream.on('data', (chunk: string | Buffer) => {
+          const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+          bytes += Buffer.byteLength(text, 'utf8');
+          if (bytes > maxBytes) {
+            stream.destroy();
+            return reject(
+              new Error(`Ukuran file melebihi batas editor in-app (${Math.round(maxBytes / 1024 / 1024)}MB).`),
+            );
+          }
+          content += text;
+        });
+        stream.on('end', () => resolve(content));
+        stream.on('error', (err: Error) => reject(err));
+      });
+    },
+  );
+
+  ipcMain.handle(
+    'sftp:writeFile',
+    async (_e, sessionId: string, path: string, content: string) => {
+      const sftp = await connections.require(sessionId).getSftp();
+      return new Promise<void>((resolve, reject) => {
+        const stream = sftp.createWriteStream(path, { encoding: 'utf8' });
+        stream.on('finish', () => resolve());
+        stream.on('error', (err: Error) => reject(err));
+        stream.end(content, 'utf8');
+      });
+    },
+  );
+
+  ipcMain.handle(
+    'sftp:chmod',
+    async (_e, sessionId: string, path: string, mode: number | string, recursive?: boolean) => {
+      const connection = connections.require(sessionId);
+      const numMode = typeof mode === 'string' ? parseInt(mode, 8) : mode;
+      if (recursive) {
+        const octal = (numMode & 0o7777).toString(8);
+        const { stderr, code } = await connection.exec(`chmod -R ${octal} -- ${shellQuote(path)}`);
+        if (code !== 0) throw new Error(stderr || `Gagal mengubah izin ke ${octal}`);
+        return;
+      }
+      const sftp = await connection.getSftp();
+      return new Promise<void>((resolve, reject) => {
+        sftp.chmod(path, numMode, (err) => (err ? reject(err) : resolve()));
+      });
+    },
+  );
+
+  ipcMain.handle(
+    'sftp:archive',
+    async (
+      _e,
+      sessionId: string,
+      action: 'extract' | 'compress',
+      sourcePath: string,
+      destPath?: string,
+      format?: 'zip' | 'tar.gz',
+    ) => {
+      const connection = connections.require(sessionId);
+      const dir = sourcePath.slice(0, sourcePath.lastIndexOf('/')) || '/';
+      const base = sourcePath.slice(sourcePath.lastIndexOf('/') + 1);
+
+      if (action === 'extract') {
+        const targetDir = destPath || dir;
+        let cmd = '';
+        if (sourcePath.endsWith('.zip')) {
+          cmd = `which unzip >/dev/null 2>&1 && unzip -o -- ${shellQuote(sourcePath)} -d ${shellQuote(targetDir)} || python3 -m zipfile -e ${shellQuote(sourcePath)} ${shellQuote(targetDir)}`;
+        } else if (sourcePath.endsWith('.tar.gz') || sourcePath.endsWith('.tgz')) {
+          cmd = `tar -xzf ${shellQuote(sourcePath)} -C ${shellQuote(targetDir)}`;
+        } else if (sourcePath.endsWith('.tar.bz2')) {
+          cmd = `tar -xjf ${shellQuote(sourcePath)} -C ${shellQuote(targetDir)}`;
+        } else if (sourcePath.endsWith('.tar')) {
+          cmd = `tar -xf ${shellQuote(sourcePath)} -C ${shellQuote(targetDir)}`;
+        } else {
+          throw new Error('Format arsip tidak didukung (didukung: .zip, .tar.gz, .tgz, .tar, .tar.bz2)');
+        }
+        const { stderr, code } = await connection.exec(cmd);
+        if (code !== 0) throw new Error(stderr || 'Gagal mengekstrak berkas arsip');
+        return;
+      }
+
+      if (action === 'compress') {
+        const archiveType = format || (destPath?.endsWith('.zip') ? 'zip' : 'tar.gz');
+        const archiveName = destPath || (archiveType === 'zip' ? `${sourcePath}.zip` : `${sourcePath}.tar.gz`);
+        let cmd = '';
+        if (archiveType === 'zip') {
+          cmd = `cd -- ${shellQuote(dir)} && (which zip >/dev/null 2>&1 && zip -r -- ${shellQuote(archiveName)} ${shellQuote(base)} || python3 -m zipfile -c ${shellQuote(archiveName)} ${shellQuote(base)})`;
+        } else {
+          cmd = `cd -- ${shellQuote(dir)} && tar -czf ${shellQuote(archiveName)} -- ${shellQuote(base)}`;
+        }
+        const { stderr, code } = await connection.exec(cmd);
+        if (code !== 0) throw new Error(stderr || 'Gagal membuat arsip berkas/folder');
+        return;
+      }
+    },
+  );
+
   // --- Import ~/.ssh/config ------------------------------------------------
   ipcMain.handle('sshconfig:scan', async () => {
     const parsed = await parseSshConfig();
@@ -1004,6 +1126,27 @@ export function registerIpc(window: BrowserWindow): void {
     portForwards.list(sessionId),
   );
 
+  // --- SSH Tunnels & SOCKS5 ---------------------------------------------------
+  ipcMain.handle('tunnel:list', (_e, sessionId?: string) => tunnelStore.list(sessionId));
+  ipcMain.handle('tunnel:create', (_e, input: SshTunnelCreateInput) =>
+    tunnelStore.create(input),
+  );
+  ipcMain.handle(
+    'tunnel:update',
+    (_e, id: string, patch: SshTunnelUpdatePatch) => tunnelStore.update(id, patch),
+  );
+  ipcMain.handle('tunnel:remove', async (_e, id: string) => {
+    await tunnelManager.stop(id);
+    tunnelStore.remove(id);
+  });
+  ipcMain.handle('tunnel:start', async (_e, id: string) => {
+    await tunnelManager.start(id);
+  });
+  ipcMain.handle('tunnel:stop', async (_e, id: string) => {
+    await tunnelManager.stop(id);
+  });
+  ipcMain.handle('tunnel:statuses', () => tunnelManager.getAllStatuses());
+
   // --- Git remote ------------------------------------------------------------
   ipcMain.handle('git:status', (_e, sessionId: string, path: string) =>
     getGitStatus(connections.require(sessionId), path),
@@ -1147,6 +1290,11 @@ export function registerIpc(window: BrowserWindow): void {
 export function shutdown(): void {
   edits?.closeAll();
   portForwards?.stopAll();
+  if (tunnelManager) {
+    for (const id of Object.keys(tunnelManager.getAllStatuses())) {
+      void tunnelManager.stop(id);
+    }
+  }
   for (const stream of shells.values()) stream.end();
   shells.clear();
   for (const handle of deployRuns.values()) handle.cancel();
