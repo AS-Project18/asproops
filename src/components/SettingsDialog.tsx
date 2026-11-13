@@ -703,6 +703,21 @@ function WorkspaceSettings() {
 
       <div className="aspro-setting-row">
         <div>
+          <strong>{t('settings.wsAutoHideSidebar')}</strong>
+          <small>{t('settings.wsAutoHideSidebarDesc')}</small>
+        </div>
+        <label className="aspro-hidden-toggle shrink-0">
+          <input
+            type="checkbox"
+            checked={prefs.autoHideSidebar}
+            onChange={(e) => setPrefs({ autoHideSidebar: e.target.checked })}
+          />
+          <span>{t(prefs.autoHideSidebar ? 'applock.statusEnabled' : 'applock.statusDisabled')}</span>
+        </label>
+      </div>
+
+      <div className="aspro-setting-row">
+        <div>
           <strong>{t('settings.terminalResetTitle')}</strong>
           <small>Kembalikan preferensi workspace lokal ke default.</small>
         </div>

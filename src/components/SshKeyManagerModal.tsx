@@ -141,12 +141,12 @@ export function SshKeyManagerModal({
 
   return (
     <div
-      className="fixed inset-0 z-[160] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[160] flex items-center justify-center bg-black/80 p-2 sm:p-4 backdrop-blur-sm"
       onClick={onClose}
       role="presentation"
     >
       <div
-        className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-2xl"
+        className="flex max-h-[92vh] sm:max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -221,7 +221,7 @@ export function SshKeyManagerModal({
                 <label className="mb-1.5 block text-xs font-semibold text-muted">
                   {t('sshKey.algorithm')}
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <label
                     className={`flex flex-col rounded-lg border p-2.5 cursor-pointer transition ${
                       algo === 'ed25519'

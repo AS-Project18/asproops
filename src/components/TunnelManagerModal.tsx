@@ -222,12 +222,12 @@ export function TunnelManagerModal({ sessionId, sessionHost, onClose }: TunnelMa
 
   return (
     <div
-      className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 p-2 sm:p-4 backdrop-blur-sm"
       onClick={onClose}
       role="presentation"
     >
       <div
-        className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-2xl"
+        className="flex max-h-[92vh] sm:max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -375,7 +375,7 @@ export function TunnelManagerModal({ sessionId, sessionHost, onClose }: TunnelMa
                 <label className="mb-1.5 block text-xs font-semibold text-muted">
                   {t('tunnel.type')}
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => setForm({ ...form, type: 'local' })}
@@ -443,7 +443,7 @@ export function TunnelManagerModal({ sessionId, sessionHost, onClose }: TunnelMa
               </div>
 
               {/* Ports and Hosts */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-muted">
                     {t('tunnel.localPort')}
@@ -475,7 +475,7 @@ export function TunnelManagerModal({ sessionId, sessionHost, onClose }: TunnelMa
               </div>
 
               {form.type !== 'dynamic' && (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-muted">
                       {t('tunnel.remoteHost')}

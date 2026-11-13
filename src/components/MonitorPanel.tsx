@@ -52,6 +52,16 @@ interface MonitorPanelProps {
 type SortField = 'pid' | 'user' | 'command' | 'cpu' | 'mem';
 type SortOrder = 'asc' | 'desc';
 
+const QUICK_PROCESS_FILTERS = [
+  { label: 'Semua', query: '' },
+  { label: 'PHP', query: 'php' },
+  { label: 'Node', query: 'node' },
+  { label: 'Python', query: 'python' },
+  { label: 'Nginx', query: 'nginx' },
+  { label: 'Docker', query: 'docker' },
+  { label: 'DB', query: 'sql' },
+];
+
 export function MonitorPanel({ sessionId }: MonitorPanelProps) {
   const { t } = useI18n();
   const [snapshot, setSnapshot] = useState<MonitorSnapshot | null>(null);
@@ -64,6 +74,8 @@ export function MonitorPanel({ sessionId }: MonitorPanelProps) {
   const [sortField, setSortField] = useState<SortField>('cpu');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [isPaused, setIsPaused] = useState(false);
+  const isPausedRef = useRef(isPaused);
+  isPausedRef.current = isPaused;
   const [frozenProcesses, setFrozenProcesses] = useState<ProcessSample[]>([]);
 
   // Kill modal state
@@ -85,7 +97,7 @@ export function MonitorPanel({ sessionId }: MonitorPanelProps) {
       setSnapshot(payload.snapshot);
       setHistory((prev) => push(prev, payload.snapshot, startedAtRef.current));
       setError(null);
-      if (!isPaused) {
+      if (!isPausedRef.current) {
         setFrozenProcesses(payload.snapshot.processes);
       }
     });
@@ -101,7 +113,7 @@ export function MonitorPanel({ sessionId }: MonitorPanelProps) {
       unsubscribeError();
       releaseMonitor(sessionId);
     };
-  }, [sessionId, isPaused]);
+  }, [sessionId]);
 
   // Toast auto-clear
   useEffect(() => {
@@ -111,13 +123,13 @@ export function MonitorPanel({ sessionId }: MonitorPanelProps) {
   }, [toast]);
 
   const togglePause = () => {
-    if (!isPaused && snapshot) {
-      setFrozenProcesses(snapshot.processes);
-      setIsPaused(true);
-    } else {
-      if (snapshot) setFrozenProcesses(snapshot.processes);
-      setIsPaused(false);
-    }
+    setIsPaused((prev) => {
+      const next = !prev;
+      if (next && snapshot) {
+        setFrozenProcesses(snapshot.processes);
+      }
+      return next;
+    });
   };
 
   const handleSort = (field: SortField) => {
@@ -282,7 +294,7 @@ export function MonitorPanel({ sessionId }: MonitorPanelProps) {
       )}
 
       {/* Top summary cards */}
-      <div className="aspro-monitor-summary mb-3 grid grid-cols-3 gap-2 text-[11px] text-faint">
+      <div className="aspro-monitor-summary mb-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-faint">
         <span>
           {t('monitor.active')}{' '}
           <span className="text-dim">{formatUptime(snapshot.uptimeSeconds)}</span>
@@ -327,7 +339,7 @@ export function MonitorPanel({ sessionId }: MonitorPanelProps) {
       </div>
 
       {/* Memory & Storage progress */}
-      <section className="mt-2 grid gap-2 2xl:grid-cols-2">
+      <section className="mt-2 grid gap-2 lg:grid-cols-2">
         <div className="aspro-monitor-card rounded-lg border border-line bg-panel p-3">
           <h3 className="mb-2 text-[11px] uppercase tracking-[0.14em] text-faint">
             {t('monitor.memory')}
@@ -384,7 +396,30 @@ export function MonitorPanel({ sessionId }: MonitorPanelProps) {
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Quick Filter Chips */}
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 max-w-full">
+              {QUICK_PROCESS_FILTERS.map((f) => {
+                const isActive =
+                  (f.query === '' && search === '') ||
+                  (f.query !== '' && search.toLowerCase() === f.query);
+                return (
+                  <button
+                    key={f.label}
+                    type="button"
+                    onClick={() => setSearch(f.query)}
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-mono transition border ${
+                      isActive
+                        ? 'border-azure/50 bg-azure/15 text-azure font-semibold'
+                        : 'border-line/60 bg-surface/60 text-faint hover:text-fg hover:border-line'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+
             {/* Filter Search Input */}
             <div className="relative">
               <input
@@ -392,7 +427,7 @@ export function MonitorPanel({ sessionId }: MonitorPanelProps) {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={t('monitor.filterPlaceholder')}
-                className="aspro-input h-7 w-48 rounded-lg pl-6 pr-6 text-[11px] text-fg placeholder:text-faint focus:w-60 transition-all"
+                className="aspro-input h-7 w-40 rounded-lg pl-6 pr-6 text-[11px] text-fg placeholder:text-faint focus:w-56 transition-all"
               />
               <span className="absolute left-2 top-1.5 text-[11px] text-faint">🔍</span>
               {search && (
@@ -509,12 +544,12 @@ export function MonitorPanel({ sessionId }: MonitorPanelProps) {
       {/* Kill Process Modal */}
       {targetProcess && (
         <div
-          className="fixed inset-0 z-[160] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[160] flex items-center justify-center bg-black/80 p-3 sm:p-4 backdrop-blur-sm"
           onClick={closeKillModal}
           role="presentation"
         >
           <div
-            className="w-full max-w-md rounded-xl border border-line bg-surface p-5 shadow-2xl"
+            className="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-xl border border-line bg-surface p-4 sm:p-5 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"

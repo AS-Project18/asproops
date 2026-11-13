@@ -13,6 +13,8 @@ export interface WorkspacePrefs {
   tabTitleFormat: 'name' | 'name-host';
   /** Tampilkan bilah Quick Snippets perintah di bawah panel terminal */
   showSnippetsBar: boolean;
+  /** Sembunyikan sidebar secara otomatis saat fokus di terminal/workspace */
+  autoHideSidebar: boolean;
 }
 
 export const DEFAULT_WORKSPACE_PREFS: WorkspacePrefs = {
@@ -22,6 +24,7 @@ export const DEFAULT_WORKSPACE_PREFS: WorkspacePrefs = {
   uiDensity: 'comfortable',
   tabTitleFormat: 'name',
   showSnippetsBar: false,
+  autoHideSidebar: false,
 };
 
 const STORAGE_KEY = 'asproops.workspacePrefs.v1';

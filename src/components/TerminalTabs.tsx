@@ -567,44 +567,44 @@ export function TerminalTabs({ sessionId, sessionName, visible }: TerminalTabsPr
           <button
             onClick={() => setShowTunnelModal(true)}
             title={t('tunnel.title')}
-            className={`flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors ${
+            className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition-colors ${
               activeTunnelsCount > 0
                 ? 'border border-emerald-500/40 bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25'
-                : 'text-dim hover:bg-line hover:text-fg'
+                : 'text-faint hover:bg-line/40 hover:text-dim'
             }`}
           >
-            <span className="font-bold text-[13px]">⇄</span>
-            <span className="hidden sm:inline font-medium">{t('tunnel.toolbarButton')}</span>
+            <span className="text-[11px]">⇄</span>
+            <span className="hidden sm:inline font-normal text-[11px]">{t('tunnel.toolbarButton')}</span>
             {activeTunnelsCount > 0 && (
-              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-bold text-abyss">
+              <span className="flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-emerald-500 px-1 text-[9px] font-bold text-abyss">
                 {activeTunnelsCount}
               </span>
             )}
           </button>
 
-          <div className="h-3.5 w-px bg-line/60 mx-0.5" />
+          <div className="h-3 w-px bg-line/50 mx-0.5" />
 
           {!isCurrentSplit ? (
             <>
               <button
                 onClick={() => handleSplitVertical(activeId)}
                 title={t('terminal.splitVertical')}
-                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-dim hover:bg-line hover:text-fg transition-colors"
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-faint hover:bg-line/40 hover:text-dim transition-colors"
               >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+                <svg className="w-3 h-3 text-faint" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3zm1 0v10h4V3H3zm5 10h5V3H8v10z" />
                 </svg>
-                <span className="hidden sm:inline">{t('terminal.splitVerticalShort')}</span>
+                <span className="hidden sm:inline font-normal text-[11px]">{t('terminal.splitVerticalShort')}</span>
               </button>
               <button
                 onClick={() => handleSplitHorizontal(activeId)}
                 title={t('terminal.splitHorizontal')}
-                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-dim hover:bg-line hover:text-fg transition-colors"
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-faint hover:bg-line/40 hover:text-dim transition-colors"
               >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+                <svg className="w-3 h-3 text-faint" viewBox="0 0 16 16" fill="currentColor">
                   <path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3zm1 0v4h10V3H3zm10 5H3v5h10V8z" />
                 </svg>
-                <span className="hidden sm:inline">{t('terminal.splitHorizontalShort')}</span>
+                <span className="hidden sm:inline font-normal text-[11px]">{t('terminal.splitHorizontalShort')}</span>
               </button>
             </>
           ) : (
@@ -612,27 +612,27 @@ export function TerminalTabs({ sessionId, sessionName, visible }: TerminalTabsPr
               <button
                 onClick={() => handleToggleSplitDirection(activeId)}
                 title={t('terminal.toggleSplitDirection')}
-                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-azure bg-azure/10 hover:bg-azure/20 transition-colors"
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-azure bg-azure/10 hover:bg-azure/20 transition-colors"
               >
                 {currentTab?.splitDirection === 'vertical' ? (
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+                  <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3zm1 0v10h4V3H3zm5 10h5V3H8v10z" />
                   </svg>
                 ) : (
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+                  <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
                     <path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3zm1 0v4h10V3H3zm10 5H3v5h10V8z" />
                   </svg>
                 )}
-                <span className="hidden sm:inline">
+                <span className="hidden sm:inline font-normal text-[11px]">
                   {currentTab?.splitDirection === 'vertical' ? 'Vertical' : 'Horizontal'}
                 </span>
               </button>
               <button
                 onClick={() => handleCloseSplit(activeId)}
                 title={t('terminal.closeSplit')}
-                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-coral hover:bg-coral/10 transition-colors"
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-coral hover:bg-coral/10 transition-colors"
               >
-                ✕ <span className="hidden sm:inline">{t('terminal.closeSplitShort')}</span>
+                ✕ <span className="hidden sm:inline font-normal text-[11px]">{t('terminal.closeSplitShort')}</span>
               </button>
             </>
           )}

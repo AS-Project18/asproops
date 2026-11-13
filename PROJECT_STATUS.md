@@ -4,7 +4,7 @@
 
 Status: COMPLETE
 
-- Source version: `1.3.0`
+- Source version: `1.4.0`
 - Electron: `44.5.1`
 - React: `19`
 - TypeScript + Vite `7`
@@ -13,6 +13,38 @@ Status: COMPLETE
 - Primary platform: Windows 10/11 x64
 
 Remote capabilities remain isolated from the Local Workspace domain.
+
+## UI & WORKSPACE ENHANCEMENTS (v1.4.0)
+
+### U1: Quick File Editor & Formatter
+Status: COMPLETE
+- In-app text editor modal with VS Code-like syntax coloring via PrismJS.
+- Multi-language support: PHP, JS, TS, Python, JSON, YAML, SQL, Shell/Bash, HTML, CSS, Markdown, Dockerfile.
+- Multi-line Tab/Shift+Tab indent/outdent, auto-closing quotes/brackets `()`, `[]`, `{}`, `""`, `''`, ```` with selection wrap.
+- Interactive text search (`Ctrl+F`), Go to line (`Ctrl+G`), Word wrap toggle.
+- Safe main-process Prettier & `@prettier/plugin-php` autoformatter (`Ctrl+Shift+I` / toolbar button).
+
+### U2: Comprehensive Responsive Layout
+Status: COMPLETE
+- Fluid multi-tier responsive breakpoints: 1400px, 1200px, 960px, and 768px.
+- Adaptive topbar, navigation rail, dashboard cards, file browser, monitor panels, and modal dialogs.
+- SFTP file navigation history (`←`, `→`, `↑`), `F5` reload, `Ctrl+H` toggle hidden files, and `F2` rename.
+- Non-destructive monitor graph pause (`isPausedRef`) and scrollable process stack filters.
+
+### U3: Fullscreen & Zen Focus Mode
+Status: COMPLETE
+- Native Electron app fullscreen toggle (`F11` / `⛶ Layar Penuh`).
+- Distraction-free Terminal Only Zen Mode (`F10` / `Ctrl+Shift+F`) expanding the active terminal workspace to 100vw x 100vh.
+- Floating translucent exit pill badge (`⤢ Keluar Mode Fokus`) with one-click return or `Esc` / `F10` shortcut.
+- Automatic terminal resize recalculation via `ResizeObserver` + `fit.fit()`.
+
+### U4: Auto-hide Sidebar & Header Refinement
+Status: COMPLETE
+- Auto-hide sidebar mode collapses left dock automatically upon terminal/workspace interaction.
+- Toggleable via header icon pill (`📌` / `⇤⇥`) and persistent in `workspacePrefs`.
+- Streamlined header removing redundant "Add Server" and "Import SSH" buttons.
+- Added live active server indicator counter, settings shortcut (`Ctrl+,`), and fullscreen/zen buttons.
+- Balanced font size (`11px font-normal`) and compact padding for secondary action buttons (Tunnels, Split Vertical, Split Horizontal).
 
 ## LOCAL WORKSPACE
 

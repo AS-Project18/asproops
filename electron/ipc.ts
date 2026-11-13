@@ -156,6 +156,24 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle('app:checkUpdate', () => checkForUpdate());
   ipcMain.handle('app:openExternal', (_e, url: string) => shell.openExternal(url));
 
+  // --- Window Fullscreen ----------------------------------------------------
+  ipcMain.handle('window:toggleFullscreen', () => {
+    if (window.isDestroyed()) return false;
+    const next = !window.isFullScreen();
+    window.setFullScreen(next);
+    return next;
+  });
+  ipcMain.handle('window:isFullscreen', () => {
+    return !window.isDestroyed() && window.isFullScreen();
+  });
+
+  window.on('enter-full-screen', () => {
+    send('window:fullscreenChange', true);
+  });
+  window.on('leave-full-screen', () => {
+    send('window:fullscreenChange', false);
+  });
+
   // --- Clipboard ------------------------------------------------------------
   // Electron 44 menghapus akses clipboard dari renderer process. Renderer
   // hanya mendapatkan helper sempit via preload, lalu operasi clipboard

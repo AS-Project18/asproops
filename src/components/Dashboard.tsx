@@ -205,9 +205,9 @@ export function Dashboard({
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-abyss p-4 sm:p-6 text-fg">
+    <div className="h-full overflow-y-auto bg-abyss p-3 sm:p-5 md:p-6 text-fg">
       {/* KPI Counters Banner */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-4 sm:mb-6 grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
         <div className="flex flex-col rounded-xl border border-line bg-panel/70 p-3.5 backdrop-blur">
           <span className="text-[11px] font-medium uppercase tracking-wider text-faint">
             {t('dashboard.totalServers')}
@@ -269,10 +269,10 @@ export function Dashboard({
       </div>
 
       {/* Operations Toolbar */}
-      <div className="mb-4 flex flex-col gap-3 rounded-xl border border-line bg-panel/50 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
+      <div className="mb-4 flex flex-col gap-2.5 sm:gap-3 rounded-xl border border-line bg-panel/50 p-2.5 sm:p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           {/* Search Bar */}
-          <div className="relative min-w-[200px] flex-1 max-w-md">
+          <div className="relative min-w-[140px] flex-1 max-w-md">
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-faint">
               🔍
             </span>
@@ -294,7 +294,7 @@ export function Dashboard({
           </div>
 
           {/* Quick Fleet Actions */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             {disconnectedCount > 0 && onConnect && (
               <button
                 onClick={handleConnectAll}
@@ -326,7 +326,7 @@ export function Dashboard({
 
         {/* Filter Pills & Selects */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-line/40 text-xs">
-          <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full">
             <button
               onClick={() => setStatusFilter('all')}
               className={`rounded-md px-2.5 py-1 text-xs transition-colors ${
@@ -421,7 +421,7 @@ export function Dashboard({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:gap-3.5 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {filteredSessions.map((session) => (
             <FleetServerCard
               key={session.id}

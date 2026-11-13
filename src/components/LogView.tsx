@@ -385,8 +385,8 @@ export function LogStreamView({ tailId, active, onExit }: LogStreamViewProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b border-line bg-panel/70 px-2 py-1.5">
-        <div className="aspro-search compact min-w-0 flex-1">
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5 sm:gap-2 border-b border-line bg-panel/70 px-2 py-1.5">
+        <div className="aspro-search compact min-w-[120px] flex-1">
           <span>⌕</span>
           <input
             value={search}
@@ -421,7 +421,7 @@ export function LogStreamView({ tailId, active, onExit }: LogStreamViewProps) {
           ↓
         </button>
 
-        <div className="aspro-search compact min-w-0 flex-1">
+        <div className="aspro-search compact min-w-[120px] flex-1">
           <span>⧩</span>
           <input
             value={filter}

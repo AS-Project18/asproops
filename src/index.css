@@ -166,13 +166,105 @@ button:disabled {
   justify-self: end;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
+}
+
+.aspro-top-btn {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid rgba(134, 60, 166, .35);
+  border-radius: 8px;
+  background: rgba(14, 7, 21, .75);
+  color: #c4b9cd;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all .15s ease-in-out;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.aspro-top-btn:hover {
+  background: rgba(45, 18, 65, .55);
+  border-color: rgba(180, 85, 220, .55);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(168, 64, 212, .18);
+}
+.aspro-top-btn.active {
+  background: rgba(255, 138, 0, .14);
+  border-color: rgba(255, 138, 0, .55);
+  color: #ff9d2e;
+}
+.aspro-top-btn-icon {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+  font-size: 14px;
+}
+
+/* Terminal Zen / Focus Mode */
+.aspro-app.is-zen-mode {
+  padding: 0 !important;
+}
+.aspro-app.is-zen-mode .aspro-workspace {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  gap: 0 !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+.aspro-app.is-zen-mode .aspro-center {
+  border-radius: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.aspro-zen-badge-container {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  z-index: 100;
+  pointer-events: auto;
+}
+.aspro-zen-badge-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: rgba(12, 6, 18, 0.85);
+  border: 1px solid rgba(180, 85, 220, 0.4);
+  color: #d8cedc;
+  font-size: 11px;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 12px rgba(180, 85, 220, 0.2);
+  opacity: 0.65;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.aspro-zen-badge-btn:hover {
+  opacity: 1;
+  background: rgba(28, 12, 42, 0.95);
+  border-color: #ff8a00;
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6), 0 0 16px rgba(255, 138, 0, 0.35);
+}
+.aspro-zen-kbd {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-family: monospace;
+  font-size: 10px;
+  color: #ffd080;
 }
 
 .aspro-workspace {
   min-height: 0;
   display: grid;
-  grid-template-columns: 78px 330px minmax(420px, 1fr);
+  grid-template-columns: var(--aspro-rail-width, 78px) minmax(240px, 330px) minmax(0, 1fr);
   gap: 9px;
 }
 
@@ -629,9 +721,148 @@ button:disabled {
 .bg-active { background-color: #1d0e29; }
 .bg-hover { background-color: #160c20; }
 
+/* Responsive Layout Breakpoints */
+:root {
+  --aspro-rail-width: 78px;
+}
+
 @media (max-width: 1400px) {
   .aspro-topbar {
-    grid-template-columns: 270px minmax(260px, 520px) 1fr;
+    grid-template-columns: 260px minmax(220px, 480px) 1fr;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 1200px) {
+  :root {
+    --aspro-rail-width: 68px;
+  }
+  .aspro-topbar {
+    grid-template-columns: 210px minmax(180px, 360px) 1fr;
+    gap: 12px;
+  }
+  .aspro-brand-subtitle {
+    display: none;
+  }
+  .aspro-brand-icon {
+    width: 38px;
+    height: 38px;
+  }
+  .aspro-brand-title {
+    font-size: 19px;
+  }
+  .aspro-quick {
+    height: 36px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+  .aspro-rail {
+    padding: 6px 4px;
+  }
+  .aspro-rail-button {
+    min-height: 58px;
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 960px) {
+  :root {
+    --aspro-rail-width: 58px;
+  }
+  .aspro-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px;
+  }
+  .aspro-quick {
+    flex: 1 1 auto;
+    max-width: 220px;
+    height: 34px;
+    padding: 0 8px;
+  }
+  .aspro-quick span:nth-child(3) {
+    display: none;
+  }
+  .aspro-button {
+    padding: 5px 9px;
+    font-size: 11px;
+  }
+  .aspro-top-btn {
+    height: 32px;
+    padding: 0 8px;
+    font-size: 11px;
+    gap: 4px;
+  }
+  .aspro-top-btn-icon {
+    width: 32px;
+    padding: 0;
+  }
+  .aspro-workspace-tab {
+    min-width: 80px;
+    max-width: 150px;
+    padding: 0 6px;
+    font-size: 10px;
+  }
+  .aspro-rail {
+    padding: 4px 2px;
+  }
+  .aspro-rail-button {
+    min-height: 50px;
+    font-size: 9px;
+    gap: 3px;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --aspro-rail-width: 50px;
+  }
+  .aspro-topbar {
+    padding: 0 6px;
+    gap: 6px;
+  }
+  .aspro-brand-title span {
+    display: none;
+  }
+  .aspro-quick {
+    max-width: 130px;
+    font-size: 11px;
+    padding: 0 6px;
+  }
+  .aspro-top-actions {
+    gap: 4px;
+  }
+  .aspro-top-btn {
+    height: 28px;
+    padding: 0 6px;
+    font-size: 10px;
+    gap: 3px;
+  }
+  .aspro-top-btn-icon {
+    width: 28px;
+    padding: 0;
+  }
+  .aspro-rail-label {
+    display: none !important;
+  }
+  .aspro-rail-button {
+    min-height: 42px;
+    justify-content: center;
+  }
+  .aspro-workspace-tab {
+    min-width: 65px;
+    max-width: 120px;
+    padding: 0 4px;
+  }
+  .aspro-statusbar {
+    padding: 0 8px;
+    gap: 8px;
+    overflow-x: auto;
+  }
+  .aspro-statusbar .aspro-divider {
+    display: none;
   }
 }
 
@@ -1611,6 +1842,29 @@ button:disabled {
   flex-direction: column;
   gap: 3px;
   overflow-y: auto;
+}
+
+@media (max-width: 720px) {
+  .aspro-settings-layout {
+    flex-direction: column;
+  }
+  .aspro-settings-nav {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid rgba(116, 48, 140, .20);
+    padding: 6px 8px;
+    gap: 4px;
+    scrollbar-width: none;
+  }
+  .aspro-settings-nav-item {
+    width: auto;
+    white-space: nowrap;
+    padding: 6px 10px;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
 }
 
 .aspro-settings-nav-item {

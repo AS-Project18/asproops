@@ -495,6 +495,13 @@ const api = {
     ): Promise<{ formatted: string; error?: string }> =>
       ipcRenderer.invoke('code:format', content, filename, languageId),
   },
+
+  appWindow: {
+    toggleFullscreen: (): Promise<boolean> => ipcRenderer.invoke('window:toggleFullscreen'),
+    isFullscreen: (): Promise<boolean> => ipcRenderer.invoke('window:isFullscreen'),
+    onFullscreenChange: (handler: (isFullscreen: boolean) => void) =>
+      subscribe('window:fullscreenChange', handler),
+  },
 };
 
 contextBridge.exposeInMainWorld('ssh', api);

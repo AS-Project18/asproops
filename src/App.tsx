@@ -1,5 +1,5 @@
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import asproIcon from './assets/asproops-icon.png';
 import { SessionSidebar } from './components/SessionSidebar';
 import { SessionForm } from './components/SessionForm';
@@ -122,6 +122,48 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [workspaceRestoreReady, setWorkspaceRestoreReady] = useState(false);
   const workspaceRestoreAttemptedRef = useRef(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [zenMode, setZenMode] = useState(false);
+
+  useEffect(() => {
+    if (window.ssh?.appWindow) {
+      void window.ssh.appWindow.isFullscreen().then(setIsFullscreen);
+      return window.ssh.appWindow.onFullscreenChange((full) => {
+        setIsFullscreen(full);
+      });
+    } else {
+      const handleFsChange = () => {
+        setIsFullscreen(Boolean(document.fullscreenElement));
+      };
+      document.addEventListener('fullscreenchange', handleFsChange);
+      return () => document.removeEventListener('fullscreenchange', handleFsChange);
+    }
+  }, []);
+
+  const toggleAppFullscreen = useCallback(() => {
+    if (window.ssh?.appWindow) {
+      void window.ssh.appWindow.toggleFullscreen();
+    } else {
+      if (!document.fullscreenElement) {
+        void document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        void document.exitFullscreen().catch(() => {});
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [zenMode]);
+
+  const handleWorkspaceInteraction = () => {
+    if (workspacePrefs.autoHideSidebar && !leftCollapsed) {
+      setLeftCollapsed(true);
+    }
+  };
 
   useEffect(() => {
     void window.ssh.appLock.status().then((status) => setAppLockEnabled(status.enabled));
@@ -320,6 +362,43 @@ export default function App() {
     const handleGlobalKeydown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
 
+      if (event.key === 'F11') {
+        event.preventDefault();
+        toggleAppFullscreen();
+        return;
+      }
+
+      if (
+        event.key === 'F10' ||
+        ((event.ctrlKey || event.metaKey) && event.shiftKey && key === 'f')
+      ) {
+        event.preventDefault();
+        setZenMode((v) => !v);
+        return;
+      }
+
+      if (zenMode && event.key === 'Escape') {
+        if (
+          !form.open &&
+          !settingsOpen &&
+          !importing &&
+          !pendingDelete &&
+          !quickConnectOpen &&
+          !sshKeysModalOpen
+        ) {
+          event.preventDefault();
+          setZenMode(false);
+          return;
+        }
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key === ',') {
+        if (form.open || importing || pendingDelete) return;
+        event.preventDefault();
+        setSettingsOpen(true);
+        return;
+      }
+
       if ((event.ctrlKey || event.metaKey) && !event.shiftKey && key === 'k') {
         if (form.open || settingsOpen || importing || pendingDelete) return;
         event.preventDefault();
@@ -357,7 +436,17 @@ export default function App() {
 
     window.addEventListener('keydown', handleGlobalKeydown);
     return () => window.removeEventListener('keydown', handleGlobalKeydown);
-  }, [activeSession, form.open, settingsOpen, importing, pendingDelete]);
+  }, [
+    activeSession,
+    form.open,
+    settingsOpen,
+    importing,
+    pendingDelete,
+    quickConnectOpen,
+    sshKeysModalOpen,
+    zenMode,
+    toggleAppFullscreen,
+  ]);
 
   /** Klik tombol nav mana pun juga membuka lagi sidebar kalau lagi disembunyikan — tujuannya kan mau lihat panelnya. */
   const selectLeftMode = (mode: LeftMode) => {
@@ -884,63 +973,134 @@ export default function App() {
     <div
       className={`aspro-app h-screen overflow-hidden bg-abyss text-fg ${
         workspacePrefs.uiDensity === 'compact' ? 'aspro-density-compact' : ''
-      }`}
+      } ${zenMode ? 'is-zen-mode' : ''}`}
     >
-      <header className="aspro-topbar">
-        <div className="aspro-brand">
-          <img src={asproIcon} alt="" className="aspro-brand-icon" />
-          <div>
-            <div className="aspro-brand-title">
-              <strong>ASPro</strong><span>Ops</span>
+      {!zenMode && (
+        <header className="aspro-topbar">
+          <div className="aspro-brand">
+            <img src={asproIcon} alt="" className="aspro-brand-icon" />
+            <div>
+              <div className="aspro-brand-title">
+                <strong>ASPro</strong><span>Ops</span>
+              </div>
+              <div className="aspro-brand-subtitle">{t('app.tagline')}</div>
             </div>
-            <div className="aspro-brand-subtitle">{t('app.tagline')}</div>
           </div>
-        </div>
 
-        <button className="aspro-quick" onClick={() => setQuickConnectOpen(true)}>
-          <span className="aspro-bolt">ϟ</span>
-          <span className="truncate">{t('app.quickConnect')}</span>
-          <span className="ml-auto text-[12px] text-faint">Ctrl + K</span>
-        </button>
+          <button className="aspro-quick" onClick={() => setQuickConnectOpen(true)}>
+            <span className="aspro-bolt">ϟ</span>
+            <span className="truncate">{t('app.quickConnect')}</span>
+            <span className="ml-auto text-[12px] text-faint">Ctrl + K</span>
+          </button>
 
-        <div className="aspro-top-actions">
-          <div className="hidden text-right xl:block">
-            <div className="text-[12px] uppercase tracking-[0.18em] text-faint">{t('app.activeServers')}</div>
-            <div className="text-xs text-dim">{connectedCount} {t('app.of')} {sessions.length}</div>
-          </div>
-          {appLockEnabled && (
+          <div className="aspro-top-actions">
+            <div className="hidden text-right xl:block select-none">
+              <div className="text-[11px] uppercase tracking-[0.16em] text-faint font-medium">
+                {t('app.activeServers')}
+              </div>
+              <div className="text-xs text-dim flex items-center justify-end gap-1.5 font-mono">
+                <span
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${
+                    connectedCount > 0
+                      ? 'bg-mint shadow-[0_0_6px_rgba(68,227,111,0.6)]'
+                      : 'bg-ghost'
+                  }`}
+                />
+                <span>{connectedCount} {t('app.of')} {sessions.length}</span>
+              </div>
+            </div>
+
+            {/* Auto-hide Sidebar Toggle */}
             <button
-              onClick={() => void window.ssh.appLock.relock()}
-              className="aspro-icon-btn"
-              title={t('app.lockNow')}
+              type="button"
+              onClick={() =>
+                setWorkspacePrefs({ autoHideSidebar: !workspacePrefs.autoHideSidebar })
+              }
+              className={`aspro-top-btn ${workspacePrefs.autoHideSidebar ? 'active' : ''}`}
+              title={
+                workspacePrefs.autoHideSidebar
+                  ? t('app.autoHideSidebarActive')
+                  : t('app.autoHideSidebarInactive')
+              }
+              aria-label={t('app.autoHideSidebar')}
             >
-              🔒
+              <span className="text-sm">{workspacePrefs.autoHideSidebar ? '⇤⇥' : '📌'}</span>
+              <span className="hidden lg:inline text-xs">
+                {workspacePrefs.autoHideSidebar
+                  ? t('app.sidebarAutoHidden')
+                  : t('app.sidebarPinned')}
+              </span>
             </button>
-          )}
-          <button
-            onClick={() => setImporting(true)}
-            className="aspro-button aspro-button-secondary"
-          >
-            ⇩ {t('app.importSsh')}
-          </button>
-          <button
-            onClick={() => setForm({ open: true, editing: null })}
-            className="aspro-button aspro-button-primary"
-          >
-            ＋ {t('app.addServer')}
-          </button>
-        </div>
-      </header>
+
+            {/* Terminal Only Zen Mode */}
+            <button
+              type="button"
+              onClick={() => setZenMode(true)}
+              className="aspro-top-btn"
+              title={`${t('app.zenMode')} (F10)`}
+              aria-label={t('app.zenMode')}
+            >
+              <span>🗖</span>
+              <span className="hidden md:inline text-xs">{t('app.zenMode')}</span>
+              <kbd className="hidden 2xl:inline text-[10px] text-faint px-1 rounded bg-black/40 border border-line/40">
+                F10
+              </kbd>
+            </button>
+
+            {/* Application Fullscreen */}
+            <button
+              type="button"
+              onClick={toggleAppFullscreen}
+              className={`aspro-top-btn ${isFullscreen ? 'active' : ''}`}
+              title={`${t('app.fullscreen')} (F11)`}
+              aria-label={t('app.fullscreen')}
+            >
+              <span>{isFullscreen ? '⤓' : '⛶'}</span>
+              <span className="hidden md:inline text-xs">{t('app.fullscreen')}</span>
+              <kbd className="hidden 2xl:inline text-[10px] text-faint px-1 rounded bg-black/40 border border-line/40">
+                F11
+              </kbd>
+            </button>
+
+            {/* Quick Settings Button */}
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="aspro-top-btn aspro-top-btn-icon"
+              title={`${t('app.settings')} (Ctrl + ,)`}
+              aria-label={t('app.settings')}
+            >
+              <span>⚙</span>
+            </button>
+
+            {/* Lock App (if enabled) */}
+            {appLockEnabled && (
+              <button
+                onClick={() => void window.ssh.appLock.relock()}
+                className="aspro-top-btn aspro-top-btn-icon text-amber hover:text-amber"
+                title={t('app.lockNow')}
+                aria-label={t('app.lockNow')}
+              >
+                🔒
+              </button>
+            )}
+          </div>
+        </header>
+      )}
 
       <div
         className={`aspro-workspace ${resizingLeft ? 'is-resizing' : ''}`}
         style={{
-          gridTemplateColumns: leftCollapsed
-            ? '78px minmax(420px, 1fr)'
-            : `78px ${leftWidth}px minmax(420px, 1fr)`,
+          gridTemplateColumns: zenMode
+            ? 'minmax(0, 1fr)'
+            : leftCollapsed
+              ? 'var(--aspro-rail-width, 78px) minmax(0, 1fr)'
+              : `var(--aspro-rail-width, 78px) minmax(240px, ${leftWidth}px) minmax(0, 1fr)`,
+          gap: zenMode ? '0' : undefined,
         }}
       >
-        <aside className="aspro-rail" aria-label={t('nav.connections')}>
+        {!zenMode && (
+          <aside className="aspro-rail" aria-label={t('nav.connections')}>
           <div className="aspro-rail-fixed-top">
             <RailButton
               icon={leftCollapsed ? '⇥' : '⇤'}
@@ -1012,8 +1172,9 @@ export default function App() {
           <div className="flex-1" />
           <RailButton icon="⚙" label={t('nav.settings')} onClick={() => setSettingsOpen(true)} />
         </aside>
+        )}
 
-        {!leftCollapsed && (
+        {!zenMode && !leftCollapsed && (
         <aside className="aspro-left-dock">
           <div className="relative min-h-0 flex-1 overflow-hidden">
             <div
@@ -1209,7 +1370,25 @@ export default function App() {
         </aside>
         )}
 
-        <main className="aspro-center">
+        <main
+          className={`aspro-center ${zenMode ? 'aspro-zen-mode' : ''}`}
+          onPointerDownCapture={handleWorkspaceInteraction}
+        >
+          {zenMode && (
+            <div className="aspro-zen-badge-container">
+              <button
+                type="button"
+                onClick={() => setZenMode(false)}
+                className="aspro-zen-badge-btn"
+                title={t('app.zenExit')}
+              >
+                <span className="text-sm">⤢</span>
+                <span>{t('app.zenExit')}</span>
+                <kbd className="aspro-zen-kbd">F10 / Esc</kbd>
+              </button>
+            </div>
+          )}
+
           <div className="aspro-workspace-tabs">
             <button
               className={`aspro-workspace-tab ${dashboardActive ? 'active' : ''}`}
@@ -1897,7 +2076,8 @@ export default function App() {
 
       </div>
 
-      <footer className="aspro-statusbar">
+      {!zenMode && (
+        <footer className="aspro-statusbar">
         <span className="text-orange">◇</span>
         {showDashboard ? (
           <>
@@ -2020,6 +2200,7 @@ export default function App() {
         ) : null}
         <span className="ml-auto text-[12px] text-faint">ASProOps Desktop</span>
       </footer>
+      )}
 
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
 
@@ -2152,9 +2333,11 @@ function RailButton({
       className={`aspro-rail-button ${active ? 'active' : ''} ${muted ? 'muted' : ''}`}
       onClick={onClick}
       disabled={!onClick && muted}
+      title={label}
+      aria-label={label}
     >
-      <span className="text-xl">{icon}</span>
-      <span>{label}</span>
+      <span className="text-xl shrink-0">{icon}</span>
+      <span className="aspro-rail-label text-[10px] truncate max-w-full">{label}</span>
     </button>
   );
 }

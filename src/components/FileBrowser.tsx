@@ -194,9 +194,29 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
   const [entries, setEntries] = useState<RemoteFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>('name');
-  const [ascending, setAscending] = useState(true);
-  const [showHidden, setShowHidden] = useState(false);
+
+  // Persistent preferences
+  const [sortKey, setSortKey] = useState<SortKey>(() => {
+    const saved = localStorage.getItem('asproops.sftpSortKey');
+    return (saved as SortKey) || 'name';
+  });
+  const [ascending, setAscending] = useState<boolean>(() => {
+    const raw = localStorage.getItem('asproops.sftpSortAsc');
+    return raw !== null ? raw === 'true' : true;
+  });
+  const [showHidden, setShowHidden] = useState<boolean>(() => {
+    return localStorage.getItem('asproops.sftpShowHidden') === 'true';
+  });
+
+  // Navigation history
+  const navHistoryRef = useRef<string[]>(['/']);
+  const navIndexRef = useRef<number>(0);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [canGoForward, setCanGoForward] = useState(false);
+
+  // Search filter ref
+  const filterInputRef = useRef<HTMLInputElement>(null);
+
   const [filter, setFilter] = useState('');
   const [transfers, setTransfers] = useState<Record<string, TransferProgress>>({});
   const [edits, setEdits] = useState<Record<string, EditStatus>>({});
@@ -286,7 +306,7 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
   }, [columns]);
 
   const load = useCallback(
-    async (target: string) => {
+    async (target: string, pushHistory = true) => {
       setLoading(true);
       setError(null);
       try {
@@ -306,6 +326,18 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
         setPath(resolvedTarget);
         setPathInput(resolvedTarget);
         setFilter('');
+
+        if (pushHistory) {
+          if (navHistoryRef.current[navIndexRef.current] !== resolvedTarget) {
+            navHistoryRef.current = [
+              ...navHistoryRef.current.slice(0, navIndexRef.current + 1),
+              resolvedTarget,
+            ];
+            navIndexRef.current = navHistoryRef.current.length - 1;
+            setCanGoBack(navIndexRef.current > 0);
+            setCanGoForward(false);
+          }
+        }
       } catch (err) {
         setError((err as Error).message);
       } finally {
@@ -314,6 +346,31 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
     },
     [sessionId, homePath],
   );
+
+  const handleGoBack = useCallback(() => {
+    if (navIndexRef.current > 0) {
+      navIndexRef.current -= 1;
+      setCanGoBack(navIndexRef.current > 0);
+      setCanGoForward(navIndexRef.current < navHistoryRef.current.length - 1);
+      const prevPath = navHistoryRef.current[navIndexRef.current];
+      void load(prevPath, false);
+    }
+  }, [load]);
+
+  const handleGoForward = useCallback(() => {
+    if (navIndexRef.current < navHistoryRef.current.length - 1) {
+      navIndexRef.current += 1;
+      setCanGoBack(navIndexRef.current > 0);
+      setCanGoForward(navIndexRef.current < navHistoryRef.current.length - 1);
+      const nextPath = navHistoryRef.current[navIndexRef.current];
+      void load(nextPath, false);
+    }
+  }, [load]);
+
+  const handleToggleHidden = (next: boolean) => {
+    setShowHidden(next);
+    localStorage.setItem('asproops.sftpShowHidden', String(next));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -395,20 +452,6 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
     setSelectionAnchor(null);
   }, [path]);
 
-  useEffect(() => {
-    if (!contextMenu && !columnsMenuOpen && selected.size === 0) return;
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      if (contextMenu) setContextMenu(null);
-      else if (columnsMenuOpen) setColumnsMenuOpen(false);
-      else setSelected(new Set());
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [contextMenu, columnsMenuOpen, selected.size]);
-
   const visible = useMemo(() => {
     const needle = filter.trim().toLowerCase();
     let result = showHidden ? entries : entries.filter((e) => !e.name.startsWith('.'));
@@ -454,12 +497,103 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
   };
 
   const handleSort = (key: SortKey) => {
-    if (key === sortKey) setAscending((prev) => !prev);
-    else {
+    let nextAsc = true;
+    if (key === sortKey) {
+      nextAsc = !ascending;
+      setAscending(nextAsc);
+    } else {
       setSortKey(key);
       setAscending(true);
+      localStorage.setItem('asproops.sftpSortKey', key);
     }
+    localStorage.setItem('asproops.sftpSortAsc', String(nextAsc));
   };
+
+  // Global SFTP keyboard shortcuts
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const targetTag = (event.target as HTMLElement)?.tagName?.toLowerCase();
+      const isInput = targetTag === 'input' || targetTag === 'textarea';
+
+      if (event.key === 'Escape') {
+        if (contextMenu) setContextMenu(null);
+        else if (columnsMenuOpen) setColumnsMenuOpen(false);
+        else setSelected(new Set());
+        return;
+      }
+
+      // F5 -> Reload directory
+      if (event.key === 'F5') {
+        event.preventDefault();
+        void load(path, false);
+        return;
+      }
+
+      // Ctrl+H -> Toggle hidden files
+      if ((event.ctrlKey || event.metaKey) && (event.key === 'h' || event.key === 'H')) {
+        event.preventDefault();
+        handleToggleHidden(!showHidden);
+        return;
+      }
+
+      // When not typing in an input/textarea
+      if (!isInput) {
+        // Alt+Left -> Back
+        if (event.altKey && event.key === 'ArrowLeft') {
+          event.preventDefault();
+          handleGoBack();
+          return;
+        }
+
+        // Alt+Right -> Forward
+        if (event.altKey && event.key === 'ArrowRight') {
+          event.preventDefault();
+          handleGoForward();
+          return;
+        }
+
+        // Alt+Up -> Up to parent folder
+        if (event.altKey && event.key === 'ArrowUp') {
+          event.preventDefault();
+          if (path !== '/') void load(parentOf(path));
+          return;
+        }
+
+        // F2 -> Rename selected file
+        if (event.key === 'F2' && selectedFiles.length === 1) {
+          event.preventDefault();
+          setRenaming({ file: selectedFiles[0], value: selectedFiles[0].name });
+          return;
+        }
+
+        // Delete -> Delete selected file(s)
+        if (event.key === 'Delete' && selectedFiles.length > 0) {
+          event.preventDefault();
+          setPendingDelete(selectedFiles);
+          return;
+        }
+
+        // Ctrl+F -> Focus filter input
+        if ((event.ctrlKey || event.metaKey) && (event.key === 'f' || event.key === 'F')) {
+          event.preventDefault();
+          filterInputRef.current?.focus();
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [
+    contextMenu,
+    columnsMenuOpen,
+    selectedFiles,
+    path,
+    showHidden,
+    handleGoBack,
+    handleGoForward,
+    load,
+  ]);
 
   const toggleColumnVisibility = (id: ColumnId) => {
     setColumns((prev) =>
@@ -853,9 +987,25 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
       <div className="aspro-file-toolbar border-b border-line">
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <button
+            onClick={handleGoBack}
+            disabled={!canGoBack}
+            title="Kembali (Alt+Left)"
+            className="aspro-file-icon disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            ←
+          </button>
+          <button
+            onClick={handleGoForward}
+            disabled={!canGoForward}
+            title="Maju (Alt+Right)"
+            className="aspro-file-icon disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            →
+          </button>
+          <button
             onClick={() => void load(parentOf(path))}
             disabled={path === '/'}
-            title={t('sftp.up')}
+            title={`${t('sftp.up')} (Alt+Up)`}
             className="aspro-file-icon"
           >
             ↑
@@ -915,7 +1065,7 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
             t={t}
           />
 
-          <button onClick={() => void load(path)} title={t('sftp.reload')} className="aspro-file-icon">
+          <button onClick={() => void load(path, false)} title={`${t('sftp.reload')} (F5)`} className="aspro-file-icon">
             ⟳
           </button>
         </div>
@@ -929,11 +1079,11 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
             {followTerminal ? t('sftp.followOn') : t('sftp.followOff')}
           </button>
 
-          <label className="aspro-hidden-toggle">
+          <label className="aspro-hidden-toggle" title="Tampilkan Berkas Tersembunyi (Ctrl+H)">
             <input
               type="checkbox"
               checked={showHidden}
-              onChange={(e) => setShowHidden(e.target.checked)}
+              onChange={(e) => handleToggleHidden(e.target.checked)}
             />
             <span>{t('sftp.hidden')}</span>
           </label>
@@ -1045,9 +1195,10 @@ export function FileBrowser({ sessionId }: FileBrowserProps) {
         <div className="aspro-file-filter">
           <span>⌕</span>
           <input
+            ref={filterInputRef}
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
-            placeholder={t('sftp.filterPlaceholder')}
+            placeholder={`${t('sftp.filterPlaceholder')} (Ctrl+F)`}
             aria-label={t('sftp.filterLabel')}
           />
         </div>
@@ -2301,7 +2452,7 @@ function FileContextMenu({
   onNewFolder: () => void;
   onNewFile: () => void;
   onReload: () => void;
-  onCopyPath: () => void;
+  onCopyPath: (targetPath?: string) => void;
   t: TFunc;
 }) {
   const single = state.files.length === 1 ? state.files[0] : null;
@@ -2465,7 +2616,12 @@ function FileContextMenu({
         <MenuItem
           onClick={() => {
             onClose();
-            onCopyPath();
+            const toCopy = single
+              ? single.path
+              : state.files.length > 0
+              ? state.files.map((f) => f.path).join('\n')
+              : undefined;
+            onCopyPath(toCopy);
           }}
         >
           <span className="mr-2 text-faint">📋</span>

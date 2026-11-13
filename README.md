@@ -12,7 +12,7 @@
 
 ASProOps adalah aplikasi desktop berbasis Electron yang dirancang sebagai satu workspace untuk pekerjaan administrasi server dan operasi developer. Satu aplikasi menangani sesi SSH, terminal lokal Windows, distro WSL, browser file SFTP, remote editing, monitoring resource server, sampai alur DevOps lengkap — project profile, live log viewer, service manager, Docker, cron job, status Git, deploy template dengan riwayat/rollback, provisioning server, port forwarding, dan editor `.env` — tanpa harus berpindah-pindah tool.
 
-> **Status project:** aktif dikembangkan. Versi source saat ini `1.3.0`. Installer Windows (`.exe`) sudah bisa dibuat lewat `npm run dist:win`, tapi belum ditandatangani (code signing) dan belum punya auto-update (unduh+pasang otomatis) — pengecekan versi terbaru sudah tersedia lewat **Settings → Tentang**, lihat [Installer / Release Binary](#installer--release-binary).
+> **Status project:** aktif dikembangkan. Versi source saat ini `1.4.0`. Installer Windows (`.exe`) sudah bisa dibuat lewat `npm run dist:win`, tapi belum ditandatangani (code signing) dan belum punya auto-update (unduh+pasang otomatis) — pengecekan versi terbaru sudah tersedia lewat **Settings → Tentang**, lihat [Installer / Release Binary](#installer--release-binary).
 
 ---
 
@@ -23,14 +23,19 @@ ASProOps adalah aplikasi desktop berbasis Electron yang dirancang sebagai satu w
 - Terminal SSH interaktif berbasis `ssh2` + xterm.js, dengan copy/paste (Ctrl+Shift+C/V, klik kanan) dan multi-tab per server.
 - Terminal lokal: PowerShell 7, Windows PowerShell, Command Prompt, dan WSL (deteksi distro otomatis).
 - **Saved Local Projects**: simpan folder project lokal, buka terminal langsung pada project tersebut, dan jalankan OMP, Codex, atau Claude dari workspace project tanpa hardcode path executable.
+- **Mode Layar Penuh & Zen Mode**: Layar penuh aplikasi (`F11`) serta **Mode Fokus Terminal (Zen Mode, `F10` / `Ctrl+Shift+F`)** yang meluaskan terminal 100% tanpa distraksi bar dan status, dengan tombol keluar mengambang (`Esc` / `F10`).
+- **Auto-hide Sidebar**: Sidebar otomatis menciut saat Anda fokus mengetik di terminal atau mengeklik workspace tengah, dapat diaktifkan/dinonaktifkan lewat header (`📌` / `⇤⇥`) atau Pengaturan.
 - Password, private key, dan SSH Agent authentication; jump host / bastion.
 - Import `~/.ssh/config`, verifikasi host key melalui `known_hosts`.
 - Quick Connect (Ctrl+K) — cari dan connect ke server tersimpan tanpa menyentuh mouse.
 - Grouping server dengan drag-and-drop, label warna per server (produksi/staging/dev/infrastruktur).
+- Split terminal (vertikal & horizontal) dengan kontrol toolbar yang proporsional dan ringkas.
 
 **SFTP & file**
 
 - Browser file SFTP dengan kolom yang bisa di-resize, diurutkan ulang, dan disembunyikan.
+- **Quick Code Editor & Autoformatter**: Editor berkas teks mandiri dengan pewarnaan sintaks ala VS Code (PHP, JavaScript, TypeScript, Python, JSON, YAML, SQL, Shell/Bash, HTML, CSS, Markdown, Dockerfile), auto-indent Tab/Shift-Tab, auto-close quotes/brackets, pencarian (`Ctrl+F`), lompat baris (`Ctrl+G`), word wrap, dan autoformat kode via Prettier (`Ctrl+Shift+I`).
+- Navigasi folder SFTP intuitif: tombol Kembali (`←`), Maju (`→`), Naik (`↑`), pintasan reload (`F5`), toggle hidden files (`Ctrl+H`), rename (`F2`), dan copy path absolut.
 - Upload, download, remote edit pakai editor lokal, follow-terminal untuk prompt Linux umum.
 - Action bar (edit/download/rename/info/delete) di posisi tetap — tidak mendorong daftar file saat dipakai.
 
@@ -38,6 +43,7 @@ ASProOps adalah aplikasi desktop berbasis Electron yang dirancang sebagai satu w
 
 - CPU, RAM, storage, network throughput, top process, dan uptime server Linux (baca `/proc`).
 - Ringkasan CPU/RAM/DISK/NET langsung di status bar bawah untuk server yang sedang aktif.
+- Quick filter stack proses (Semua, PHP, Node, Python, Nginx, Docker, Database) dan fitur jeda monitor tanpa menghapus riwayat grafik.
 
 **DevOps workspace**
 
@@ -48,7 +54,7 @@ ASProOps adalah aplikasi desktop berbasis Electron yang dirancang sebagai satu w
 - **Docker Manager** — daftar container (`docker ps -a`), start/stop/restart, dan live log viewer per container.
 - **Cron Job Manager** — baca/tulis crontab milik user SSH yang login: tambah/ubah/hapus/nonaktifkan job, dengan parser yang tahan terhadap komentar dokumentasi bawaan `/etc/crontab`.
 - **Server Provisioning** — jalankan template setup server (install Docker, Node.js/NVM, PHP+Composer, MySQL, Nginx, update sistem) satu klik di server manapun, dengan output live.
-- **Port Forwarding** — local (`-L`) dan remote (`-R`) SSH tunnel, kelola beberapa aturan tersimpan per server dengan status tunnel real-time.
+- **Port Forwarding** — local (`-L`) dan remote (`-R`) SSH tunnel, kelola beberapa aturan tersimpan per server dengan status tunnel real-time dan badge indikator ringkas.
 - **Git Panel** — status branch, ahead/behind, file berubah, commit terakhir, fetch/pull langsung dari path project.
 - **Deploy Template, riwayat, & rollback** — rangkaian langkah deploy yang bisa dipasangkan ke banyak server; enam template bawaan (CodeIgniter 4, Laravel, Vue, NestJS, plus template Provisioning PHP/MySQL/Nginx/Docker/Node.js) tersedia langsung. Eksekusi berhenti otomatis begitu satu langkah gagal, dengan output live dan tombol batal. Setiap run tercatat di riwayat per project (commit git, sukses/gagal), dan bisa di-**rollback** ke commit sebelumnya satu klik.
 
@@ -56,10 +62,11 @@ ASProOps adalah aplikasi desktop berbasis Electron yang dirancang sebagai satu w
 
 - **Log Login SSH server** — lihat riwayat login sungguhan yang dicatat sshd (`journalctl`/`auth.log`), mencakup semua klien (bukan cuma dari ASProOps). Mode live atau lihat tanggal lain (hari ini/kemarin/7 hari/tanggal manual), dengan eskalasi akses otomatis (langsung → `sudo -n` → prompt password sudo kalau perlu).
 - Kunci aplikasi (PIN) opsional, dengan kunci otomatis setelah sekian menit tanpa aktivitas (bisa dimatikan), plus tombol kunci manual di header.
+- Header yang bersih dan rapi: kontrol cepat Pengaturan (`Ctrl+,`), Layar Penuh (`F11`), Fokus Terminal (`F10`), Auto-hide Sidebar, dan status server aktif.
+- Antarmuka responsif menyeluruh (multi-tier breakpoints: 1400px, 1200px, 960px, 768px) yang nyaman di monitor besar maupun laptop.
 - Session persistence dan kredensial terenkripsi menggunakan Electron `safeStorage`.
-- Preferensi SSH (timeout, keepalive, auto-reconnect), Terminal (font, scrollback, cursor), dan SFTP (folder unduhan, kebijakan konflik) bisa diatur di Settings.
+- Preferensi SSH (timeout, keepalive, auto-reconnect), Terminal (font, scrollback, cursor), Workspace (Auto-hide sidebar, density, format judul tab), dan SFTP (folder unduhan, kebijakan konflik) bisa diatur di Settings.
 - **Cek Update** — Settings → Tentang menampilkan versi aplikasi yang sedang berjalan dan bisa mengecek rilis terbaru di GitHub Releases, dengan link langsung ke halaman unduhan kalau ada versi baru.
-- Sidebar kiri bisa disembunyikan/ditampilkan untuk memperluas area kerja.
 - Bahasa Indonesia dan English (default: English).
 
 <!-- ---

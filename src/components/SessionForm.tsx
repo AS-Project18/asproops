@@ -91,8 +91,8 @@ export function SessionForm({ existing, candidates, onSave, onCancel }: SessionF
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-6">
-      <div className="aspro-dialog max-h-full w-full max-w-md overflow-y-auto shadow-2xl">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-3 sm:p-6">
+      <div className="aspro-dialog max-h-[92vh] w-full max-w-md overflow-y-auto shadow-2xl">
         <h2 className="border-b border-line px-6 py-4 text-base font-semibold text-fg">
           {existing ? `Ubah ${existing.name}` : 'Tambah server'}
         </h2>
@@ -186,7 +186,7 @@ export function SessionForm({ existing, candidates, onSave, onCancel }: SessionF
             </p>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Grup">
               <input
                 list="asproops-groups-list"

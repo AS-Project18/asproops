@@ -12,7 +12,7 @@
 
 ASProOps is an Electron-based desktop application designed as a single workspace for server administration and developer operations. One app handles SSH sessions, local Windows terminals, WSL distros, an SFTP file browser, remote editing, server resource monitoring, and a full DevOps flow — project profiles, live log viewer, service manager, Docker, cron jobs, Git status, deploy templates with history/rollback, server provisioning, port forwarding, and a `.env` editor — without switching between tools.
 
-> **Project status:** actively developed. Current source version `1.3.0`. A Windows installer (`.exe`) can already be built via `npm run dist:win`, but it isn't code-signed yet and has no auto-update (automatic download+install) — checking for the latest version is available under **Settings → About**, see [Installer / Release Binary](#installer--release-binary).
+> **Project status:** actively developed. Current source version `1.4.0`. A Windows installer (`.exe`) can already be built via `npm run dist:win`, but it isn't code-signed yet and has no auto-update (automatic download+install) — checking for the latest version is available under **Settings → About**, see [Installer / Release Binary](#installer--release-binary).
 
 ---
 
@@ -27,10 +27,15 @@ ASProOps is an Electron-based desktop application designed as a single workspace
 - Import `~/.ssh/config`, host key verification via `known_hosts`.
 - Quick Connect (Ctrl+K) — search and connect to a saved server without touching the mouse.
 - Drag-and-drop server grouping, per-server color labels (production/staging/dev/infrastructure).
+- **Fullscreen & Zen Focus Mode**: App-wide Fullscreen (`F11`) and distraction-free **Terminal Focus / Zen Mode (`F10` / `Ctrl+Shift+F`)** expanding the terminal 100% across the viewport with a floating exit badge (`Esc` / `F10`).
+- **Auto-hide Sidebar**: Automatically collapses the sidebar when focusing or typing in the terminal or main workspace, toggleable via topbar (`📌` / `⇤⇥`) or Settings.
+- Split terminal (vertical & horizontal) with compact, balanced toolbar controls.
 
 **SFTP & files**
 
 - SFTP file browser with resizable, reorderable, and hideable columns.
+- **Quick Code Editor & Autoformatter**: Built-in code editor with VS Code-like syntax highlighting (PHP, JavaScript, TypeScript, Python, JSON, YAML, SQL, Shell/Bash, HTML, CSS, Markdown, Dockerfile), multi-line Tab/Shift-Tab indent, auto-closing quotes/brackets, text search (`Ctrl+F`), Go to line (`Ctrl+G`), word wrap, and built-in Prettier code formatting (`Ctrl+Shift+I`).
+- Intuitive SFTP folder navigation: Back (`←`), Forward (`→`), Up (`↑`), reload (`F5`), toggle hidden files (`Ctrl+H`), rename (`F2`), and exact path copying.
 - Upload, download, remote edit with your local editor, follow-terminal for common Linux prompts.
 - A fixed-position action bar (edit/download/rename/info/delete) that never shifts the file list while you use it.
 
@@ -38,6 +43,7 @@ ASProOps is an Electron-based desktop application designed as a single workspace
 
 - CPU, RAM, storage, network throughput, top processes, and uptime for Linux servers (reads `/proc`).
 - A live CPU/RAM/DISK/NET summary right in the bottom status bar for the currently active server.
+- Quick process stack filters (All, PHP, Node, Python, Nginx, Docker, Database) and non-destructive graph pausing.
 
 **DevOps workspace**
 
@@ -48,7 +54,7 @@ ASProOps is an Electron-based desktop application designed as a single workspace
 - **Docker Manager** — list containers (`docker ps -a`), start/stop/restart, and a live per-container log viewer.
 - **Cron Job Manager** — read/write the crontab belonging to the logged-in SSH user: add/edit/delete/disable jobs, with a parser resilient to the default documentation comments shipped in `/etc/crontab`.
 - **Server Provisioning** — run one-click server setup templates (install Docker, Node.js/NVM, PHP+Composer, MySQL, Nginx, system updates) on any server, with live output.
-- **Port Forwarding** — local (`-L`) and remote (`-R`) SSH tunnels, manage several saved rules per server with real-time tunnel status.
+- **Port Forwarding** — local (`-L`) and remote (`-R`) SSH tunnels, manage several saved rules per server with real-time tunnel status and compact counter badges.
 - **Git Panel** — branch status, ahead/behind, changed files, last commit, fetch/pull directly from a project's path.
 - **Deploy Template, history, & rollback** — a sequence of deploy steps that can be attached to many servers; six built-in templates (CodeIgniter 4, Laravel, Vue, NestJS, plus PHP/MySQL/Nginx/Docker/Node.js provisioning templates) are available out of the box. Execution stops automatically the moment a step fails, with live output and a cancel button. Every run is recorded per project (git commit, success/failure), and can be **rolled back** to a previous commit in one click.
 
@@ -56,10 +62,11 @@ ASProOps is an Electron-based desktop application designed as a single workspace
 
 - **Server SSH login log** — see the real login history recorded by sshd itself (`journalctl`/`auth.log`), covering every client (not just ASProOps). Live mode or browse other dates (today/yesterday/7 days/pick a date), with automatic access escalation (direct → `sudo -n` → sudo password prompt if needed).
 - Optional application lock (PIN), with automatic re-lock after a configurable period of inactivity (can be turned off), plus a manual lock button in the header.
+- Clean and streamlined header: Quick settings (`Ctrl+,`), Fullscreen (`F11`), Terminal Focus (`F10`), Auto-hide Sidebar toggle, and active server stats.
+- Comprehensive responsive UI across multiple display breakpoints (1400px, 1200px, 960px, 768px).
 - Session persistence and encrypted credentials via Electron `safeStorage`.
-- SSH preferences (timeout, keepalive, auto-reconnect), Terminal (font, scrollback, cursor), and SFTP (download folder, conflict policy) are all configurable in Settings.
+- Preferences for SSH (timeout, keepalive, auto-reconnect), Terminal (font, scrollback, cursor), Workspace (Auto-hide sidebar, density, tab title format), and SFTP (download folder, conflict policy) in Settings.
 - **Update check** — Settings → About shows the running app version and can check GitHub Releases for a newer one, with a direct link to the download page if there is one.
-- The left sidebar can be collapsed/shown to reclaim workspace width.
 - Indonesian and English (default: English).
 
 <!-- ---
