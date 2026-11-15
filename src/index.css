@@ -273,35 +273,114 @@ button:disabled {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 8px 5px;
-  border: 1px solid rgba(108, 44, 136, .27);
-  border-radius: 10px;
-  background: rgba(8, 4, 12, .86);
+  border: 1px solid rgba(138, 58, 173, 0.24);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(16, 8, 26, 0.94) 0%, rgba(9, 4, 15, 0.96) 100%);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(147, 51, 234, 0.22) transparent;
 }
+
+.aspro-rail::-webkit-scrollbar {
+  width: 3px;
+}
+.aspro-rail::-webkit-scrollbar-thumb {
+  background: rgba(147, 51, 234, 0.25);
+  border-radius: 3px;
+}
+.aspro-rail::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 85, 247, 0.45);
+}
+
 .aspro-rail-button {
-  min-height: 70px;
+  position: relative;
+  min-height: 64px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
+  margin-bottom: 3px;
+  padding: 6px 3px;
   border: 1px solid transparent;
-  border-radius: 8px;
-  color: #746b7b;
-  font-size: 11px;
+  border-radius: 10px;
+  color: #8b8095;
+  cursor: pointer;
+  background: transparent;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+.aspro-rail-icon-wrap {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
 .aspro-rail-button:hover {
-  color: #bfb4c5;
-  background: rgba(100, 39, 127, .08);
+  color: #e2d9ec;
+  background: rgba(138, 58, 173, 0.08);
 }
+
+.aspro-rail-button:hover .aspro-rail-icon-wrap {
+  transform: translateY(-1.5px);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
 .aspro-rail-button.active {
-  color: #ffb43b;
-  border-color: #c56706;
-  background: linear-gradient(180deg, rgba(100, 42, 8, .28), rgba(70, 22, 3, .14));
-  box-shadow: 0 0 20px rgba(255, 125, 0, .13), inset 0 0 18px rgba(255, 122, 0, .06);
+  color: #f8fafc;
+  background: linear-gradient(90deg, rgba(168, 85, 247, 0.14) 0%, rgba(168, 85, 247, 0.03) 100%);
+  border-color: rgba(168, 85, 247, 0.25);
 }
+
+.aspro-rail-button.active .aspro-rail-icon-wrap {
+  background: rgba(168, 85, 247, 0.18);
+  border-color: rgba(192, 132, 252, 0.45);
+  box-shadow: 0 0 16px rgba(168, 85, 247, 0.35), inset 0 0 8px rgba(192, 132, 252, 0.15);
+  transform: translateY(-1px);
+}
+
+.aspro-rail-active-indicator {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3.5px;
+  height: 26px;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(180deg, #c084fc 0%, #38bdf8 100%);
+  box-shadow: 0 0 8px rgba(192, 132, 252, 0.7);
+}
+
+.aspro-rail-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  line-height: 1.1;
+  transition: color 0.15s ease;
+}
+
+.aspro-rail-button.active .aspro-rail-label {
+  color: #f1f5f9;
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(192, 132, 252, 0.4);
+}
+
 .aspro-rail-button.muted {
   color: #4f4755;
+  opacity: 0.5;
 }
 
 .aspro-server-explorer {
@@ -757,11 +836,15 @@ button:disabled {
     font-size: 11px;
   }
   .aspro-rail {
-    padding: 6px 4px;
+    padding: 6px 3px;
   }
   .aspro-rail-button {
-    min-height: 58px;
+    min-height: 56px;
     font-size: 10px;
+  }
+  .aspro-rail-icon-wrap {
+    width: 32px;
+    height: 32px;
   }
 }
 
@@ -809,9 +892,13 @@ button:disabled {
     padding: 4px 2px;
   }
   .aspro-rail-button {
-    min-height: 50px;
+    min-height: 48px;
     font-size: 9px;
     gap: 3px;
+  }
+  .aspro-rail-icon-wrap {
+    width: 28px;
+    height: 28px;
   }
 }
 
@@ -850,6 +937,10 @@ button:disabled {
   .aspro-rail-button {
     min-height: 42px;
     justify-content: center;
+  }
+  .aspro-rail-icon-wrap {
+    width: 30px;
+    height: 30px;
   }
   .aspro-workspace-tab {
     min-width: 65px;
@@ -2350,19 +2441,6 @@ button:disabled {
 .aspro-local-section-heading.cli {
   margin-top: 12px;
 }
-.aspro-local-project-actions.registry {
-  grid-template-columns: minmax(64px, .65fr) minmax(0, 1.5fr) minmax(54px, .55fr);
-}
-.aspro-local-project-actions.registry select {
-  min-width: 0;
-  min-height: 25px;
-  border: 1px solid rgba(122, 48, 147, .24);
-  border-radius: 5px;
-  outline: none;
-  background: rgba(4, 2, 7, .65);
-  color: #ad9bb5;
-  font-size: 8px;
-}
 .aspro-local-cli-form small {
   display: block;
   margin-top: 3px;
@@ -2684,14 +2762,82 @@ button:disabled {
 }
 
 .aspro-local-project-actions.registry {
-  grid-template-columns: minmax(88px, 1.2fr) minmax(74px, 1fr) 40px;
+  display: flex;
+  align-items: stretch;
   gap: 4px;
   margin-top: 5px;
 }
 
-.aspro-local-project-actions.registry > button,
-.aspro-local-project-actions.registry > select {
+.aspro-local-project-actions.registry .aspro-local-terminal-button {
+  flex: 1 1 0%;
+  min-width: 60px;
   min-height: 27px;
+  padding: 2px 6px;
+}
+
+.aspro-local-cli-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.aspro-local-cli-btn {
+  position: relative;
+  width: 27px;
+  height: 27px;
+  min-width: 27px;
+  min-height: 27px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid rgba(122, 48, 147, .24);
+  border-radius: 5px;
+  background: rgba(52, 19, 65, .25);
+  color: #ad9bb5;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.aspro-local-cli-btn:hover:not(:disabled) {
+  border-color: rgba(194, 80, 234, .55);
+  background: rgba(78, 26, 98, .45);
+  transform: translateY(-1px);
+}
+
+.aspro-local-cli-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.aspro-local-cli-btn.preferred:not(:disabled) {
+  border-color: rgba(194, 80, 234, .65);
+  background: rgba(85, 30, 105, .38);
+  box-shadow: 0 0 6px rgba(194, 80, 234, .25);
+}
+
+.aspro-local-cli-btn:disabled {
+  cursor: not-allowed;
+  opacity: .32;
+  border-color: rgba(122, 48, 147, .12);
+  background: rgba(30, 12, 38, .2);
+}
+
+.aspro-local-cli-btn.unavailable:not(:disabled) {
+  opacity: .45;
+}
+
+.aspro-local-cli-pref-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #c084fc;
+  box-shadow: 0 0 4px #c084fc;
+  pointer-events: none;
 }
 
 .aspro-local-terminal-button {
@@ -2762,10 +2908,23 @@ button:disabled {
   z-index: 4;
   top: -8px;
   flex: 0 0 auto;
-  margin: -8px -5px 4px;
-  padding: 8px 5px 4px;
-  border-bottom: 1px solid rgba(108, 44, 136, .18);
-  background: rgba(8, 4, 12, .97);
+  margin: -8px -5px 6px;
+  padding: 8px 5px 6px;
+  border-bottom: 1px solid rgba(138, 58, 173, 0.18);
+  background: rgba(12, 6, 20, 0.98);
+}
+
+.aspro-rail-fixed-top .aspro-rail-button {
+  min-height: 44px;
+  margin-bottom: 0;
+  padding: 4px;
+  gap: 5px;
+}
+
+.aspro-rail-fixed-top .aspro-rail-icon-wrap {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
 }
 
 .aspro-server-ops {

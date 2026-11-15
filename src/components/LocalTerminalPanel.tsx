@@ -20,6 +20,7 @@ import type {
 import { useI18n } from '../i18n';
 import { useWorkspacePrefs } from '../workspacePrefs';
 import { ProjectContextDialog } from './ProjectContextDialog';
+import { CliIcon } from './CliIcon';
 
 
 
@@ -183,7 +184,10 @@ export function LocalTerminalPanel({
   const [projectLoading, setProjectLoading] = useState(true);
   const [projectDraft, setProjectDraft] = useState<ProjectDraft | null>(null);
   const [cliDraft, setCliDraft] = useState<CliDraft | null>(null);
-  const [cliSelection, setCliSelection] = useState<Record<string, string>>({});
+  const enabledCliProfiles = useMemo(
+    () => cliProfiles.filter((cli) => cli.enabled),
+    [cliProfiles],
+  );
   const [projectQuery, setProjectQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -193,11 +197,6 @@ export function LocalTerminalPanel({
   const [contextError, setContextError] = useState<string | null>(null);
   const [sectionLayout, setSectionLayout] = useState<LocalSectionLayout>(loadSectionLayout);
   const sectionStackRef = useRef<HTMLDivElement>(null);
-
-  const cliMap = useMemo(
-    () => new Map(cliProfiles.map((profile) => [profile.id, profile])),
-    [cliProfiles],
-  );
 
   const visibleProjects = useMemo(() => {
     const query = projectQuery.trim().toLowerCase();
@@ -709,13 +708,6 @@ export function LocalTerminalPanel({
                       profiles,
                       workspacePrefs.defaultShell,
                     );
-                    const selectedId =
-                      cliSelection[project.id] ??
-                      project.preferredCliProfileId ??
-                      cliProfiles.find((cli) => cli.enabled && cli.available)?.id ??
-                      cliProfiles.find((cli) => cli.enabled)?.id ??
-                      '';
-                    const selectedCli = selectedId ? cliMap.get(selectedId) : undefined;
 
                     return (
                       <article
@@ -827,6 +819,7 @@ export function LocalTerminalPanel({
 
                         <div className="aspro-local-project-actions registry">
                           <button
+                            type="button"
                             className="aspro-local-terminal-button"
                             disabled={!project.pathExists || !profile}
                             onClick={() => openProject(project)}
@@ -845,45 +838,41 @@ export function LocalTerminalPanel({
                               </small>
                             ) : null}
                           </button>
-                          <select
-                            value={selectedId}
-                            onChange={(event) =>
-                              setCliSelection((current) => ({
-                                ...current,
-                                [project.id]: event.target.value,
-                              }))
-                            }
-                            title={t('local.cliSelect')}
-                          >
-                            <option value="">{t('local.cliSelect')}</option>
-                            {cliProfiles.map((cli) => (
-                              <option key={cli.id} value={cli.id} disabled={!cli.enabled}>
-                                {cli.name} · {statusLabel(cli)}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            className={
-                              selectedCli && project.preferredCliProfileId === selectedCli.id
-                                ? 'preferred'
-                                : ''
-                            }
-                            disabled={
-                              !project.pathExists ||
-                              !profile ||
-                              !selectedCli ||
-                              !selectedCli.enabled ||
-                              !selectedCli.available
-                            }
-                            title={
-                              selectedCli?.available
-                                ? selectedCli.command
-                                : t('local.cliUnavailable')
-                            }
-                            onClick={() => selectedCli && openProject(project, selectedCli)}
-                          >
-                            {t('local.run')}
-                          </button>
+
+                          {enabledCliProfiles.length > 0 ? (
+                            <div className="aspro-local-cli-buttons">
+                              {enabledCliProfiles.map((cli) => {
+                                const isPreferred = project.preferredCliProfileId === cli.id;
+                                const canRun = Boolean(project.pathExists && profile && cli.available);
+                                const titleText = !project.pathExists
+                                  ? t('local.missing')
+                                  : !profile
+                                    ? t('local.noShellForProject')
+                                    : !cli.available
+                                      ? `${cli.name} (${statusLabel(cli)}) · ${t('local.cliUnavailable')}`
+                                      : `${isPreferred ? `★ [${t('local.preferredCli')}] ` : ''}${cli.name} (${statusLabel(cli)}) · ${[cli.command, ...cli.args].join(' ')}`;
+
+                                return (
+                                  <button
+                                    key={cli.id}
+                                    type="button"
+                                    className={`aspro-local-cli-btn ${isPreferred ? 'preferred' : ''} ${
+                                      cli.available ? 'available' : 'unavailable'
+                                    }`}
+                                    disabled={!canRun}
+                                    title={titleText}
+                                    aria-label={`${cli.name} · ${statusLabel(cli)}`}
+                                    onClick={() => openProject(project, cli)}
+                                  >
+                                    <CliIcon cli={cli} size={15} />
+                                    {isPreferred ? (
+                                      <span className="aspro-local-cli-pref-dot" aria-hidden="true" />
+                                    ) : null}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : null}
                         </div>
 
 
@@ -989,7 +978,10 @@ export function LocalTerminalPanel({
               <div className="aspro-local-cli-list">
                 {cliProfiles.map((cli) => (
                   <div key={cli.id} className="aspro-local-cli-row compact">
-                    <strong className="aspro-local-cli-name">{cli.name}</strong>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <CliIcon cli={cli} size={13} className="shrink-0" />
+                      <strong className="aspro-local-cli-name truncate">{cli.name}</strong>
+                    </div>
                     <span className={`aspro-local-cli-status ${cli.status}`}>
                       {statusLabel(cli)}
                     </span>

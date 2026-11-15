@@ -24,6 +24,20 @@ import { SshKeyManagerModal } from './components/SshKeyManagerModal';
 import { CommandPalette } from './components/CommandPalette';
 import { QuickSnippetsBar } from './components/QuickSnippetsBar';
 import { Dashboard } from './components/Dashboard';
+import {
+  NavAuthLogIcon,
+  NavCollapseIcon,
+  NavGitIcon,
+  NavLocalIcon,
+  NavMonitorIcon,
+  NavOpsIcon,
+  NavPortForwardIcon,
+  NavProjectsIcon,
+  NavProvisionIcon,
+  NavServersIcon,
+  NavSettingsIcon,
+  NavSftpIcon,
+} from './components/NavIcons';
 import { useI18n } from './i18n';
 import { useWorkspacePrefs } from './workspacePrefs';
 import { useSessions } from './hooks/useSessions';
@@ -1103,7 +1117,7 @@ export default function App() {
           <aside className="aspro-rail" aria-label={t('nav.connections')}>
           <div className="aspro-rail-fixed-top">
             <RailButton
-              icon={leftCollapsed ? '⇥' : '⇤'}
+              icon={<NavCollapseIcon collapsed={leftCollapsed} size={16} />}
               label={leftCollapsed ? t('nav.showSidebar') : t('nav.hideSidebar')}
               onClick={() => setLeftCollapsed((v) => !v)}
             />
@@ -1111,66 +1125,70 @@ export default function App() {
 
           <RailButton
             active={leftMode === 'local'}
-            icon=">_"
+            icon={<NavLocalIcon size={20} />}
             label={t('nav.local')}
             onClick={() => selectLeftMode('local')}
           />
           <RailButton
             active={leftMode === 'servers'}
-            icon="$_"
+            icon={<NavServersIcon size={20} />}
             label={t('nav.connections')}
             onClick={() => selectLeftMode('servers')}
           />
           <RailButton
             active={leftMode === 'files'}
-            icon="□"
+            icon={<NavSftpIcon size={20} />}
             label={t('nav.sftp')}
             onClick={() => selectLeftMode('files')}
           />
           <RailButton
             active={leftMode === 'monitor'}
-            icon="⌁"
+            icon={<NavMonitorIcon size={20} />}
             label={t('nav.monitor')}
             onClick={() => selectLeftMode('monitor')}
           />
           <RailButton
             active={leftMode === 'projects'}
-            icon="▣"
+            icon={<NavProjectsIcon size={20} />}
             label={t('nav.projects')}
             onClick={() => selectLeftMode('projects')}
           />
           <RailButton
             active={leftMode === 'git'}
-            icon="⎇"
+            icon={<NavGitIcon size={20} />}
             label={t('nav.git')}
             onClick={() => selectLeftMode('git')}
           />
           <RailButton
             active={leftMode === 'ops'}
-            icon="▦"
+            icon={<NavOpsIcon size={20} />}
             label={t('nav.ops')}
             onClick={() => selectLeftMode('ops')}
           />
           <RailButton
             active={leftMode === 'provision'}
-            icon="⚒"
+            icon={<NavProvisionIcon size={20} />}
             label={t('nav.provision')}
             onClick={() => selectLeftMode('provision')}
           />
           <RailButton
             active={leftMode === 'portforward'}
-            icon="⇌"
+            icon={<NavPortForwardIcon size={20} />}
             label={t('nav.portforward')}
             onClick={() => selectLeftMode('portforward')}
           />
           <RailButton
             active={leftMode === 'authlog'}
-            icon="⚿"
+            icon={<NavAuthLogIcon size={20} />}
             label={t('nav.authlog')}
             onClick={() => selectLeftMode('authlog')}
           />
           <div className="flex-1" />
-          <RailButton icon="⚙" label={t('nav.settings')} onClick={() => setSettingsOpen(true)} />
+          <RailButton
+            icon={<NavSettingsIcon size={20} />}
+            label={t('nav.settings')}
+            onClick={() => setSettingsOpen(true)}
+          />
         </aside>
         )}
 
@@ -2322,7 +2340,7 @@ function RailButton({
   muted = false,
   onClick,
 }: {
-  icon: string;
+  icon: ReactNode;
   label: string;
   active?: boolean;
   muted?: boolean;
@@ -2336,8 +2354,9 @@ function RailButton({
       title={label}
       aria-label={label}
     >
-      <span className="text-xl shrink-0">{icon}</span>
+      <span className="aspro-rail-icon-wrap">{icon}</span>
       <span className="aspro-rail-label text-[10px] truncate max-w-full">{label}</span>
+      {active && <span className="aspro-rail-active-indicator" aria-hidden="true" />}
     </button>
   );
 }
